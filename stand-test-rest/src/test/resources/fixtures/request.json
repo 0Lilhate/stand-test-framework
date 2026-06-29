@@ -1,0 +1,4 @@
+{
+  "correlationId": "${correlationId}",
+  "amount": 100
+}
