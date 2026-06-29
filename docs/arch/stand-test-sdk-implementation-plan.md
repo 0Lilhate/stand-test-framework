@@ -203,27 +203,64 @@ flowchart TD
 ### stand-test-kafka
 
 - **Назначение.** Kafka send/expect/assert для стендовых сценариев. Содержит typed step-модель
-  (`KafkaStep`) и Kafka `StepExecutor`.
-- **Входит (будущие возможности).** send JSON-сообщения с outbound `correlationId`; expect сообщение
-  из топика; фильтр по key; фильтр по `correlationId`; фильтр по JSONPath; timeout-diagnostics;
-  attach потреблённых сообщений в отчёт.
-- **Базовая offset-стратегия (обязательно для MVP).**
+  (`KafkaStep` → step-типы `kafka.send` / `kafka.expect`) и Kafka `StepExecutor`. Единственная точка
+  реального Kafka-IO к стенду; поверх `kafka-clients` (raw — для контроля assign/seek), без своего
+  клиента.
+
+- **`kafka.send` (MVP).** Публикует JSON-сообщение в топик-алиас:
+  - параметры: topic-алиас (§9); `body` (inline) / `bodyResource` (classpath); `key` (опц.); headers
+    (опц.); `injectCorrelationId`; подстановка `${...}` в key/headers/body (как у REST);
+  - **outbound `correlationId`** инжектится носителем из конфига топика (§8.4). В MVP реализован только
+    носитель **HEADER**: при `injectCorrelationId` и (a) отсутствии `correlation` у топика, либо (b)
+    носителе KEY/PAYLOAD_FIELD (ещё не реализованы) — `StandTestException`, зеркаля REST HEADER-only
+    (`RestStepExecutor.injectCorrelationId`); KEY/PAYLOAD_FIELD — следующая подытерация (§8.4);
+  - продьюсер создаётся и **закрывается внутри** `execute()` (try-with-resources, `flush` до close);
+  - сериализация: ключ и значение — `String` (JSON как строка), header-значения — UTF-8 байты.
+
+- **`kafka.expect` (MVP).** Ждёт сообщение из топик-алиаса до timeout:
+  - **selection (выбор сообщения):** primary — по `correlationId` (`correlationIdFromContext`); опц.
+    дискриминатор — по `key` (param `key`, симметрично `kafka.send`, нужен для нескольких
+    триггер→expect на одном топике, §8.7); сообщение «потребляется» (consume-and-advance, §8.7), так что
+    следующий expect на топике стартует за уже выбранным;
+  - **assertion:** JSONPath-ассерты по value выбранного сообщения (`assertPath`) — **жёсткий**
+    `StandTestAssertionError` при несовпадении; **capture** значений из сообщения в `VariableStore`
+    (как REST-capture);
+  - **poll-цикл через `stand-test-await`:** probe = один **короткий** `consumer.poll(pollTimeout)`
+    (возвращает первое сообщение, прошедшее selection, либо пусто); cadence/timeout держит `Awaiter`
+    (`AwaitPolicy.timeout` = `withinSeconds(...)`); чтобы не удваивать ожидание — либо `pollTimeout`
+    несёт паузу и `AwaitPolicy.pollInterval`≈0, либо poll near-zero и паузу держит `pollInterval`
+    (одно из двух, не оба); консьюмер спозиционирован в `prepare` (§8.7) и поллится **на вызывающем
+    потоке** — совместимо с thread-confinement await и с тем, что `KafkaConsumer` непотокобезопасен.
+
+- **Offset-стратегия и seek-race (обязательно для MVP).**
   - `group.id` уникален **на прогон сценария** (включает `testRunId`), не переиспользуется между
     тестами;
-  - перед триггерящим действием консьюмер уже подготовлен: `subscribe`/`assign` → **`seekToEnd`
-    (start-from-now)** → выполняется действие → `poll` до timeout;
-  - явный риск **`KAFKA-SEEK-RACE`**: если позицию консьюмера не зафиксировать **до** действия,
-    ожидаемое сообщение можно пропустить (см. [§15](#15-parallel-execution-and-isolation) и
-    [§19 риски](#19-риски));
-  - при timeout в отчёт прикладывается диагностика: topic; partition(s); offsets; число
-    просмотренных сообщений; критерии фильтра; сэмпл последних сообщений.
+  - **`assign(partitionsFor(topic))` → `seekToEnd` → `position(...)`**, а не голый `subscribe()` (при
+    нём назначение партиций ленивое и `seekToEnd` до первого `poll` бессмыслен); start-from-now;
+  - **позиционирование выполняется в фазе `prepare` раннера ДО любого шага** (§8.7) — это и снимает
+    **`KAFKA-SEEK-RACE`**: консьюмер живёт в run-scoped `ResourceScope` и закрывается раннером;
+  - при timeout в отчёт прикладывается диагностика (`TimeoutDiagnostics`): topic; partition(s);
+    offsets; число просмотренных сообщений; критерии selection; сэмпл последних сообщений.
+
+- **Подключение к брокеру.** Адрес/креды — по ссылкам из env-модели (§9): `KafkaClusterDefinition`
+  (`bootstrapServersRef` + опц. security secret-ref'ы), резолв через `EnvironmentRegistry` как
+  `baseUrlRef` у REST; запрет хардкода bootstrap-серверов и секретов в коде/сценарии (§9/§20).
+
+- **Регистрация executor.** Через `ServiceLoader`
+  (`META-INF/services/ru.alfa.stand.test.core.execution.StepExecutor`, public no-arg конструктор) —
+  см. §8.5.
+
 - **Не должно входить.** Собственный Kafka-клиент; бизнес-обработчики; продакшн-конфигурация
   ретраев/DLQ.
 - **Внутренние зависимости.** `stand-test-core`, `stand-test-await`.
-- **Внешние зависимости.** `kafka-clients` (Apache, raw — для контроля assign/seek), Jackson, JSONPath.
-- **MVP.** Да — send JSON, expect JSON, фильтр по `correlationId`/key, базовая offset-стратегия,
-  timeout-diagnostics.
-- **Отложено.** Сложные offset/commit-стратегии, batch-проверки, schema-registry/Avro.
+- **Внешние зависимости.** `kafka-clients` (Apache, raw — для контроля assign/seek); `json-path`
+  (JSONPath; value читается как строка — отдельный JSON-binding/Jackson не обязателен, как в REST).
+- **MVP.** Да — send JSON; expect JSON; selection по `correlationId`/`key`; JSONPath-ассерты; capture;
+  базовая offset-стратегия с pre-arm (§8.7); timeout-diagnostics. Носитель correlationId по умолчанию —
+  **HEADER** (полностью специфицирован и реализован в REST).
+- **Отложено.** JSONPath как **фильтр выбора** среди многих сообщений (в MVP JSONPath — ассерт по уже
+  выбранному сообщению); KEY/PAYLOAD_FIELD как носитель correlationId (следующая подытерация, §8.4);
+  сложные offset/commit-стратегии; batch-проверки; schema-registry/Avro.
 
 ### stand-test-db
 
@@ -435,8 +472,10 @@ flowchart LR
   предоставление `StandClient`; проброс SDK-падений в JUnit.
 - **Итерация 4 — REST adapter.** Минимальные GET/POST; outbound correlationId; JSON-ассерты; capture
   переменных.
-- **Итерация 5 — Kafka adapter.** send JSON; expect JSON; базовая offset-стратегия (start-from-now,
-  уникальный group.id); фильтр по `correlationId`; timeout-diagnostics.
+- **Итерация 5 — Kafka adapter.** *Prerequisite (core):* хук `StepExecutor.prepare` + `ResourceScope`
+  в `StepExecutionContext` (§8.7) и `KafkaClusterDefinition` в env-модели (§9). Затем: `kafka.send`
+  (JSON, inject correlationId); `kafka.expect` (selection по `correlationId`/`key`, JSONPath-ассерты,
+  capture); базовая offset-стратегия (start-from-now с pre-arm, уникальный group.id); timeout-diagnostics.
 - **Итерация 6 — DB adapter.** query; await-query; expect single value; seed (write-allow);
   schema-whitelist; черновик cleanup-стратегии по `testRunId`.
 - **Итерация 7 — Allure.** step-репортинг; attachments; метаданные сценария; проброс timeout-диагностики.
@@ -598,6 +637,20 @@ Java DSL и YAML draft (см. §10–§11) обновлены так, что `co
 исходящий REST/Kafka/gRPC-запрос (`injectCorrelationId()` / `correlationIdFromContext()` /
 `injectCorrelationId: true`).
 
+**Носители correlationId для Kafka (inject на `send` / extract при `expect`-match).** Носитель задаётся
+`CorrelationConfig(source, name)` из `TopicDefinition.correlation`:
+
+| `source` | inject (send) | extract / match (expect) | семантика `name` |
+|---|---|---|---|
+| `HEADER` | header `name` = `correlationId` (UTF-8 байты) | header `name`, декод UTF-8 | имя header |
+| `KEY` | `ProducerRecord.key()` = `correlationId` | `record.key()` | **игнорируется** (ключ целиком = correlationId) |
+| `PAYLOAD_FIELD` | JSON-поле `name` в value = `correlationId` | JSON-поле `name` из value | имя **top-level** поля (dotted-path/JSONPath — отложено) |
+
+Сравнение — со строкой `ScenarioContext.correlationId().value()`. **HEADER** — носитель по умолчанию для
+MVP (полностью специфицирован и реализован в REST); `KEY`/`PAYLOAD_FIELD` для Kafka — следующая
+подытерация. Для `KEY` поле `name` `CorrelationConfig` обязательно non-blank (контракт core), но
+**игнорируется** при матче — допустимо положить туда сентинел вроде `key`.
+
 ### 8.5 Module ownership: Validator, Runner, Step Executor SPI, StandClient
 
 Привязка компонентов конвейера к модулям:
@@ -606,8 +659,10 @@ Java DSL и YAML draft (см. §10–§11) обновлены так, что `co
 `Scenario`, `ScenarioStep`, `ScenarioContext`, `VariableStore`, `VariableResolver`,
 `ScenarioValidator`, `ValidationResult`, `ScenarioRunner` (interface/SPI), `StepExecutor` SPI,
 `StepExecutionContext`, `StepResult`, `ScenarioResult`, `StepStatus`, `StandClient` (контракт-фасад),
-`ForbiddenOperation`, `EnvironmentRegistry`-контракты, `StepEvent`/`ReportingEvent` SPI. Только
-модели, интерфейсы и базовые контракты — **без** реализации REST/Kafka/DB/gRPC.
+`ForbiddenOperation`, `EnvironmentRegistry`-контракты, `StepEvent`/`ReportingEvent` SPI,
+`ResourceScope` (run-scoped реестр `AutoCloseable`-ресурсов, §8.7) и опциональный хук
+`StepExecutor.prepare` (§8.7). Только модели, интерфейсы и базовые контракты — **без** реализации
+REST/Kafka/DB/gRPC.
 
 **Adapter-модули содержат реализации `StepExecutor`** и typed step-definitions:
 
@@ -615,6 +670,13 @@ Java DSL и YAML draft (см. §10–§11) обновлены так, что `co
 - `stand-test-kafka` — `KafkaStep` + Kafka executor;
 - `stand-test-db` — `DbStep` + DB executor;
 - `stand-test-grpc` — `GrpcStep` + gRPC executor.
+
+Каждый адаптер **регистрирует свой `StepExecutor` через `ServiceLoader`** — файл
+`META-INF/services/ru.alfa.stand.test.core.execution.StepExecutor` с FQCN реализации (класс public,
+public no-arg конструктор). `StandClient`/JUnit-обвязка собирает исполнители через
+`ServiceLoader.load(StepExecutor.class)` за `DefaultScenarioRunner`; незарегистрированный тип шага →
+`StandTestException` в рантайме. Подключение `testImplementation` на адаптер делает его step-типы
+исполняемыми **без** wiring-кода.
 
 **Решение по step-model (зафиксировано — выбран один подход).** core владеет **generic** моделью шага
 (`ScenarioStep` = тип шага + типизированные параметры) и `StepExecutor` SPI; **typed step definitions
@@ -642,6 +704,60 @@ Java DSL и YAML draft (см. §10–§11) обновлены так, что `co
 - `ai-schema` **генерирует/использует** ограничения из core-контракта.
 - Иначе появится drift между runtime-валидатором и AI-схемой (риск зафиксирован в
   [§19](#19-риски)).
+
+### 8.7 Async-expect: пред-вооружение консьюмера и run-scoped ресурсы
+
+Снимаем `KAFKA-SEEK-RACE` (§19). **Проблема:** раннер исполняет шаги **строго последовательно**
+(`DefaultScenarioRunner` — без look-ahead), а `correlationId` SDK-owned и инжектится **до** триггера
+(§8.4). Если `kafka.expect` создаёт и позиционирует консьюмер (`seekToEnd`, start-from-now) только в
+своём шаге — это происходит **после** триггерящего REST-шага, и сообщение теряется. «start-from-now»
+обязателен (чтобы не реигрывать историю топика), но позиция должна быть зафиксирована **до** действия.
+
+**Решение — пред-вооружение (pre-arm) консьюмеров отдельной фазой раннера, без знания core о Kafka:**
+
+- `StepExecutor` SPI получает **опциональный** хук `default void prepare(ScenarioStep step,
+  StepExecutionContext context) {}` (по умолчанию no-op).
+- Перед основным циклом раннер проходит шаги **в порядке объявления** и вызывает `executor.prepare(...)`
+  для каждого. Kafka-executor в `prepare` для `kafka.expect`-шага вооружает **один консьюмер на
+  топик-алиас на прогон** (idempotent — если консьюмер для топика в этом прогоне уже вооружён, повторно
+  не создаётся): run-scoped `group.id` (включает `testRunId`), `assign(partitionsFor(topic))` →
+  `seekToEnd` → `position(...)` (форсирует seek), и регистрирует его в **`ResourceScope`** под ключом
+  топик-алиаса (ниже). REST/DB `prepare` — no-op.
+- Все expect-консьюмеры спозиционированы на конец лога **до выполнения любого шага** → до любого
+  триггера → race исключён; примеры §10/§11 (rest.post раньше, kafka.expect позже) корректны как
+  написаны, без дополнительного `arm`-шага.
+- `kafka.expect.execute()` достаёт консьюмер из `ResourceScope` **по ключу топик-алиаса** и поллит его
+  до match/timeout (через `Awaiter`, см. §4 stand-test-kafka).
+- **Consume-and-advance (обязательно).** Консьюмер на топик — **общий** для всех `kafka.expect` на этом
+  топике в прогоне и **продвигается** по мере чтения: каждый expect начинает с позиции, где остановился
+  предыдущий, и «потребляет» (продвигает offset за) выбранное сообщение. Это снимает silent false-pass
+  при **нескольких триггер→expect на одном топике**: `correlationId` уникален на **прогон** (не на шаг,
+  §8.2/§15), поэтому все сообщения прогона на топике несут один и тот же `correlationId`, и **без**
+  продвижения второй expect повторно выбрал бы первое (устаревшее) сообщение. С продвижением N-й expect
+  видит N-е сообщение → соответствие триггер↔expect сохраняется.
+- **Дискриминатор для неоднозначных потоков.** Если на один топик в прогоне приходит несколько
+  correlationId-совпадающих сообщений **не** в строгом порядке expect-шагов, selection только по
+  `correlationId` неоднозначна — нужен per-trigger дискриминатор (различный `key` на `send` и
+  соответствующий `key`-селектор на `expect`); selection пропускает (не потребляя как «выбранное»)
+  сообщения, не прошедшие дискриминатор.
+
+**`ResourceScope` — run-scoped **keyed** реестр закрываемых ресурсов (новый core-контракт):**
+
+- новый компонент в `StepExecutionContext` (рядом с `VariableStore`), **отдельный** от него:
+  `VariableStore` хранит value-объекты (коэрсятся в `String`), а `ResourceScope` — живые `AutoCloseable`
+  (например `KafkaConsumer`), привязанные к прогону;
+- **keyed-реестр:** `register(key, AutoCloseable)` (idempotent на ключ) + `get(key)` (lookup из
+  `execute`) + `closeAll()`; ключ Kafka-консьюмера — **топик-алиас**, так что `prepare` и все `execute`
+  по этому топику детерминированно делят один продвигающийся консьюмер;
+- один `ResourceScope` на scenario run, владелец — `ScenarioRunner`; `closeAll()` в `finally` прогона —
+  гарантия отсутствия утечек консьюмеров/соединений;
+- generic: тем же механизмом DB/gRPC-адаптеры держат per-run соединения (ключ — datasource/target-алиас);
+  core по-прежнему **не** зависит от адаптеров.
+
+> **Контракт порядка (нормативно):** для async-expect шага, ловящего эффект более раннего триггера,
+> раннер обязан вызвать `prepare` (позиционирование) для **всех** шагов до выполнения **первого** шага.
+> Реализация требует расширения core-SPI — `StepExecutor.prepare` (default no-op, обратносовместимо) и
+> `ResourceScope` в `StepExecutionContext`; это prerequisite Итерации 5 (§7).
 
 ---
 
@@ -671,6 +787,8 @@ environments:
         baseUrl: ${CLIENT_SERVICE_URL}
         correlationHeader: X-Correlation-Id
     kafka:
+      bootstrapServersRef: KAFKA_BOOTSTRAP_SERVERS     # ссылка на env/secret, не значение (§20)
+      # securityProtocolRef / saslJaasConfigRef — для SASL/SSL-стендов (опц., тоже ссылки)
       topics:
         response-topic:
           name: pakt.response.ift
@@ -688,6 +806,14 @@ environments:
 
 Логические имена из DSL (`stand.rest("client-service")`, `db("mainDb")`, `kafka("response-topic")`)
 резолвятся `EnvironmentRegistry` в endpoint + secret-ref **только** для выбранного `@StandEnv`/`env`.
+
+**Kafka-кластер.** Адрес брокеров и креды берутся по **ссылкам**, не значениям: per-environment
+`KafkaClusterDefinition` (`bootstrapServersRef` + опц. `securityProtocolRef` / `saslJaasConfigRef`),
+резолвится `EnvironmentRegistry` так же, как `baseUrlRef` у REST (резолв ссылки в значение — на стороне
+адаптера, см. §4 stand-test-rest). Топик-алиас (`TopicDefinition` = `alias` + реальное `name` +
+носитель correlationId, §8.4) — отдельная сущность от кластера: один кластер на окружение, много
+топиков. `EnvironmentDefinition` расширяется полем kafka-кластера (новый core-контракт, prerequisite
+Итерации 5, §7).
 
 ---
 
@@ -734,6 +860,16 @@ class ExampleFlowTest {
 Подготовка данных (`given`-шаги), действие и проверки описываются как **отдельные шаги** модели —
 их разделение читается так же явно, как в YAML (`given` / `then`).
 
+**`kafka.send`** (produce-сторона, симметрично `RestStep.post`) — отдельный шаг, обычно в `given` до
+триггера/ожидания:
+
+```java
+.step(KafkaStep.send("request-topic")
+        .body("fixtures/event.json")        // inline или bodyResource (classpath)
+        .key("${requestId}")                // опц. ключ партиционирования
+        .injectCorrelationId())             // SDK-owned correlationId → носитель из конфига топика (§8.4)
+```
+
 ---
 
 ## 11. YAML DSL draft
@@ -776,6 +912,17 @@ then:
       params:
         requestId: "${requestId}"
       equals: "SUCCESS"
+```
+
+**`kafka.send`** (produce, симметрично `rest.post`) — в `given` до триггера:
+
+```yaml
+given:
+  - kafka.send:
+      topic: request-topic             # логический алиас топика (§9)
+      body: fixtures/event.json
+      key: "${requestId}"              # опц.
+      injectCorrelationId: true        # SDK-owned correlationId → носитель из конфига топика (§8.4)
 ```
 
 ---
@@ -846,6 +993,9 @@ testImplementation("ru.alfa.stand.test:stand-test-allure")
 - Каждый scenario run получает **уникальный `correlationId`**.
 - Каждый scenario run получает **свой `VariableStore`** (см. [§8.2](#82-scenariocontext-variablestore-и-captureresolve)).
 - **Kafka consumer group уникален per scenario run** (включает `testRunId`; см. §4 stand-test-kafka).
+- **Async-expect консьюмеры пред-вооружаются до выполнения шагов** (§8.7): позиция фиксируется
+  (`seekToEnd`) до триггера → снимает `KAFKA-SEEK-RACE`; консьюмеры живут в run-scoped `ResourceScope`
+  и закрываются раннером.
 - Test data изолируется через `testRunId`.
 - **Cleanup не затрагивает чужие данные** (только по своему `testRunId`).
 - **Static mutable state запрещён.**
@@ -925,13 +1075,13 @@ checks как post-MVP).
 | Появятся разные стили тестов | Единый DSL и единая `Scenario Model` (§3), стандартизованные идентификаторы (§2), примеры usage и стартер. |
 | Стенды будут нестабильны | await-диагностика и таймауты с понятными отчётами; ретраи только через политику await; стенды только из whitelist (§2.7). |
 | Секреты попадут в репозиторий | §2.8 + §9: секреты только из env/secret-manager; запрет значений в коде/yaml; проверка в DoD и (позже) pre-commit/CI-скан. |
-| Kafka offset strategy будет работать неправильно | Базовая offset-стратегия в §4 `stand-test-kafka` (уникальный group.id per run, start-from-now, поллинг до timeout); фильтрация по `correlationId`/key; timeout-diagnostics с числом просмотренных сообщений; тесты на «не нашли». |
+| Kafka offset strategy будет работать неправильно | §4 `stand-test-kafka` + §8.7: уникальный group.id per run; `assign`+`seekToEnd` (start-from-now) с pre-arm в фазе `prepare`; поллинг до timeout через await; selection по `correlationId`/key; timeout-diagnostics с числом просмотренных сообщений; тесты на «не нашли». |
 | Сложность поддержки Gradle multi-module | Единые convention в root `subprojects { }`, BOM-платформа, минимальные графы зависимостей, CI на каждый модуль; периодический ревью графа. |
 | Несовместимость версий зависимостей | BOM-платформа выравнивает версии (§13); обновления через version catalog; smoke-проверка у потребителя. |
 | Java bytecode incompatibility | §14: фиксированный `--release` на LTS baseline; CI проверяет target; toolchain 24 помечен как decision point. |
 | AI schema drift from runtime validator | §8.6: единый источник forbidden-ops в core; `ai-schema` генерирует ограничения из core-контракта. |
 | Java DSL bypassing validator | §8.1: lazy builder + анти-правило (§20); запрет eager-IO Java API; единый Validator для обоих входов. |
-| Kafka seek race (`KAFKA-SEEK-RACE`) | §4 `stand-test-kafka`: позиция консьюмера фиксируется (`seekToEnd`) **до** триггерящего действия; контракт порядка; диагностика. |
+| Kafka seek race (`KAFKA-SEEK-RACE`) | **§8.7** (механизм): консьюмеры пред-вооружаются (`assign`→`seekToEnd`→`position`) в фазе `prepare` раннера **до** любого шага → до триггера; живут в run-scoped `ResourceScope`; контракт порядка нормативен. §4 `stand-test-kafka` — детали стратегии; диагностика при timeout. |
 | DB adapter станет unsafe generic DB client | §4 `stand-test-db`: readonly по умолчанию, write-allow flag, datasource+schema whitelist, probe-first правило, определение destructive SQL. |
 | Parallel execution interference | §15: уникальные `testRunId`/`correlationId`, per-scenario `VariableStore`, уникальный consumer group, изоляция данных по `testRunId`, запрет static mutable state. |
 
