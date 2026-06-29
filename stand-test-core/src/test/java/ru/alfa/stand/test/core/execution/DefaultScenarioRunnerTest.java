@@ -396,6 +396,70 @@ class DefaultScenarioRunnerTest {
     }
 
     @Test
+    @DisplayName("prepare runs for every step in declaration order before any step executes")
+    void run_prepareRunsForAllSteps_beforeExecution() {
+        List<String> events = new java.util.ArrayList<>();
+        FakeStepExecutor executor = new FakeStepExecutor("fake.ok", (step, context) -> {
+            events.add("execute:" + step.id());
+            return StepResult.success(step.id(), step.type(), Instant.now(), Instant.now());
+        }).onPrepare((step, context) -> events.add("prepare:" + step.id()));
+
+        runner(executor).run(scenario(GenericStep.of("s1", "fake.ok"), GenericStep.of("s2", "fake.ok")));
+
+        assertThat(events).containsExactly("prepare:s1", "prepare:s2", "execute:s1", "execute:s2");
+        assertThat(executor.prepareInvocations()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("a resource registered during prepare is closed after a successful run")
+    void run_closesResourcesRegisteredInPrepare_onSuccess() {
+        java.util.concurrent.atomic.AtomicBoolean closed = new java.util.concurrent.atomic.AtomicBoolean(false);
+        FakeStepExecutor executor = FakeStepExecutor.succeeding("fake.ok")
+                .onPrepare((step, context) -> context.resourceScope().register("res", () -> closed.set(true)));
+
+        ScenarioResult result = runner(executor).run(scenario(GenericStep.of("s1", "fake.ok")));
+
+        assertThat(result.isSuccessful()).isTrue();
+        assertThat(closed).isTrue();
+    }
+
+    @Test
+    @DisplayName("a resource registered during prepare is closed even when a step fails")
+    void run_closesResourcesRegisteredInPrepare_onFailure() {
+        java.util.concurrent.atomic.AtomicBoolean closed = new java.util.concurrent.atomic.AtomicBoolean(false);
+        FakeStepExecutor executor = FakeStepExecutor.failing("fake.fail", "nope")
+                .onPrepare((step, context) -> context.resourceScope().register("res", () -> closed.set(true)));
+
+        assertThatThrownBy(() -> runner(executor).run(scenario(GenericStep.of("s1", "fake.fail"))))
+                .isInstanceOf(StandTestAssertionError.class);
+        assertThat(closed).isTrue();
+    }
+
+    @Test
+    @DisplayName("a failing resource close in the finally block does not change a passing outcome")
+    void run_faultyResourceClose_doesNotAffectOutcome() {
+        FakeStepExecutor executor = FakeStepExecutor.succeeding("fake.ok")
+                .onPrepare((step, context) -> context.resourceScope().register("res", () -> {
+                    throw new IllegalStateException("close failed");
+                }));
+
+        ScenarioResult result = runner(executor).run(scenario(GenericStep.of("s1", "fake.ok")));
+
+        assertThat(result.isSuccessful()).isTrue();
+    }
+
+    @Test
+    @DisplayName("a step type with no executor is skipped by prepare without failing the pre-phase")
+    void run_prepareSkipsUnknownStepType() {
+        FakeStepExecutor executor = FakeStepExecutor.succeeding("fake.other");
+
+        assertThatThrownBy(() -> runner(executor).run(scenario(GenericStep.of("s1", "fake.missing"))))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("No step executor");
+        assertThat(executor.prepareInvocations()).isZero();
+    }
+
+    @Test
     @DisplayName("concurrent runs of one runner instance stay isolated")
     void run_concurrentRuns_areIsolated() {
         FakeStepExecutor isolating = new FakeStepExecutor("fake.iso", (step, context) -> {

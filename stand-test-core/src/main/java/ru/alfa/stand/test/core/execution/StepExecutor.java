@@ -28,6 +28,27 @@ public interface StepExecutor {
     boolean supports(String stepType);
 
     /**
+     * Optional pre-execution hook, invoked by the runner for every step (in declaration order) before
+     * the first step runs (plan §8.7). The default is a no-op.
+     *
+     * <p>This exists for async-expect steps that must position a resource <em>before</em> the
+     * triggering step produces its effect — the canonical case being a {@code kafka.expect} consumer
+     * that is armed ({@code assign}/{@code seekToEnd}) here so it is listening before an earlier
+     * {@code rest.post} sends the message it will wait for. This is the resolution of
+     * {@code KAFKA-SEEK-RACE}: the runner positions all such resources up front, so an
+     * SDK-owned correlation id injected outbound by an earlier step cannot be missed. Resources opened
+     * here belong in the run's {@link ResourceScope} (see {@link StepExecutionContext#resourceScope()})
+     * so the runner closes them after the run. Implementations should be idempotent per logical key
+     * (arming the same topic twice in one run must not open a second consumer).
+     *
+     * @param step the step being prepared
+     * @param context the per-run execution context
+     */
+    default void prepare(ScenarioStep step, StepExecutionContext context) {
+        // No-op by default: only async-expect adapters (Kafka) override this. REST/DB prepare is a no-op.
+    }
+
+    /**
      * Executes the given step.
      *
      * @param step the step to execute

@@ -9,6 +9,10 @@ jacoco = "0.8.15"
 # reactor-netty is deliberately NOT pulled in; json-path uses the json-smart provider (no Jackson).
 springWebflux = "6.2.8"
 jsonPath = "2.9.0"
+# stand-test-kafka adapter: raw Apache kafka-clients (for assign/seek control) + JSONPath.
+# Pinned to the 3.x line: 4.x renamed the consumer reset enum and changed MockConsumer's constructor,
+# and 3.9.x keeps the OffsetResetStrategy-based MockConsumer used by the adapter's broker-free tests.
+kafkaClients = "3.9.2"
 # Reserved for later phases (not applied at the skeleton stage):
 springBoot = "3.5.14"
 springDependencyManagement = "1.1.7"
@@ -22,3 +26,4 @@ junit-platform-testkit = { module = "org.junit.platform:junit-platform-testkit" 
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 spring-webflux = { module = "org.springframework:spring-webflux", version.ref = "springWebflux" }
 json-path = { module = "com.jayway.jsonpath:json-path", version.ref = "jsonPath" }
+kafka-clients = { module = "org.apache.kafka:kafka-clients", version.ref = "kafkaClients" }

@@ -20,14 +20,29 @@ class StepExecutionContextTest {
         ScenarioContext scenarioContext = ScenarioContext.start(ScenarioId.of("flow"), "ift");
         VariableStore variableStore = new VariableStore();
         EnvironmentRegistry registry = new InMemoryEnvironmentRegistry(java.util.Map.of());
+        ResourceScope resourceScope = new ResourceScope();
 
         StepExecutionContext context = new StepExecutionContext(
-                scenarioContext, variableStore, registry, NoOpReportingEventPublisher.INSTANCE);
+                scenarioContext, variableStore, registry, NoOpReportingEventPublisher.INSTANCE, resourceScope);
 
         assertThat(context.scenarioContext()).isSameAs(scenarioContext);
         assertThat(context.variableStore()).isSameAs(variableStore);
         assertThat(context.environmentRegistry()).isSameAs(registry);
         assertThat(context.reportingEventPublisher()).isSameAs(NoOpReportingEventPublisher.INSTANCE);
+        assertThat(context.resourceScope()).isSameAs(resourceScope);
+    }
+
+    @Test
+    @DisplayName("the four-argument constructor supplies a fresh, empty resource scope")
+    void fourArgConstructorSuppliesFreshScope() {
+        StepExecutionContext context = new StepExecutionContext(
+                ScenarioContext.start(ScenarioId.of("flow"), "ift"),
+                new VariableStore(),
+                new InMemoryEnvironmentRegistry(java.util.Map.of()),
+                NoOpReportingEventPublisher.INSTANCE);
+
+        assertThat(context.resourceScope()).isNotNull();
+        assertThat(context.resourceScope().contains("anything")).isFalse();
     }
 
     @Test

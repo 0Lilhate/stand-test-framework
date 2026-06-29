@@ -1,0 +1,5 @@
+{
+  "type": "PAYMENT_REQUESTED",
+  "correlationId": "${correlationId}",
+  "amount": 100
+}

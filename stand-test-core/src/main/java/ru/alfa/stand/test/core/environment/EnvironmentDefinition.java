@@ -4,21 +4,23 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Definition of a single whitelisted environment: its logical services, topics, datasources and gRPC
- * targets keyed by alias. All maps are defensively copied and exposed as immutable.
+ * Definition of a single whitelisted environment: its logical services, topics, datasources, gRPC
+ * targets and (optional) Kafka cluster. All maps are defensively copied and exposed as immutable.
  *
  * @param name the logical environment name (never blank)
  * @param services service endpoints keyed by alias
  * @param topics topics keyed by alias
  * @param datasources datasources keyed by alias
  * @param grpcTargets gRPC targets keyed by alias
+ * @param kafkaCluster the Kafka cluster of this environment (may be null when no Kafka is configured)
  */
 public record EnvironmentDefinition(
         String name,
         Map<String, ServiceEndpointDefinition> services,
         Map<String, TopicDefinition> topics,
         Map<String, DatasourceDefinition> datasources,
-        Map<String, GrpcTargetDefinition> grpcTargets) {
+        Map<String, GrpcTargetDefinition> grpcTargets,
+        KafkaClusterDefinition kafkaCluster) {
 
     public EnvironmentDefinition {
         if (name == null || name.isBlank()) {
@@ -28,6 +30,25 @@ public record EnvironmentDefinition(
         topics = (topics == null) ? Map.of() : Map.copyOf(topics);
         datasources = (datasources == null) ? Map.of() : Map.copyOf(datasources);
         grpcTargets = (grpcTargets == null) ? Map.of() : Map.copyOf(grpcTargets);
+    }
+
+    /**
+     * Creates an environment with no Kafka cluster. Convenience for the (REST/DB/gRPC) callers that do
+     * not configure Kafka, preserving the prior five-argument shape.
+     *
+     * @param name the logical environment name (never blank)
+     * @param services service endpoints keyed by alias
+     * @param topics topics keyed by alias
+     * @param datasources datasources keyed by alias
+     * @param grpcTargets gRPC targets keyed by alias
+     */
+    public EnvironmentDefinition(
+            String name,
+            Map<String, ServiceEndpointDefinition> services,
+            Map<String, TopicDefinition> topics,
+            Map<String, DatasourceDefinition> datasources,
+            Map<String, GrpcTargetDefinition> grpcTargets) {
+        this(name, services, topics, datasources, grpcTargets, null);
     }
 
     /**

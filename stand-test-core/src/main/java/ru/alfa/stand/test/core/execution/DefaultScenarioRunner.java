@@ -117,13 +117,15 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
         validator.validate(scenario).throwIfInvalid();
 
         ScenarioContext context = ScenarioContext.start(scenario.id(), scenario.environment(), scenario.tags());
+        ResourceScope resourceScope = new ResourceScope();
         StepExecutionContext executionContext = new StepExecutionContext(
-                context, new VariableStore(), environmentRegistry, reportingEventPublisher);
+                context, new VariableStore(), environmentRegistry, reportingEventPublisher, resourceScope);
 
         Instant startedAt = clock.instant();
         publishScenario(context, ScenarioPhase.STARTED);
         List<StepResult> stepResults = new ArrayList<>();
         try {
+            prepareSteps(scenario, executionContext);
             for (ScenarioStep step : scenario.steps()) {
                 StepResult result = executeStep(step, executionContext, context, stepResults);
                 if (result.status().isFailure()) {
@@ -131,9 +133,36 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
                 }
             }
         } finally {
+            closeQuietly(resourceScope);
             publishScenario(context, ScenarioPhase.FINISHED);
         }
         return ScenarioResult.from(context, stepResults, startedAt, clock.instant());
+    }
+
+    /**
+     * Pre-execution phase (plan §8.7): walks the steps in declaration order and invokes
+     * {@link StepExecutor#prepare} on the executor that supports each step, so async-expect resources
+     * (a {@code kafka.expect} consumer) are positioned before any step runs. A step whose type has no
+     * registered executor is skipped here — the main loop reports it through {@link #resolveExecutor}
+     * with full step events, preserving the existing failure path.
+     */
+    private void prepareSteps(Scenario scenario, StepExecutionContext executionContext) {
+        for (ScenarioStep step : scenario.steps()) {
+            StepExecutor executor = findExecutor(step.type());
+            if (executor != null) {
+                executor.prepare(step, executionContext);
+            }
+        }
+    }
+
+    private void closeQuietly(ResourceScope resourceScope) {
+        try {
+            resourceScope.closeAll();
+        } catch (RuntimeException closeFailure) {
+            // Closing run-scoped resources is best-effort in the finally block: a faulty close must never
+            // mask the real test outcome (a thrown step failure) or fail an otherwise-passing run.
+            // Becomes a WARN log once SLF4J is wired (plan §17).
+        }
     }
 
     private StepResult executeStep(
@@ -178,13 +207,21 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
     }
 
     private StepExecutor resolveExecutor(ScenarioStep step) {
+        StepExecutor executor = findExecutor(step.type());
+        if (executor == null) {
+            throw new StandTestException(
+                    "No step executor registered for step type '" + step.type() + "' (stepId=" + step.id() + ")");
+        }
+        return executor;
+    }
+
+    private StepExecutor findExecutor(String stepType) {
         for (StepExecutor executor : executors) {
-            if (executor.supports(step.type())) {
+            if (executor.supports(stepType)) {
                 return executor;
             }
         }
-        throw new StandTestException(
-                "No step executor registered for step type '" + step.type() + "' (stepId=" + step.id() + ")");
+        return null;
     }
 
     private void publishScenario(ScenarioContext context, ScenarioPhase phase) {
