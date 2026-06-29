@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="GradleSettings">
+    <option name="linkedExternalProjectsSettings">
+      <GradleProjectSettings>
+        <option name="externalProjectPath" value="$PROJECT_DIR$" />
+        <option name="modules">
+          <set>
+            <option value="$PROJECT_DIR$" />
+            <option value="$PROJECT_DIR$/stand-test-ai-schema" />
+            <option value="$PROJECT_DIR$/stand-test-allure" />
+            <option value="$PROJECT_DIR$/stand-test-await" />
+            <option value="$PROJECT_DIR$/stand-test-bom" />
+            <option value="$PROJECT_DIR$/stand-test-core" />
+            <option value="$PROJECT_DIR$/stand-test-db" />
+            <option value="$PROJECT_DIR$/stand-test-grpc" />
+            <option value="$PROJECT_DIR$/stand-test-junit" />
+            <option value="$PROJECT_DIR$/stand-test-kafka" />
+            <option value="$PROJECT_DIR$/stand-test-rest" />
+            <option value="$PROJECT_DIR$/stand-test-scenario-yaml" />
+            <option value="$PROJECT_DIR$/stand-test-spring-boot-starter" />
+          </set>
+        </option>
+        <option name="myGradleHome" value="" />
+      </GradleProjectSettings>
+    </option>
+  </component>
+</project>

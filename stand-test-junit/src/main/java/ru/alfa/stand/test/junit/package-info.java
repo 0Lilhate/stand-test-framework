@@ -1,0 +1,11 @@
+/**
+ * Stand test SDK — JUnit 5 integration (the bridge between the JUnit lifecycle and the SDK).
+ *
+ * <p>{@link ru.alfa.stand.test.junit.StandTest @StandTest} wires
+ * {@link ru.alfa.stand.test.junit.StandTestExtension}, which resolves a
+ * {@link ru.alfa.stand.test.core.StandClient} (assembled from {@code StepExecutor} SPI implementations
+ * discovered on the classpath) and an {@link ru.alfa.stand.test.await.Awaiter} as test parameters,
+ * without Spring. SDK failures surface as native JUnit failures via the exception hierarchy
+ * ({@code StandTestAssertionError} / {@code StandTestException}), so no manual translation is needed.
+ */
+package ru.alfa.stand.test.junit;

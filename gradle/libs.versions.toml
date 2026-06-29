@@ -1,0 +1,17 @@
+[versions]
+java = "24"
+checkstyle = "10.18.2"
+junit = "5.11.4"
+assertj = "3.26.3"
+jacoco = "0.8.15"
+# Reserved for later phases (not applied at the skeleton stage):
+springBoot = "3.5.14"
+springDependencyManagement = "1.1.7"
+
+[libraries]
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+junit-platform-testkit = { module = "org.junit.platform:junit-platform-testkit" }
+assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }

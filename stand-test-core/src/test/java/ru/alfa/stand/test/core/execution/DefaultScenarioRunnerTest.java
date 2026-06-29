@@ -1,0 +1,413 @@
+package ru.alfa.stand.test.core.execution;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.IntStream;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import ru.alfa.stand.test.core.context.ScenarioContext;
+import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
+import ru.alfa.stand.test.core.event.NoOpReportingEventPublisher;
+import ru.alfa.stand.test.core.event.ReportingEvent;
+import ru.alfa.stand.test.core.event.ReportingEventPublisher;
+import ru.alfa.stand.test.core.event.ScenarioEvent;
+import ru.alfa.stand.test.core.event.ScenarioPhase;
+import ru.alfa.stand.test.core.event.StepEvent;
+import ru.alfa.stand.test.core.event.StepPhase;
+import ru.alfa.stand.test.core.exception.StandTestAssertionError;
+import ru.alfa.stand.test.core.exception.StandTestException;
+import ru.alfa.stand.test.core.result.ScenarioResult;
+import ru.alfa.stand.test.core.result.StepResult;
+import ru.alfa.stand.test.core.result.StepStatus;
+import ru.alfa.stand.test.core.scenario.GenericStep;
+import ru.alfa.stand.test.core.scenario.Scenario;
+import ru.alfa.stand.test.core.scenario.ScenarioStep;
+import ru.alfa.stand.test.core.validation.DefaultScenarioValidator;
+
+class DefaultScenarioRunnerTest {
+
+    private static Scenario scenario(ScenarioStep... steps) {
+        Scenario.Builder builder = Scenario.builder("example-flow").environment("ift");
+        for (ScenarioStep step : steps) {
+            builder.step(step);
+        }
+        return builder.build();
+    }
+
+    private static DefaultScenarioRunner runner(StepExecutor... executors) {
+        return new DefaultScenarioRunner(List.of(executors));
+    }
+
+    @Test
+    @DisplayName("a successful scenario returns a SUCCESS result with one step result")
+    void run_successfulScenario_returnsSuccess() {
+        FakeStepExecutor executor = FakeStepExecutor.succeeding("fake.ok");
+
+        ScenarioResult result = runner(executor).run(scenario(GenericStep.of("s1", "fake.ok")));
+
+        assertThat(result.isSuccessful()).isTrue();
+        assertThat(result.status()).isEqualTo(StepStatus.SUCCESS);
+        assertThat(result.stepResults()).hasSize(1);
+        assertThat(executor.invocations()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a step that returns a FAILED status is raised as a StandTestAssertionError")
+    void run_stepReturnsFailed_throwsAssertionError() {
+        DefaultScenarioRunner runner = runner(FakeStepExecutor.failing("fake.fail", "status was PENDING"));
+
+        assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.fail"))))
+                .isInstanceOf(StandTestAssertionError.class)
+                .hasMessageContaining("s1")
+                .hasMessageContaining("status was PENDING");
+    }
+
+    @Test
+    @DisplayName("an assertion error thrown by an executor propagates unchanged")
+    void run_executorThrowsAssertionError_propagates() {
+        StandTestAssertionError thrown = new StandTestAssertionError("boom");
+        DefaultScenarioRunner runner = runner(new FakeStepExecutor("fake.throw", (step, context) -> {
+            throw thrown;
+        }));
+
+        assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.throw"))))
+                .isSameAs(thrown);
+    }
+
+    @Test
+    @DisplayName("a StandTestException thrown by an executor propagates as infrastructure failure")
+    void run_executorThrowsInfra_propagates() {
+        DefaultScenarioRunner runner = runner(new FakeStepExecutor("fake.infra", (step, context) -> {
+            throw new StandTestException("datasource unreachable");
+        }));
+
+        assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.infra"))))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("datasource unreachable");
+    }
+
+    @Test
+    @DisplayName("an unexpected runtime exception is wrapped as a StandTestException")
+    void run_unexpectedException_isWrapped() {
+        IllegalStateException cause = new IllegalStateException("weird");
+        DefaultScenarioRunner runner = runner(new FakeStepExecutor("fake.weird", (step, context) -> {
+            throw cause;
+        }));
+
+        assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.weird"))))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("failed unexpectedly")
+                .hasCause(cause);
+    }
+
+    @Test
+    @DisplayName("a step type with no registered executor fails with a StandTestException")
+    void run_noExecutor_throwsInfra() {
+        DefaultScenarioRunner runner = runner(FakeStepExecutor.succeeding("fake.other"));
+
+        assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.missing"))))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("No step executor")
+                .hasMessageContaining("fake.missing");
+    }
+
+    @Test
+    @DisplayName("an invalid scenario fails validation before any step runs")
+    void run_invalidScenario_throwsInfra() {
+        FakeStepExecutor executor = FakeStepExecutor.succeeding("fake.ok");
+        Scenario empty = Scenario.builder("example-flow").environment("ift").build();
+
+        assertThatThrownBy(() -> runner(executor).run(empty))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("validation failed");
+        assertThat(executor.invocations()).isZero();
+    }
+
+    @Test
+    @DisplayName("execution short-circuits: no step after the first failure runs")
+    void run_shortCircuits_afterFirstFailure() {
+        FakeStepExecutor failing = FakeStepExecutor.failing("fake.fail", "nope");
+        FakeStepExecutor next = FakeStepExecutor.succeeding("fake.ok");
+
+        assertThatThrownBy(() -> runner(failing, next)
+                .run(scenario(GenericStep.of("s1", "fake.fail"), GenericStep.of("s2", "fake.ok"))))
+                .isInstanceOf(StandTestAssertionError.class);
+        assertThat(failing.invocations()).isEqualTo(1);
+        assertThat(next.invocations()).isZero();
+    }
+
+    @Test
+    @DisplayName("each run gets a fresh, isolated variable store")
+    void run_isolatesVariableStorePerRun() {
+        FakeStepExecutor isolating = new FakeStepExecutor("fake.iso", (step, context) -> {
+            if (context.variableStore().contains("seen")) {
+                return StepResult.failed(step.id(), step.type(), Instant.now(), Instant.now(), "store leaked");
+            }
+            context.variableStore().put("seen", true);
+            return StepResult.success(step.id(), step.type(), Instant.now(), Instant.now());
+        });
+        DefaultScenarioRunner runner = runner(isolating);
+
+        assertThat(runner.run(scenario(GenericStep.of("s1", "fake.iso"))).isSuccessful()).isTrue();
+        assertThat(runner.run(scenario(GenericStep.of("s1", "fake.iso"))).isSuccessful()).isTrue();
+    }
+
+    @Test
+    @DisplayName("scenario and step lifecycle events are published in order")
+    void run_publishesLifecycleEvents_inOrder() {
+        RecordingReportingEventPublisher recording = new RecordingReportingEventPublisher();
+        DefaultScenarioRunner runner = new DefaultScenarioRunner(
+                List.of(FakeStepExecutor.succeeding("fake.ok")),
+                new DefaultScenarioValidator(),
+                new InMemoryEnvironmentRegistry(Map.of()),
+                recording);
+
+        runner.run(scenario(GenericStep.of("s1", "fake.ok")));
+
+        List<ReportingEvent> events = recording.events();
+        assertThat(events).hasSize(4);
+        assertThat(events.get(0)).isInstanceOfSatisfying(ScenarioEvent.class,
+                e -> assertThat(e.phase()).isEqualTo(ScenarioPhase.STARTED));
+        assertThat(events.get(1)).isInstanceOfSatisfying(StepEvent.class, e -> {
+            assertThat(e.phase()).isEqualTo(StepPhase.STARTED);
+            assertThat(e.status()).isNull();
+        });
+        assertThat(events.get(2)).isInstanceOfSatisfying(StepEvent.class, e -> {
+            assertThat(e.phase()).isEqualTo(StepPhase.FINISHED);
+            assertThat(e.status()).isEqualTo(StepStatus.SUCCESS);
+        });
+        assertThat(events.get(3)).isInstanceOfSatisfying(ScenarioEvent.class,
+                e -> assertThat(e.phase()).isEqualTo(ScenarioPhase.FINISHED));
+    }
+
+    @Test
+    @DisplayName("the scenario FINISHED event and the failed step event are still published on failure")
+    void run_publishesFinishedEvents_onFailure() {
+        RecordingReportingEventPublisher recording = new RecordingReportingEventPublisher();
+        DefaultScenarioRunner runner = new DefaultScenarioRunner(
+                List.of(FakeStepExecutor.failing("fake.fail", "nope")),
+                new DefaultScenarioValidator(),
+                new InMemoryEnvironmentRegistry(Map.of()),
+                recording);
+
+        assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.fail"))))
+                .isInstanceOf(StandTestAssertionError.class);
+
+        List<ReportingEvent> events = recording.events();
+        assertThat(events.get(events.size() - 1)).isInstanceOfSatisfying(ScenarioEvent.class,
+                e -> assertThat(e.phase()).isEqualTo(ScenarioPhase.FINISHED));
+        assertThat(events).anySatisfy(event -> assertThat(event).isInstanceOfSatisfying(StepEvent.class, e -> {
+            assertThat(e.phase()).isEqualTo(StepPhase.FINISHED);
+            assertThat(e.status()).isEqualTo(StepStatus.FAILED);
+        }));
+    }
+
+    @Test
+    @DisplayName("step result diagnostics flow into the finished step event")
+    void run_stepDiagnostics_flowIntoFinishedEvent() {
+        RecordingReportingEventPublisher recording = new RecordingReportingEventPublisher();
+        FakeStepExecutor withDiagnostics = new FakeStepExecutor("fake.diag", (step, context) ->
+                new StepResult(step.id(), step.type(), StepStatus.SUCCESS, Instant.now(), Instant.now(),
+                        null, Map.of("attempts", 3)));
+        DefaultScenarioRunner runner = new DefaultScenarioRunner(
+                List.of(withDiagnostics),
+                new DefaultScenarioValidator(),
+                new InMemoryEnvironmentRegistry(Map.of()),
+                recording);
+
+        runner.run(scenario(GenericStep.of("s1", "fake.diag")));
+
+        assertThat(recording.events()).anySatisfy(event -> assertThat(event).isInstanceOfSatisfying(StepEvent.class, e -> {
+            assertThat(e.phase()).isEqualTo(StepPhase.FINISHED);
+            assertThat(e.diagnostics()).containsEntry("attempts", 3);
+        }));
+    }
+
+    @Test
+    @DisplayName("a null result from an executor is reported as an infrastructure failure")
+    void run_nullExecutorResult_isWrapped() {
+        DefaultScenarioRunner runner = runner(new FakeStepExecutor("fake.null", (step, context) -> null));
+
+        assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.null"))))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("failed unexpectedly");
+    }
+
+    @Test
+    @DisplayName("null scenario and null collaborators are rejected")
+    void invalidArguments_areRejected() {
+        assertThatThrownBy(() -> runner(FakeStepExecutor.succeeding("fake.ok")).run(null))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new DefaultScenarioRunner(null))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new DefaultScenarioRunner(
+                List.of(), null, new InMemoryEnvironmentRegistry(Map.of()), NoOpReportingEventPublisher.INSTANCE))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    @DisplayName("all steps of a multi-step scenario run in order and produce ordered results")
+    void run_multiStep_executesAllInOrder() {
+        FakeStepExecutor executor = FakeStepExecutor.succeeding("fake.ok");
+
+        ScenarioResult result = runner(executor).run(scenario(
+                GenericStep.of("s1", "fake.ok"),
+                GenericStep.of("s2", "fake.ok"),
+                GenericStep.of("s3", "fake.ok")));
+
+        assertThat(result.isSuccessful()).isTrue();
+        assertThat(result.stepResults()).extracting(StepResult::stepId).containsExactly("s1", "s2", "s3");
+        assertThat(executor.invocations()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("the variable store is shared across steps within a single run")
+    void run_sharesVariableStore_withinRun() {
+        FakeStepExecutor executor = new FakeStepExecutor("fake.var", (step, context) -> {
+            if ("s1".equals(step.id())) {
+                context.variableStore().put("token", "abc");
+                return StepResult.success(step.id(), step.type(), Instant.now(), Instant.now());
+            }
+            boolean shared = "abc".equals(context.variableStore().getRequired("token"));
+            return shared
+                    ? StepResult.success(step.id(), step.type(), Instant.now(), Instant.now())
+                    : StepResult.failed(step.id(), step.type(), Instant.now(), Instant.now(), "token mismatch");
+        });
+
+        ScenarioResult result = runner(executor)
+                .run(scenario(GenericStep.of("s1", "fake.var"), GenericStep.of("s2", "fake.var")));
+
+        assertThat(result.isSuccessful()).isTrue();
+        assertThat(result.stepResults()).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("a returned TIMEOUT status is raised as a failure but a SKIPPED status is not")
+    void run_timeoutThrows_skippedDoesNot() {
+        DefaultScenarioRunner timing = runner(new FakeStepExecutor("fake.timeout", (step, context) ->
+                StepResult.timeout(step.id(), step.type(), Instant.now(), Instant.now(), "waited too long")));
+        assertThatThrownBy(() -> timing.run(scenario(GenericStep.of("s1", "fake.timeout"))))
+                .isInstanceOf(StandTestAssertionError.class)
+                .hasMessageContaining("TIMEOUT")
+                .hasMessageContaining("waited too long");
+
+        DefaultScenarioRunner skipping = runner(new FakeStepExecutor("fake.skip", (step, context) ->
+                StepResult.skipped(step.id(), step.type(), Instant.now(), Instant.now())));
+        assertThat(skipping.run(scenario(GenericStep.of("s1", "fake.skip"))).isSuccessful()).isTrue();
+    }
+
+    @Test
+    @DisplayName("the injected clock drives the run timestamps and event times")
+    void run_usesInjectedClock() {
+        Instant fixed = Instant.parse("2026-06-29T12:00:00Z");
+        RecordingReportingEventPublisher recording = new RecordingReportingEventPublisher();
+        DefaultScenarioRunner runner = new DefaultScenarioRunner(
+                List.of(FakeStepExecutor.succeeding("fake.ok")),
+                new DefaultScenarioValidator(),
+                new InMemoryEnvironmentRegistry(Map.of()),
+                recording,
+                Clock.fixed(fixed, ZoneOffset.UTC));
+
+        ScenarioResult result = runner.run(scenario(GenericStep.of("s1", "fake.ok")));
+
+        assertThat(result.startedAt()).isEqualTo(fixed);
+        assertThat(result.finishedAt()).isEqualTo(fixed);
+        assertThat(result.duration()).isEqualTo(Duration.ZERO);
+        assertThat(recording.events().get(0)).isInstanceOfSatisfying(ScenarioEvent.class,
+                e -> assertThat(e.timestamp()).isEqualTo(fixed));
+    }
+
+    @Test
+    @DisplayName("the runner maps scenario fields into the per-run ScenarioContext handed to executors")
+    void run_propagatesScenarioContext() {
+        AtomicReference<ScenarioContext> captured = new AtomicReference<>();
+        FakeStepExecutor capturing = new FakeStepExecutor("fake.ctx", (step, context) -> {
+            captured.set(context.scenarioContext());
+            return StepResult.success(step.id(), step.type(), Instant.now(), Instant.now());
+        });
+        Scenario scenario = Scenario.builder("example-flow").environment("ift").tag("smoke")
+                .step(GenericStep.of("s1", "fake.ctx")).build();
+
+        runner(capturing).run(scenario);
+
+        ScenarioContext context = captured.get();
+        assertThat(context.scenarioId().value()).isEqualTo("example-flow");
+        assertThat(context.environment()).isEqualTo("ift");
+        assertThat(context.tags()).containsExactly("smoke");
+        assertThat(context.correlationId()).isNotNull();
+        assertThat(context.testRunId()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("a throwing reporting publisher never changes the test outcome or duplicates a result")
+    void run_throwingPublisher_doesNotAffectOutcome() {
+        ReportingEventPublisher throwing = new ReportingEventPublisher() {
+            @Override
+            public void publish(ScenarioEvent event) {
+                throw new IllegalStateException("reporting down");
+            }
+
+            @Override
+            public void publish(StepEvent event) {
+                throw new IllegalStateException("reporting down");
+            }
+        };
+        DefaultScenarioRunner runner = new DefaultScenarioRunner(
+                List.of(FakeStepExecutor.succeeding("fake.ok")),
+                new DefaultScenarioValidator(),
+                new InMemoryEnvironmentRegistry(Map.of()),
+                throwing);
+
+        ScenarioResult result = runner.run(scenario(GenericStep.of("s1", "fake.ok")));
+
+        assertThat(result.isSuccessful()).isTrue();
+        assertThat(result.stepResults()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("a step with no registered executor still emits STARTED and FAILED step events")
+    void run_noExecutor_emitsStepEvents() {
+        RecordingReportingEventPublisher recording = new RecordingReportingEventPublisher();
+        DefaultScenarioRunner runner = new DefaultScenarioRunner(
+                List.of(FakeStepExecutor.succeeding("fake.other")),
+                new DefaultScenarioValidator(),
+                new InMemoryEnvironmentRegistry(Map.of()),
+                recording);
+
+        assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.missing"))))
+                .isInstanceOf(StandTestException.class);
+
+        List<ReportingEvent> events = recording.events();
+        assertThat(events).anySatisfy(event -> assertThat(event).isInstanceOfSatisfying(StepEvent.class,
+                e -> assertThat(e.phase()).isEqualTo(StepPhase.STARTED)));
+        assertThat(events).anySatisfy(event -> assertThat(event).isInstanceOfSatisfying(StepEvent.class, e -> {
+            assertThat(e.phase()).isEqualTo(StepPhase.FINISHED);
+            assertThat(e.status()).isEqualTo(StepStatus.FAILED);
+        }));
+    }
+
+    @Test
+    @DisplayName("concurrent runs of one runner instance stay isolated")
+    void run_concurrentRuns_areIsolated() {
+        FakeStepExecutor isolating = new FakeStepExecutor("fake.iso", (step, context) -> {
+            if (context.variableStore().contains("seen")) {
+                return StepResult.failed(step.id(), step.type(), Instant.now(), Instant.now(), "store leaked");
+            }
+            context.variableStore().put("seen", true);
+            return StepResult.success(step.id(), step.type(), Instant.now(), Instant.now());
+        });
+        DefaultScenarioRunner runner = runner(isolating);
+
+        assertThatCode(() -> IntStream.range(0, 64).parallel().forEach(index ->
+                runner.run(scenario(GenericStep.of("s1", "fake.iso"))))).doesNotThrowAnyException();
+    }
+}
