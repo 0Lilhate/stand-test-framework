@@ -17,6 +17,11 @@ kafkaClients = "3.9.2"
 # consumer. H2 is a TEST-ONLY in-memory database — the broker-free analog of Kafka's MockConsumer and
 # REST's HttpServer (plan §16) — never a runtime dependency of the published adapter.
 h2 = "2.3.232"
+# stand-test-allure adapter: Allure Java commons (lifecycle + model API, io.qameta.allure). The adapter
+# maps core reporting events to Allure steps/labels/attachments. allure-junit5 (the JUnit integration
+# that actually opens the Allure test case) is a consumer-side wiring concern, deliberately NOT a
+# dependency of this mapping module — it would pull JUnit onto a pure reporting adapter's classpath.
+allure = "2.29.1"
 # Reserved for later phases (not applied at the skeleton stage):
 springBoot = "3.5.14"
 springDependencyManagement = "1.1.7"
@@ -32,3 +37,4 @@ spring-webflux = { module = "org.springframework:spring-webflux", version.ref = 
 json-path = { module = "com.jayway.jsonpath:json-path", version.ref = "jsonPath" }
 kafka-clients = { module = "org.apache.kafka:kafka-clients", version.ref = "kafkaClients" }
 h2 = { module = "com.h2database:h2", version.ref = "h2" }
+allure-java-commons = { module = "io.qameta.allure:allure-java-commons", version.ref = "allure" }

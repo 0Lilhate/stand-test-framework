@@ -1,0 +1,86 @@
+package ru.alfa.stand.test.allure.attachment;
+
+import java.util.Locale;
+
+/**
+ * The generic, transport-agnostic attachment kinds the adapter publishes to Allure.
+ *
+ * <p>Deliberately generic (plan §8.9): there are no REST/Kafka/DB-specific attachment kinds. Each value
+ * carries the media type Allure stores and the file extension used for the rendered source file. The
+ * producing adapter chooses a media type when it builds a core {@code Attachment}; this enum is how the
+ * reporting side maps that media type to a file extension and how the adapter's own helpers
+ * ({@code publishJson}/{@code publishKeyValue}/…) name their content.
+ */
+public enum AttachmentType {
+
+    /** Plain UTF-8 text. */
+    TEXT("text/plain", "txt"),
+
+    /** JSON document. */
+    JSON("application/json", "json"),
+
+    /** XML document. */
+    XML("application/xml", "xml"),
+
+    /** SQL statement text. */
+    SQL("application/sql", "sql"),
+
+    /** Arbitrary bytes carried as text (the core attachment contract is textual). */
+    BINARY("application/octet-stream", "bin"),
+
+    /** A rendered key/value diagnostics block. */
+    KEY_VALUE("text/plain", "txt");
+
+    private final String mediaType;
+    private final String fileExtension;
+
+    AttachmentType(String mediaType, String fileExtension) {
+        this.mediaType = mediaType;
+        this.fileExtension = fileExtension;
+    }
+
+    /**
+     * Returns the media type Allure stores for this kind.
+     *
+     * @return the media type
+     */
+    public String mediaType() {
+        return mediaType;
+    }
+
+    /**
+     * Returns the file extension (no leading dot) for the rendered attachment source.
+     *
+     * @return the file extension
+     */
+    public String fileExtension() {
+        return fileExtension;
+    }
+
+    /**
+     * Derives a sensible file extension for an arbitrary media type carried on a core attachment,
+     * falling back to {@code txt} for an unknown type.
+     *
+     * @param mediaType the media type (may be null)
+     * @return the file extension without a leading dot
+     */
+    public static String extensionForMediaType(String mediaType) {
+        if (mediaType == null) {
+            return TEXT.fileExtension;
+        }
+        String lower = mediaType.toLowerCase(Locale.ROOT);
+        if (lower.contains("json")) {
+            return JSON.fileExtension;
+        }
+        if (lower.contains("xml")) {
+            return XML.fileExtension;
+        }
+        if (lower.contains("sql")) {
+            return SQL.fileExtension;
+        }
+        if (lower.contains("octet-stream")) {
+            return BINARY.fileExtension;
+        }
+        return TEXT.fileExtension;
+    }
+}
