@@ -267,28 +267,43 @@ flowchart TD
 - **Назначение.** Слой seed/probe/assertion для БД. Содержит typed step-модель (`DbStep`) и DB
   `StepExecutor`. **Сначала — probe/assertion-слой, а не generic DB-клиент**: запись поддерживается
   только как ограниченная подготовка тест-данных.
-- **Входит (будущие возможности).** seed-скрипты; query; await-query; expect row exists; expect single
-  value; cleanup по `testRunId`.
-- **Ограничения безопасности (обязательно).**
-  - **datasource whitelist** — только описанные датасорсы из env-конфига;
-  - **schema whitelist** — seed/cleanup пишут только в разрешённые схемы (`allowedSchemas`);
-  - **readonly по умолчанию**; seed/cleanup требуют **explicit write-allow** (флаг датасорса
-    `writeAllowed` в env-конфиге + явный шаг);
-  - **destructive SQL запрещён по умолчанию** и требует **explicit allow flag**;
-  - **что считается destructive:** `delete` без фильтра по `testRunId`; `truncate`; `drop`;
-    `update` без фильтра по `testRunId`; любой `insert`/`update`/`delete` вне whitelisted-схемы;
-  - **seed помечает данные `testRunId`** (если таблица/модель это поддерживает);
-  - **cleanup работает по `testRunId`** (soft-cleanup, без «широких» операций);
+- **Входит (будущие возможности).** Типы шагов **`db.query`** / **`db.expectEventually`** (await-query) /
+  **`db.seed`** / **`db.cleanup`** — typed `DbStep` собирает core-`ScenarioStep` (как `RestStep`/`KafkaStep`,
+  §8.5): query; await-query; expect row exists; expect single value; seed-скрипты; cleanup по `testRunId`.
+  `db.expectEventually` поллит query через `stand-test-await` (probe = выполнить query, condition = значение
+  совпало; на timeout — `StandTestAssertionError` с `TimeoutDiagnostics`: datasource, query, params,
+  последнее наблюдённое значение, число попыток). У DB нет poll-хазардов Kafka (нет pre-arm/seek-race);
+  per-run JDBC-соединение держится в `ResourceScope` по ключу-алиасу датасорса (§8.7).
+- **Ограничения безопасности (обязательно — механизм специфицирован в [§8.8](#88-безопасность-db-классификация-sql-и-write-guard)).**
+  - **datasource whitelist** — только описанные датасорсы из env-конфига (резолв `urlRef`/`userRef`/
+    `passwordRef` → значения в рантайме адаптером, как `baseUrlRef` у REST, §9);
+  - **schema whitelist** — seed/cleanup пишут только в разрешённые схемы (`allowedSchemas`); схема write-шага
+    выводится из **schema-qualified** имени таблицы (§8.8);
+  - **readonly по умолчанию**; write (`INSERT`/`UPDATE`/`DELETE`) — только на `db.seed`/`db.cleanup` **и** при
+    `writeAllowed == true` (флаг датасорса в env-конфиге + явный шаг);
+  - **destructive SQL запрещён**; **что считается destructive:** `delete`/`update` без декларированного
+    `testRunId`-предиката (маркер `DbStep.whereTestRunId(...)`, §8.8); `truncate`; `drop`/DDL; любой
+    `insert`/`update`/`delete` вне whitelisted-схемы или неквалифицированной таблицы;
+  - **классификация SQL** — единый statement-классификатор в core, потребляемый `ScenarioValidator` (статически,
+    до прогона) и форсимый адаптером повторно в рантайме (defense-in-depth); один statement на шаг,
+    непарсимое — **reject** (fail-closed), см. §8.8;
+  - **seed помечает данные `testRunId`** — автор включает `test_run_id = :testRunId` (built-in `${testRunId}`);
+    адаптер не инъектит автоматически (§8.8);
+  - **cleanup работает по `testRunId`** (soft-cleanup, без «широких» операций) — **явный** `db.cleanup`-шаг
+    (не авто-teardown; не отработает после упавшего шага — §8.8);
   - **shared mutable test data запрещены** (см. [§15](#15-parallel-execution-and-isolation));
   - **БД не становится основным способом проверки бизнес-логики**, если есть публичный API/событие.
 - **Не должно входить.** ORM/доменные репозитории сервиса; «широкие» destructive-операции;
-  обход публичного поведения; generic-режим «произвольный SQL к произвольной БД».
+  обход публичного поведения; generic-режим «произвольный SQL к произвольной БД»; мульти-statement-батчи.
 - **Внутренние зависимости.** `stand-test-core`, `stand-test-await`.
-- **Внешние зависимости.** JDBC (`java.sql`), драйвер предоставляет потребитель; опционально
-  HikariCP/Spring-JDBC как тонкий помощник.
-- **MVP.** Да — query, await-query, expect single value, seed (write-allow), черновик
-  cleanup-стратегии по `testRunId`.
-- **Отложено.** Полноценный безопасный движок cleanup, миграционные сиды, multi-datasource транзакции.
+- **Внешние зависимости.** JDBC (`java.sql`); драйвер предоставляет потребитель. Именованные параметры
+  (`:name`) — собственный переписыватель `:name` → `?` поверх `PreparedStatement`; Spring-JDBC/HikariCP —
+  опциональный тонкий помощник, не обязателен для MVP. Тесты самого SDK — на **H2 in-memory** (§16).
+- **MVP.** Да — `db.query`; `db.expectEventually` (await-query, expect single value); `db.seed`
+  (write-allow); черновик `db.cleanup` по `testRunId`; statement-классификатор + schema/datasource-whitelist.
+  `seed` принимает inline SQL или classpath-ресурс (как `body`/`bodyFromResource` у REST), **один statement**.
+- **Отложено.** Полноценный безопасный движок cleanup + teardown/finally-хук; «expect row exists» как отдельный
+  шаг; миграционные сиды; multi-datasource транзакции; мульти-statement seed.
 
 ### stand-test-grpc
 
@@ -476,8 +491,12 @@ flowchart LR
   в `StepExecutionContext` (§8.7) и `KafkaClusterDefinition` в env-модели (§9). Затем: `kafka.send`
   (JSON, inject correlationId); `kafka.expect` (selection по `correlationId`/`key`, JSONPath-ассерты,
   capture); базовая offset-стратегия (start-from-now с pre-arm, уникальный group.id); timeout-diagnostics.
-- **Итерация 6 — DB adapter.** query; await-query; expect single value; seed (write-allow);
-  schema-whitelist; черновик cleanup-стратегии по `testRunId`.
+- **Итерация 6 — DB adapter.** *Prerequisite (core):* statement-классификатор SQL в `core.validation`
+  (read/write/destructive; schema-qualified; `testRunId`-предикат; fail-closed), потребляемый
+  `ScenarioValidator` и деривируемый из `ForbiddenOperation` (§8.6/§8.8) — нового env-контракта **не**
+  требуется (`DatasourceDefinition` уже есть, §9). Затем: `db.query`; `db.expectEventually` (await-query,
+  expect single value); `db.seed` (write-allow); schema/datasource-whitelist; черновик `db.cleanup` по
+  `testRunId` (§8.8).
 - **Итерация 7 — Allure.** step-репортинг; attachments; метаданные сценария; проброс timeout-диагностики.
 - **Итерация 8 — Example tests.** Только технические примеры использования SDK; **без** бизнес-логики
   реального проекта.
@@ -746,8 +765,10 @@ public no-arg конструктор). `StandClient`/JUnit-обвязка соб
 - новый компонент в `StepExecutionContext` (рядом с `VariableStore`), **отдельный** от него:
   `VariableStore` хранит value-объекты (коэрсятся в `String`), а `ResourceScope` — живые `AutoCloseable`
   (например `KafkaConsumer`), привязанные к прогону;
-- **keyed-реестр:** `register(key, AutoCloseable)` (idempotent на ключ) + `get(key)` (lookup из
-  `execute`) + `closeAll()`; ключ Kafka-консьюмера — **топик-алиас**, так что `prepare` и все `execute`
+- **keyed-реестр:** `register(key, AutoCloseable)` (**fail-fast на дубликат ключа** — бросает
+  `StandTestException`; per-key идемпотентность обеспечивает **адаптер**, проверяя `contains(key)` перед
+  `register`, как делает Kafka-executor) + `contains(key)`/`get(key)` (lookup из `prepare`/`execute`) +
+  `closeAll()`; ключ Kafka-консьюмера — **топик-алиас**, так что `prepare` и все `execute`
   по этому топику детерминированно делят один продвигающийся консьюмер;
 - один `ResourceScope` на scenario run, владелец — `ScenarioRunner`; `closeAll()` в `finally` прогона —
   гарантия отсутствия утечек консьюмеров/соединений;
@@ -758,6 +779,69 @@ public no-arg конструктор). `StandClient`/JUnit-обвязка соб
 > раннер обязан вызвать `prepare` (позиционирование) для **всех** шагов до выполнения **первого** шага.
 > Реализация требует расширения core-SPI — `StepExecutor.prepare` (default no-op, обратносовместимо) и
 > `ResourceScope` в `StepExecutionContext`; это prerequisite Итерации 5 (§7).
+
+### 8.8 Безопасность DB: классификация SQL и write-guard
+
+Снимаем блокер уровня контракта для Итерации 6 (DB). **Проблема:** §4 stand-test-db определяет destructive
+SQL *семантически* («`delete`/`update` без фильтра по `testRunId`», «запись вне whitelisted-схемы») и
+помечает ограничения **обязательными**, но не задаёт, как это **достоверно извлечь из строки SQL** —
+комментарии, строковые литералы, мульти-statement-батчи, `search_path`/квалификация схемы и биндинг
+параметров делают наивный матчинг небезопасным (риск пропустить destructive-операцию на реальном
+DEV/IFT-стенде → потеря данных). Это DB-аналог `KAFKA-SEEK-RACE` (§8.7): нетривиальный механизм,
+объявленный обязательным, но не специфицированный. Здесь он фиксируется до старта реализации.
+
+**Где форсятся guardrails (нормативно).** Проверки, выводимые из **модели сценария** без IO, выполняет
+**`ScenarioValidator` статически до прогона**, потребляя `ForbiddenOperation` (§8.6) — это сохраняет
+единый источник истины и переиспользование в `ai-schema` (§4 stand-test-ai-schema). DB-адаптер форсит те же инварианты
+**повторно в рантайме** (defense-in-depth: эффективная схема соединения, параметризованный bind). Для
+этого core получает **statement-классификатор** (`SqlGuard`/правила в `core.validation`, потребляемые
+валидатором) — **prerequisite Итерации 6** (§7). Новый env-контракт **не** требуется: `DatasourceDefinition`
+(`allowedSchemas`/`writeAllowed`, §9) уже реализован.
+
+**Ограниченная грамматика (MVP — fail-closed):**
+
+- **Один statement на шаг.** После вырезания комментариев и строковых литералов наличие разделителя
+  statement'ов (`;` в середине) или непарсимый ввод → **reject** (`StandTestException`), никогда не
+  «allow по умолчанию».
+- **Классификация по ведущему ключевому слову:** `SELECT`/`WITH … SELECT` → **read**;
+  `INSERT`/`UPDATE`/`DELETE` → **write**; `TRUNCATE`/`DROP`/`ALTER`/`CREATE`/`GRANT`/… → **DDL/destructive**.
+- **readonly по умолчанию:** read разрешён всегда; write разрешён **только** на шаге `db.seed`/`db.cleanup`
+  **и** при `DatasourceDefinition.writeAllowed == true` (иначе `DESTRUCTIVE_SQL_WITHOUT_ALLOW`). DDL/destructive
+  в MVP запрещены всегда (отдельного destructive-allow-флага MVP не вводит).
+- **Schema-whitelist:** таблица в write-statement обязана быть **schema-qualified** (`test_data.orders`),
+  и эта схема ∈ `allowedSchemas`; неквалифицированная таблица в write → reject (схему нельзя доказать).
+  Для read квалификация не требуется.
+- **`testRunId`-предикат для `UPDATE`/`DELETE`:** вместо парсинга `WHERE` шаг обязан **декларировать** предикат
+  явным маркером (`DbStep.whereTestRunId("test_run_id")`, биндящим колонку к `${testRunId}`); классификатор
+  проверяет, что statement ссылается на этот bind. `UPDATE`/`DELETE` без декларированного `testRunId`-предиката
+  → destructive → запрет.
+- **Только параметризованные binds.** Значения подставляются через `PreparedStatement` (`:name` → `?`,
+  см. §4 stand-test-db), не строковой склейкой; это и закрывает SQL-инъекцию.
+
+**`seed`/`testRunId`-тегирование (контракт).** `testRunId` проставляет **автор** seed-SQL через built-in
+`${testRunId}` (например колонка `test_run_id = :testRunId`), адаптер его **не** инъектит автоматически;
+`db.cleanup` затем работает по этой колонке. Так «seed помечает данные `testRunId`» становится конкретным.
+
+**Чтение и assertion (нормативно).** `db.query` — **разовое** read-исполнение (без `Awaiter`): выполняет
+SELECT и **каптит** значения колонок в `VariableStore` (`capture(name, column)`) для подготовки `${...}`
+следующим шагам; ассертов не делает. `db.expectEventually` поллит SELECT через `stand-test-await` и
+проверяет `expectSingleValue`: результат обязан быть **ровно одна строка, первый столбец**; **0 строк** =
+«ещё не готово» (poll продолжается; на timeout → `StandTestAssertionError`); **>1 строки** →
+`StandTestException` (неоднозначно). Сравнение значения — type-aware, как в REST/Kafka (числа по значению;
+иная смена типа — несовпадение). Маркер `whereTestRunId(col)` **дописывает** предикат `where <col> =
+:testRunId` (built-in `${testRunId}`); SQL шага не должен нести собственный `WHERE` (единственный источник
+предиката), иначе reject.
+
+**Failure-маппинг (§8.3).** Несовпадение `expectSingleValue` / timeout → `StandTestAssertionError`
+(падение теста); reject классификатора, нарушение whitelist/write-guard, `SQLException`, ошибка
+соединения/резолва ссылки → `StandTestException` (инфраструктура/конфиг). Новой константы
+`ForbiddenOperation` **не** требуется — переиспользуются `DESTRUCTIVE_SQL_WITHOUT_ALLOW`,
+`NON_WHITELISTED_DATASOURCE`, `RAW_JDBC_CLIENT` (§8.6).
+
+> **Известное ограничение MVP (forward).** `db.cleanup` — **явный шаг**, не авто-teardown: раннер
+> short-circuit'ит на первом падении и не имеет teardown-хука (§8.3), поэтому cleanup **не отработает после
+> упавшего шага**. Для «черновика cleanup» это приемлемо; полноценный безопасный cleanup-движок и
+> finally/teardown-хук — отложены (§4 stand-test-db).
 
 ---
 
@@ -870,6 +954,18 @@ class ExampleFlowTest {
         .injectCorrelationId())             // SDK-owned correlationId → носитель из конфига топика (§8.4)
 ```
 
+**`db.seed` / `db.cleanup`** (write-сторона, только при `writeAllowed`; см. [§8.8](#88-безопасность-db-классификация-sql-и-write-guard)) —
+подготовка данных в `given` и явный soft-cleanup:
+
+```java
+.step(DbStep.seed("mainDb")                  // write — только на seed/cleanup + writeAllowed (§8.8)
+        .sql("insert into test_data.request(id, test_run_id, status) values (:requestId, :testRunId, 'NEW')")
+        .paramFromContext("requestId"))      // :testRunId — built-in ${testRunId}, проставляет автор (§8.8)
+.step(DbStep.cleanup("mainDb")               // явный soft-cleanup по testRunId (не авто-teardown, §8.8)
+        .sql("delete from test_data.request")            // без своего WHERE — предикат дописывает маркер
+        .whereTestRunId("test_run_id"))      // → where test_run_id = :testRunId, иначе destructive
+```
+
 ---
 
 ## 11. YAML DSL draft
@@ -923,6 +1019,24 @@ given:
       body: fixtures/event.json
       key: "${requestId}"              # опц.
       injectCorrelationId: true        # SDK-owned correlationId → носитель из конфига топика (§8.4)
+```
+
+**`db.seed` / `db.cleanup`** (write, только при `writeAllowed`; §8.8) — подготовка и явный soft-cleanup:
+
+```yaml
+given:
+  - db.seed:                           # write — только seed/cleanup + writeAllowed (§8.8)
+      datasource: mainDb
+      sql: |
+        insert into test_data.request(id, test_run_id, status)
+        values (:requestId, :testRunId, 'NEW')
+      params:
+        requestId: "${requestId}"      # :testRunId — built-in ${testRunId}, проставляет автор (§8.8)
+
+  - db.cleanup:                        # явный soft-cleanup по testRunId (не авто-teardown, §8.8)
+      datasource: mainDb
+      sql: delete from test_data.request
+      whereTestRunId: test_run_id      # → where test_run_id = :testRunId, иначе destructive
 ```
 
 ---
@@ -1082,7 +1196,7 @@ checks как post-MVP).
 | AI schema drift from runtime validator | §8.6: единый источник forbidden-ops в core; `ai-schema` генерирует ограничения из core-контракта. |
 | Java DSL bypassing validator | §8.1: lazy builder + анти-правило (§20); запрет eager-IO Java API; единый Validator для обоих входов. |
 | Kafka seek race (`KAFKA-SEEK-RACE`) | **§8.7** (механизм): консьюмеры пред-вооружаются (`assign`→`seekToEnd`→`position`) в фазе `prepare` раннера **до** любого шага → до триггера; живут в run-scoped `ResourceScope`; контракт порядка нормативен. §4 `stand-test-kafka` — детали стратегии; диагностика при timeout. |
-| DB adapter станет unsafe generic DB client | §4 `stand-test-db`: readonly по умолчанию, write-allow flag, datasource+schema whitelist, probe-first правило, определение destructive SQL. |
+| DB adapter станет unsafe generic DB client | **§8.8** (механизм): statement-классификатор fail-closed (read/write/destructive), один statement на шаг, schema-qualified write ∈ `allowedSchemas`, обязательный `testRunId`-предикат, параметризованные binds; статически в `ScenarioValidator` + повторно в адаптере. §4 `stand-test-db`: readonly по умолчанию, write-allow flag, datasource+schema whitelist, probe-first правило, границы адаптера. |
 | Parallel execution interference | §15: уникальные `testRunId`/`correlationId`, per-scenario `VariableStore`, уникальный consumer group, изоляция данных по `testRunId`, запрет static mutable state. |
 
 ---
