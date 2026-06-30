@@ -3,6 +3,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Язык общения
+
+**Отвечай пользователю на русском языке.** Это касается объяснений, разборов, выводов и вопросов. При
+этом технические артефакты оставляй на английском по существующему стилю репозитория: код и идентификаторы
+(классы, методы, файлы), Javadoc и комментарии в коде, сообщения коммитов/PR. Термины и фрагменты кода
+внутри русского текста не переводи.
+
 ## What this repo is
 
 `stand-test-framework` is a multi-module Gradle (Kotlin DSL) build that produces **`stand-test-sdk`** —

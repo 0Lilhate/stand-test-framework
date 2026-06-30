@@ -1,6 +1,6 @@
 # stand-test-core
 
-**Group:** `ru.alfa.stand.test` · **Gradle plugin:** `java-library` · Root of the module graph.
+**Group:** core · **Gradle plugin:** `java-library` · Root of the module graph.
 
 `stand-test-core` is the foundation of the stand-test SDK. It contains **only** immutable models,
 value objects, contracts and SPI — the canonical `Scenario Model` that both the Java DSL and the
