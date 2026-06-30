@@ -13,6 +13,10 @@ jsonPath = "2.9.0"
 # Pinned to the 3.x line: 4.x renamed the consumer reset enum and changed MockConsumer's constructor,
 # and 3.9.x keeps the OffsetResetStrategy-based MockConsumer used by the adapter's broker-free tests.
 kafkaClients = "3.9.2"
+# stand-test-db adapter: production code is JDK-only (java.sql); the JDBC driver is supplied by the
+# consumer. H2 is a TEST-ONLY in-memory database — the broker-free analog of Kafka's MockConsumer and
+# REST's HttpServer (plan §16) — never a runtime dependency of the published adapter.
+h2 = "2.3.232"
 # Reserved for later phases (not applied at the skeleton stage):
 springBoot = "3.5.14"
 springDependencyManagement = "1.1.7"
@@ -27,3 +31,4 @@ assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 spring-webflux = { module = "org.springframework:spring-webflux", version.ref = "springWebflux" }
 json-path = { module = "com.jayway.jsonpath:json-path", version.ref = "jsonPath" }
 kafka-clients = { module = "org.apache.kafka:kafka-clients", version.ref = "kafkaClients" }
+h2 = { module = "com.h2database:h2", version.ref = "h2" }

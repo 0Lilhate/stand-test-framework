@@ -1,0 +1,156 @@
+package ru.alfa.stand.test.db;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import ru.alfa.stand.test.core.exception.StandTestException;
+
+/**
+ * The shared parameter-map schema for a DB {@code ScenarioStep}.
+ *
+ * <p>{@link DbStep} writes these keys into a core {@code GenericStep}'s parameter map; the
+ * {@link DbStepExecutor} reads them back. Keeping the key names and the read/write logic in one place
+ * makes the parameter map a single, explicit contract that a future YAML front-end can target without
+ * sharing the typed Java builder (mirroring {@code RestStepParameters} / {@code KafkaStepParameters}).
+ *
+ * <p>Reader methods are deliberately strict: a value of the wrong shape is a {@link StandTestException}
+ * (a configuration error), never a silent default.
+ */
+public final class DbStepParameters {
+
+    /** Prefix of the core step type produced for a DB step (for example {@code db.query}). */
+    public static final String TYPE_PREFIX = "db.";
+
+    /** Parameter key: logical datasource alias resolved via the environment registry. */
+    public static final String DATASOURCE = "datasource";
+    /** Parameter key: inline SQL (a single statement). */
+    public static final String SQL = "sql";
+    /** Parameter key: classpath resource whose content is the SQL (a single statement). */
+    public static final String SQL_RESOURCE = "sqlResource";
+    /** Parameter key: named bind values as a name-to-value map. */
+    public static final String PARAMS = "params";
+    /** Parameter key (query): list of column captures into the variable store. */
+    public static final String CAPTURES = "captures";
+    /** Parameter key (expectEventually): the single value the first column must eventually equal. */
+    public static final String EXPECTED_VALUE = "expectedValue";
+    /** Parameter key (cleanup / optional): the column the appended {@code testRunId} predicate binds. */
+    public static final String WHERE_TEST_RUN_ID_COLUMN = "whereTestRunIdColumn";
+    /** Parameter key (expectEventually): maximum time to wait for a match, in milliseconds. */
+    public static final String TIMEOUT_MILLIS = "timeoutMillis";
+    /** Parameter key (expectEventually): the poll interval between probes, in milliseconds. */
+    public static final String POLL_INTERVAL_MILLIS = "pollIntervalMillis";
+
+    /** Nested key (capture): target variable name. */
+    public static final String VARIABLE_NAME = "variableName";
+    /** Nested key (capture): result-set column label. */
+    public static final String COLUMN = "column";
+
+    /** Default {@code db.expectEventually} timeout when none is set, in milliseconds. */
+    public static final long DEFAULT_TIMEOUT_MILLIS = 30_000L;
+    /** Default poll interval between probes when none is set, in milliseconds. */
+    public static final long DEFAULT_POLL_INTERVAL_MILLIS = 200L;
+
+    private DbStepParameters() {
+    }
+
+    static String requireString(Map<String, Object> parameters, String key) {
+        Object value = parameters.get(key);
+        if (!(value instanceof String text) || text.isBlank()) {
+            throw new StandTestException("DB step parameter '" + key + "' must be a non-blank string");
+        }
+        return text;
+    }
+
+    static Optional<String> optionalString(Map<String, Object> parameters, String key) {
+        Object value = parameters.get(key);
+        if (value == null) {
+            return Optional.empty();
+        }
+        if (!(value instanceof String text)) {
+            throw new StandTestException("DB step parameter '" + key + "' must be a string");
+        }
+        return Optional.of(text);
+    }
+
+    static Object requireExpectedValue(Map<String, Object> parameters) {
+        Object value = parameters.get(EXPECTED_VALUE);
+        if (value == null) {
+            throw new StandTestException("A db.expectEventually step requires an expected value (expectValue(...))");
+        }
+        return value;
+    }
+
+    static long positiveMillis(Map<String, Object> parameters, String key, long defaultValue) {
+        Object value = parameters.get(key);
+        if (value == null) {
+            return defaultValue;
+        }
+        // Accept only whole-number types: a Double would be silently truncated (250.9 -> 250) or saturated
+        // (1e30 -> Long.MAX_VALUE) by longValue(). The Java DSL always supplies a Long (Duration.toMillis());
+        // a future YAML front-end may supply an Integer. Mirrors the strict RestStepParameters.expectedStatus.
+        long millis;
+        if (value instanceof Long longMillis) {
+            millis = longMillis;
+        } else if (value instanceof Integer intMillis) {
+            millis = intMillis;
+        } else {
+            throw new StandTestException("DB step parameter '" + key + "' must be a whole number of milliseconds (Integer or Long)");
+        }
+        if (millis <= 0) {
+            throw new StandTestException("DB step parameter '" + key + "' must be a positive number of milliseconds");
+        }
+        return millis;
+    }
+
+    static Map<String, Object> bindValues(Map<String, Object> parameters) {
+        Object value = parameters.get(PARAMS);
+        if (value == null) {
+            return Map.of();
+        }
+        if (!(value instanceof Map<?, ?> raw)) {
+            throw new StandTestException("DB step parameter '" + PARAMS + "' must be a map");
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : raw.entrySet()) {
+            if (entry.getValue() == null) {
+                throw new StandTestException("DB bind value for ':" + entry.getKey() + "' must not be null");
+            }
+            result.put(String.valueOf(entry.getKey()), entry.getValue());
+        }
+        return result;
+    }
+
+    static List<DbCapture> captures(Map<String, Object> parameters) {
+        List<DbCapture> result = new ArrayList<>();
+        for (Map<String, Object> entry : entryList(parameters, CAPTURES)) {
+            Object name = entry.get(VARIABLE_NAME);
+            Object column = entry.get(COLUMN);
+            if (!(name instanceof String variableName) || !(column instanceof String columnLabel)) {
+                throw new StandTestException("DB capture requires string '" + VARIABLE_NAME + "' and '" + COLUMN + "'");
+            }
+            result.add(new DbCapture(variableName, columnLabel));
+        }
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> entryList(Map<String, Object> parameters, String key) {
+        Object value = parameters.get(key);
+        if (value == null) {
+            return List.of();
+        }
+        if (!(value instanceof List<?> list)) {
+            throw new StandTestException("DB step parameter '" + key + "' must be a list");
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?>)) {
+                throw new StandTestException("DB step parameter '" + key + "' entries must be maps");
+            }
+            result.add((Map<String, Object>) item);
+        }
+        return result;
+    }
+}
