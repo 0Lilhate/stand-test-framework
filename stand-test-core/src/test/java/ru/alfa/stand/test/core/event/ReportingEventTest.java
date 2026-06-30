@@ -5,8 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import ru.alfa.stand.test.core.identifier.CorrelationId;
@@ -26,7 +30,7 @@ class ReportingEventTest {
     void noOpPublisher_acceptsEvents() {
         ReportingEventPublisher publisher = NoOpReportingEventPublisher.INSTANCE;
         ScenarioEvent scenarioEvent = new ScenarioEvent(
-                SCENARIO_ID, TEST_RUN_ID, CORRELATION_ID, ScenarioPhase.STARTED, NOW);
+                SCENARIO_ID, TEST_RUN_ID, CORRELATION_ID, "ift", Set.of("smoke"), ScenarioPhase.STARTED, NOW);
         StepEvent stepEvent = startedStep();
 
         assertThat(publisher).isNotNull();
@@ -40,11 +44,37 @@ class ReportingEventTest {
     @DisplayName("scenario and step events are both ReportingEvent instances")
     void events_shareReportingEventMarker() {
         ReportingEvent scenarioEvent = new ScenarioEvent(
-                SCENARIO_ID, TEST_RUN_ID, CORRELATION_ID, ScenarioPhase.FINISHED, NOW);
+                SCENARIO_ID, TEST_RUN_ID, CORRELATION_ID, "ift", Set.of(), ScenarioPhase.FINISHED, NOW);
         ReportingEvent stepEvent = startedStep();
 
         assertThat(scenarioEvent).isInstanceOf(ScenarioEvent.class);
         assertThat(stepEvent).isInstanceOf(StepEvent.class);
+    }
+
+    @Test
+    @DisplayName("a scenario event exposes environment and a defensively copied, immutable tag set")
+    void scenarioEvent_carriesEnvironmentAndTags() {
+        Set<String> tags = new HashSet<>();
+        tags.add("smoke");
+        ScenarioEvent event = new ScenarioEvent(
+                SCENARIO_ID, TEST_RUN_ID, CORRELATION_ID, "ift", tags, ScenarioPhase.STARTED, NOW);
+
+        tags.add("leak");
+
+        assertThat(event.environment()).isEqualTo("ift");
+        assertThat(event.tags()).containsExactly("smoke");
+        assertThatThrownBy(() -> event.tags().add("x")).isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    @DisplayName("a scenario event rejects a blank environment and a null phase")
+    void scenarioEvent_validation() {
+        assertThatThrownBy(() -> new ScenarioEvent(
+                SCENARIO_ID, TEST_RUN_ID, CORRELATION_ID, " ", Set.of(), ScenarioPhase.STARTED, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new ScenarioEvent(
+                SCENARIO_ID, TEST_RUN_ID, CORRELATION_ID, "ift", Set.of(), null, NOW))
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test
@@ -76,13 +106,39 @@ class ReportingEventTest {
     }
 
     @Test
+    @DisplayName("the backwards-compatible step event constructor defaults attachments to an empty list")
+    void stepEvent_defaultsAttachmentsToEmpty() {
+        StepEvent event = startedStep();
+
+        assertThat(event.attachments()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("step event attachments are defensively copied and immutable")
+    void stepEvent_attachmentsAreImmutable() {
+        List<Attachment> attachments = new ArrayList<>();
+        attachments.add(new Attachment("request", "application/json", "{}"));
+        StepEvent event = new StepEvent(
+                SCENARIO_ID, TEST_RUN_ID, CORRELATION_ID, "s1", "rest.post", StepPhase.FINISHED,
+                StepStatus.SUCCESS, NOW, "ok", Map.of(), attachments);
+
+        attachments.add(new Attachment("leak", "text/plain", "x"));
+
+        assertThat(event.attachments()).hasSize(1);
+        assertThat(event.attachments().get(0).name()).isEqualTo("request");
+        assertThatThrownBy(() -> event.attachments().add(new Attachment("x", "text/plain", "y")))
+                .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
     @DisplayName("a step event rejects a blank step id and a null required field")
     void stepEvent_validation() {
         assertThatThrownBy(() -> new StepEvent(
                 SCENARIO_ID, TEST_RUN_ID, CORRELATION_ID, " ", "rest.post", StepPhase.STARTED,
                 null, NOW, null, Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new ScenarioEvent(SCENARIO_ID, TEST_RUN_ID, CORRELATION_ID, null, NOW))
+        assertThatThrownBy(() -> new ScenarioEvent(
+                SCENARIO_ID, TEST_RUN_ID, CORRELATION_ID, "ift", Set.of(), null, NOW))
                 .isInstanceOf(NullPointerException.class);
     }
 

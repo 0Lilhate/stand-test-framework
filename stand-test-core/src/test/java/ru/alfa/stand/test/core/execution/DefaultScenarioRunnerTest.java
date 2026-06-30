@@ -16,6 +16,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import ru.alfa.stand.test.core.context.ScenarioContext;
 import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
+import ru.alfa.stand.test.core.event.Attachment;
 import ru.alfa.stand.test.core.event.NoOpReportingEventPublisher;
 import ru.alfa.stand.test.core.event.ReportingEvent;
 import ru.alfa.stand.test.core.event.ReportingEventPublisher;
@@ -391,8 +392,94 @@ class DefaultScenarioRunnerTest {
                 e -> assertThat(e.phase()).isEqualTo(StepPhase.STARTED)));
         assertThat(events).anySatisfy(event -> assertThat(event).isInstanceOfSatisfying(StepEvent.class, e -> {
             assertThat(e.phase()).isEqualTo(StepPhase.FINISHED);
-            assertThat(e.status()).isEqualTo(StepStatus.FAILED);
+            assertThat(e.status()).isEqualTo(StepStatus.BROKEN);
         }));
+    }
+
+    @Test
+    @DisplayName("an infrastructure failure is recorded as a BROKEN step event carrying the exception class")
+    void run_infraFailure_emitsBrokenEventWithExceptionClass() {
+        RecordingReportingEventPublisher recording = new RecordingReportingEventPublisher();
+        DefaultScenarioRunner runner = new DefaultScenarioRunner(
+                List.of(new FakeStepExecutor("fake.infra", (step, context) -> {
+                    throw new StandTestException("datasource unreachable");
+                })),
+                new DefaultScenarioValidator(),
+                new InMemoryEnvironmentRegistry(Map.of()),
+                recording);
+
+        assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.infra"))))
+                .isInstanceOf(StandTestException.class);
+
+        assertThat(recording.events()).anySatisfy(event -> assertThat(event).isInstanceOfSatisfying(StepEvent.class, e -> {
+            assertThat(e.phase()).isEqualTo(StepPhase.FINISHED);
+            assertThat(e.status()).isEqualTo(StepStatus.BROKEN);
+            assertThat(e.message()).isEqualTo("datasource unreachable");
+            assertThat(e.diagnostics()).containsEntry("exception.class", StandTestException.class.getName());
+        }));
+    }
+
+    @Test
+    @DisplayName("an assertion failure thrown by an executor is recorded as a FAILED step event")
+    void run_assertionFailure_emitsFailedEvent() {
+        RecordingReportingEventPublisher recording = new RecordingReportingEventPublisher();
+        DefaultScenarioRunner runner = new DefaultScenarioRunner(
+                List.of(new FakeStepExecutor("fake.throw", (step, context) -> {
+                    throw new StandTestAssertionError("boom");
+                })),
+                new DefaultScenarioValidator(),
+                new InMemoryEnvironmentRegistry(Map.of()),
+                recording);
+
+        assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.throw"))))
+                .isInstanceOf(StandTestAssertionError.class);
+
+        assertThat(recording.events()).anySatisfy(event -> assertThat(event).isInstanceOfSatisfying(StepEvent.class, e -> {
+            assertThat(e.phase()).isEqualTo(StepPhase.FINISHED);
+            assertThat(e.status()).isEqualTo(StepStatus.FAILED);
+            assertThat(e.diagnostics()).containsEntry("exception.class", StandTestAssertionError.class.getName());
+        }));
+    }
+
+    @Test
+    @DisplayName("step result attachments flow into the finished step event")
+    void run_stepAttachments_flowIntoFinishedEvent() {
+        RecordingReportingEventPublisher recording = new RecordingReportingEventPublisher();
+        FakeStepExecutor withAttachments = new FakeStepExecutor("fake.att", (step, context) ->
+                new StepResult(step.id(), step.type(), StepStatus.SUCCESS, Instant.now(), Instant.now(),
+                        null, Map.of(), List.of(new Attachment("request", "application/json", "{}"))));
+        DefaultScenarioRunner runner = new DefaultScenarioRunner(
+                List.of(withAttachments),
+                new DefaultScenarioValidator(),
+                new InMemoryEnvironmentRegistry(Map.of()),
+                recording);
+
+        runner.run(scenario(GenericStep.of("s1", "fake.att")));
+
+        assertThat(recording.events()).anySatisfy(event -> assertThat(event).isInstanceOfSatisfying(StepEvent.class, e -> {
+            assertThat(e.phase()).isEqualTo(StepPhase.FINISHED);
+            assertThat(e.attachments()).extracting(Attachment::name).containsExactly("request");
+        }));
+    }
+
+    @Test
+    @DisplayName("scenario events carry the environment and tags from the run context")
+    void run_scenarioEvent_carriesEnvironmentAndTags() {
+        RecordingReportingEventPublisher recording = new RecordingReportingEventPublisher();
+        DefaultScenarioRunner runner = new DefaultScenarioRunner(
+                List.of(FakeStepExecutor.succeeding("fake.ok")),
+                new DefaultScenarioValidator(),
+                new InMemoryEnvironmentRegistry(Map.of()),
+                recording);
+        Scenario scenario = Scenario.builder("example-flow").environment("ift").tag("smoke")
+                .step(GenericStep.of("s1", "fake.ok")).build();
+
+        runner.run(scenario);
+
+        assertThat(recording.events().get(0)).isInstanceOfSatisfying(ScenarioEvent.class, e -> {
+            assertThat(e.environment()).isEqualTo("ift");
+            assertThat(e.tags()).containsExactly("smoke");
+        });
     }
 
     @Test

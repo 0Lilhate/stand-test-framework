@@ -9,6 +9,7 @@ import java.util.Objects;
 import ru.alfa.stand.test.core.context.ScenarioContext;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
+import ru.alfa.stand.test.core.event.Attachment;
 import ru.alfa.stand.test.core.event.NoOpReportingEventPublisher;
 import ru.alfa.stand.test.core.event.ReportingEventPublisher;
 import ru.alfa.stand.test.core.event.ScenarioEvent;
@@ -39,9 +40,11 @@ import ru.alfa.stand.test.core.variable.VariableStore;
  * An executor may signal a failure either by returning a {@link StepStatus#isFailure() failing}
  * {@link StepResult} or by throwing. A returned failing status is never silently kept — it is
  * converted into a thrown {@link StandTestAssertionError}. A thrown {@link AssertionError} propagates
- * as a test failure; a {@link StandTestException} propagates as an infrastructure error; any other
- * runtime exception is wrapped as a {@link StandTestException}. A successful run returns a
- * {@link StepStatus#SUCCESS SUCCESS} {@link ScenarioResult}.
+ * as a test failure (recorded {@link StepStatus#FAILED}); a {@link StandTestException} propagates as an
+ * infrastructure error and any other runtime exception is wrapped as a {@link StandTestException} (both
+ * recorded {@link StepStatus#BROKEN}, so a reporting consumer can tell an unmet assertion from an
+ * infrastructure problem). A successful run returns a {@link StepStatus#SUCCESS SUCCESS}
+ * {@link ScenarioResult}.
  *
  * <p>Lifecycle reporting events ({@link ScenarioEvent}/{@link StepEvent}) are published throughout, so
  * a reporting adapter (Allure, later) sees the full run: every attempted step emits STARTED and
@@ -170,7 +173,7 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
             StepExecutionContext executionContext,
             ScenarioContext context,
             List<StepResult> stepResults) {
-        publishStep(context, step, StepPhase.STARTED, null, null, Map.of());
+        publishStep(context, step, StepPhase.STARTED, null, null, Map.of(), List.of());
         Instant start = clock.instant();
         StepResult result;
         try {
@@ -178,32 +181,42 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
             result = executor.execute(step, executionContext);
             Objects.requireNonNull(result, "step executor returned a null result for step '" + step.id() + "'");
         } catch (AssertionError assertionFailure) {
-            recordFailure(step, start, context, stepResults, assertionFailure.getMessage());
+            recordFailure(step, start, context, stepResults, StepStatus.FAILED, assertionFailure);
             throw assertionFailure;
         } catch (StandTestException infraFailure) {
-            recordFailure(step, start, context, stepResults, infraFailure.getMessage());
+            recordFailure(step, start, context, stepResults, StepStatus.BROKEN, infraFailure);
             throw infraFailure;
         } catch (RuntimeException unexpected) {
-            recordFailure(step, start, context, stepResults, String.valueOf(unexpected));
+            recordFailure(step, start, context, stepResults, StepStatus.BROKEN, unexpected);
             throw new StandTestException("Step '" + step.id() + "' (" + step.type() + ") failed unexpectedly", unexpected);
         }
         // The executor returned normally. Recording and the FINISHED event happen OUTSIDE the try above
         // so that a failure of the (best-effort) reporting publisher can never reclassify a passing step
         // as failed or add a duplicate StepResult (plan §17: reporting is a side-channel).
         stepResults.add(result);
-        publishStep(context, step, StepPhase.FINISHED, result.status(), result.errorMessage(), result.diagnostics());
+        publishStep(context, step, StepPhase.FINISHED, result.status(), result.errorMessage(), result.diagnostics(), result.attachments());
         return result;
     }
 
+    /**
+     * Records a thrown step failure: an {@link AssertionError} maps to {@link StepStatus#FAILED} and a
+     * {@link StandTestException}/unexpected runtime exception to {@link StepStatus#BROKEN} (plan §8.3),
+     * so a reporting consumer can tell an unmet assertion from an infrastructure problem. The failing
+     * step's exception class is carried as a diagnostic for the report; the throw semantics are
+     * unchanged — the caller re-throws.
+     */
     private void recordFailure(
             ScenarioStep step,
             Instant start,
             ScenarioContext context,
             List<StepResult> stepResults,
-            String message) {
-        StepResult failed = StepResult.failed(step.id(), step.type(), start, clock.instant(), message);
+            StepStatus status,
+            Throwable cause) {
+        String message = (cause.getMessage() == null) ? cause.toString() : cause.getMessage();
+        Map<String, Object> diagnostics = Map.of("exception.class", cause.getClass().getName());
+        StepResult failed = new StepResult(step.id(), step.type(), status, start, clock.instant(), message, diagnostics);
         stepResults.add(failed);
-        publishStep(context, step, StepPhase.FINISHED, failed.status(), failed.errorMessage(), Map.of());
+        publishStep(context, step, StepPhase.FINISHED, failed.status(), failed.errorMessage(), failed.diagnostics(), failed.attachments());
     }
 
     private StepExecutor resolveExecutor(ScenarioStep step) {
@@ -226,7 +239,13 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
 
     private void publishScenario(ScenarioContext context, ScenarioPhase phase) {
         publish(new ScenarioEvent(
-                context.scenarioId(), context.testRunId(), context.correlationId(), phase, clock.instant()));
+                context.scenarioId(),
+                context.testRunId(),
+                context.correlationId(),
+                context.environment(),
+                context.tags(),
+                phase,
+                clock.instant()));
     }
 
     private void publishStep(
@@ -235,7 +254,8 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
             StepPhase phase,
             StepStatus status,
             String message,
-            Map<String, Object> diagnostics) {
+            Map<String, Object> diagnostics,
+            List<Attachment> attachments) {
         publish(new StepEvent(
                 context.scenarioId(),
                 context.testRunId(),
@@ -246,7 +266,8 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
                 status,
                 clock.instant(),
                 message,
-                diagnostics));
+                diagnostics,
+                attachments));
     }
 
     private void publish(ScenarioEvent event) {
