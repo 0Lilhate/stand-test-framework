@@ -1,5 +1,6 @@
 package ru.alfa.stand.test.core.environment;
 
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -42,12 +43,21 @@ public record DatasourceDefinition(
     }
 
     /**
-     * Returns whether the given schema is within the write whitelist.
+     * Returns whether the given target schema is within the write whitelist, after folding the target the way
+     * PostgreSQL folds an unquoted identifier (to lower case).
      *
-     * @param schema the schema name
-     * @return true if the schema is whitelisted
+     * <p>The DB adapter only ever passes an unqualified, unquoted schema name extracted from the statement
+     * (a quoted, case-distinct schema is blanked by the SQL classifier and never reaches here), and that
+     * extractor yields ASCII identifiers, so {@link Locale#ROOT} lower-casing exactly mirrors how the
+     * database resolves the target schema. Only the <em>target</em> is folded, never the whitelist: an entry
+     * must be the physical (lower-case) schema name, and a non-lower-case entry stays inert (fail-closed,
+     * plan §8.8) rather than leniently matching a different physical schema. Case-insensitivity is applied
+     * here <strong>only</strong> to schema names — datasource/service/topic aliases stay exact-match.
+     *
+     * @param schema the target schema name (may be null)
+     * @return true if the folded schema is whitelisted
      */
     public boolean isSchemaAllowed(String schema) {
-        return allowedSchemas.contains(schema);
+        return schema != null && allowedSchemas.contains(schema.toLowerCase(Locale.ROOT));
     }
 }

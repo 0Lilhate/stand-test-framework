@@ -45,6 +45,28 @@ class EnvironmentTest {
     }
 
     @Test
+    @DisplayName("the schema whitelist folds the unquoted target to lower case (PostgreSQL semantics); whitelist entries are physical lower-case names")
+    void datasource_schemaWhitelistFoldsTargetCase() {
+        DatasourceDefinition lower = new DatasourceDefinition("mainDb", "U", "U", "P", Set.of("test_data"), true);
+        // The unquoted SQL target is folded the way PostgreSQL folds it, so any case of the target matches.
+        assertThat(lower.isSchemaAllowed("TEST_DATA")).isTrue();
+        assertThat(lower.isSchemaAllowed("Test_Data")).isTrue();
+        assertThat(lower.isSchemaAllowed("test_data")).isTrue();
+        assertThat(lower.isSchemaAllowed("other")).isFalse();
+        assertThat(lower.isSchemaAllowed(null)).isFalse();
+
+        // An empty whitelist allows nothing.
+        DatasourceDefinition none = new DatasourceDefinition("mainDb", "U", "U", "P", Set.of(), true);
+        assertThat(none.isSchemaAllowed("test_data")).isFalse();
+
+        // A non-lower-case whitelist entry is inert (configure the physical lower-case schema name): the target
+        // is folded, the whitelist is not, so this stays fail-closed rather than leniently matching.
+        DatasourceDefinition upper = new DatasourceDefinition("mainDb", "U", "U", "P", Set.of("TEST_DATA"), true);
+        assertThat(upper.isSchemaAllowed("test_data")).isFalse();
+        assertThat(upper.isSchemaAllowed("TEST_DATA")).isFalse();
+    }
+
+    @Test
     @DisplayName("environment definition resolves aliases via Optional and is immutable")
     void environmentDefinition_resolvesAliases() {
         ServiceEndpointDefinition service = new ServiceEndpointDefinition(
