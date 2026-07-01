@@ -7,8 +7,9 @@
 **§11** (YAML draft). Формальную JSON Schema и вывод forbidden-operations оставляем **Итерации 10**
 (`stand-test-ai-schema`) — она деривует их из того же core-контракта.
 
-> **Статус:** дизайн. Модуль `stand-test-scenario-yaml` — скелет (`package-info.java`), в MVP не входит
-> (§4). Реализация (парсер + loader) — отдельная будущая итерация, вне Итерации 9.
+> **Статус:** РЕАЛИЗОВАНО. `YamlScenarioParser` (SnakeYAML `SafeConstructor`) парсит YAML → `Scenario`
+> (модуль core-only + внешняя snakeyaml; парсер строит модель и ничего не исполняет). Дизайн-решения ниже
+> актуальны; открытые вопросы разрешены при реализации (см. §«Отложено / открытые вопросы»).
 
 ## Что проектируется / чего НЕ проектируется
 
@@ -204,21 +205,29 @@ Scenario  ->  StandClient.run(scenario)   // DefaultStandClient → DefaultScena
 `scenario-yaml` и адаптеров (§4/§5). Т.е. схема-для-людей (здесь) и схема-для-машин/AI (там) согласованы,
 но не дублируют источник истины.
 
-## Отложено / открытые вопросы
+## Разрешённые при реализации решения / отложенное
 
-- **Реализация** `YamlScenarioParser`/loader + добавление SnakeYAML в каталог — будущая итерация (не 9).
-- **`given`/`then` семантика:** сейчас — просто порядок (конкатенация). Нужно ли жёстче (напр. запрет
-  assert-шагов в `given`)? — решить при реализации; влияет только на дружелюбность ошибок, не на модель.
-- **Инлайн vs ресурс для `body`/`sql`:** правило различения (путь-подобная строка → `*_RESOURCE`) —
-  зафиксировать явным маркером при реализации, чтобы убрать эвристику (напр. `bodyResource:`/`sqlResource:`
-  как явные surface-ключи наравне с `body:`/`sql:`).
+Разрешено (реализовано в `YamlScenarioParser`):
+- **`given`/`then` семантика:** просто порядок (конкатенация `given`+`then` в единый список). Жёсткого
+  разделения (напр. запрет assert в `given`) не вводим — влияло бы лишь на дружелюбность ошибок, не на модель.
+- **Инлайн vs ресурс:** **явные surface-ключи** `body:`/`bodyResource:` и `sql:`/`sqlResource:` (не
+  эвристика «путь-подобная строка»); указать оба → ошибка. Однозначно и AI-safe.
+- **Дюрации:** `<n>s` / `<n>ms` / bare-число (=ms) → `Long` millis; невалид/≤0 → ошибка. ISO-8601 не вводим.
+- **Wire-ключи** централизованы в `YamlStepKeys` (хардкод-литералы, mirror `*StepParameters`), т.к. модуль
+  core-only. **Follow-up:** поднять константы ключей в `core`, чтобы убрать дублирование парсер↔адаптеры.
+
+Отложено:
 - **gRPC-шаги** — вне схемы до `stand-test-grpc`.
-- **Дюрации:** поддержать `s`/`ms` (и, возможно, ISO-8601) — уточнить при реализации.
+- **JSON Schema + forbidden-op enforcement** — Итерация 10 (`ai-schema`), из core-контракта.
+- **Опц. YAML-раннер-удобство** в junit-слое (`@StandTest` + путь к YAML) — отдельно.
 
-## Definition of Done (Итерация 9, design-only)
+## Definition of Done
 
-- [x] Дизайн-документ (этот файл): схема, surface→internal маппинг, план парсера (SnakeYAML+SafeConstructor),
-      план раннера (переиспользование core-раннера + SPI + `${...}`), гашение `ForbiddenOperation`, граф.
-- [ ] README `scenario-yaml` приведён к core-only (устранить противоречие с §4/§5).
-- [ ] (опц.) Ссылка на этот документ из §4/§11 мастер-плана.
-- Кода/зависимостей не добавляется; сборка не меняется. Реализация — отдельной итерацией.
+- [x] Дизайн-документ (этот файл): схема, surface→internal маппинг, план парсера/раннера, гашение
+      `ForbiddenOperation`, граф.
+- [x] README `scenario-yaml` — core-only (устранено противоречие с §4/§5).
+- [x] Ссылки на этот документ из §4/§11 мастер-плана.
+- [x] **Реализация** `YamlScenarioParser` (SnakeYAML `SafeConstructor`): rest/kafka/db surface → корректный
+      `Scenario`; типы (`expectedStatus` Integer, `*_MILLIS` Long, флаги Boolean, assert/capture List<Map>);
+      fail-closed ошибки с локацией; проходит `DefaultScenarioValidator`; core-only (compileClasspath = core
+      + snakeyaml); JaCoCo ≥80%.

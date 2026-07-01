@@ -1,0 +1,49 @@
+package ru.alfa.stand.test.scenario;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import ru.alfa.stand.test.core.exception.StandTestException;
+
+/**
+ * Translates a {@code rest.<method>} surface node into the {@code GenericStep} parameters the REST executor
+ * reads. Mirrors {@code RestStep.build()}: {@code method}/{@code service}/{@code path}/{@code query}/
+ * {@code headers}/{@code injectCorrelationId}/{@code assertions}/{@code captures} are always written (empty
+ * when absent); {@code expectedStatus} and {@code body}/{@code bodyResource} are written only when present.
+ */
+final class RestStepTranslator {
+
+    private static final Set<String> KNOWN = Set.of("id", "service", "path", "query", "headers",
+            "body", "bodyResource", "injectCorrelationId", "expectStatus", "assert", "capture");
+    private static final Set<String> METHODS = Set.of("GET", "POST", "PUT", "DELETE");
+
+    private RestStepTranslator() {
+    }
+
+    static Map<String, Object> params(String type, Map<String, Object> fields, String location) {
+        SurfaceValues.checkKnownKeys(fields, KNOWN, location);
+        String method = type.substring("rest.".length()).toUpperCase(Locale.ROOT);
+        if (!METHODS.contains(method)) {
+            throw new StandTestException("Unsupported REST method in '" + type + "' at " + location + " (use rest.get/post/put/delete)");
+        }
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put(YamlStepKeys.METHOD, method);
+        params.put(YamlStepKeys.SERVICE, SurfaceValues.requireString(fields, "service", location));
+        params.put(YamlStepKeys.PATH, SurfaceValues.requireString(fields, "path", location));
+        params.put(YamlStepKeys.QUERY, SurfaceValues.stringMap(fields.get("query"), location + ".query"));
+        params.put(YamlStepKeys.HEADERS, SurfaceValues.stringMap(fields.get("headers"), location + ".headers"));
+        params.put(YamlStepKeys.INJECT_CORRELATION_ID, SurfaceValues.boolFlag(fields, "injectCorrelationId", location));
+        params.put(YamlStepKeys.ASSERTIONS, fields.containsKey("assert")
+                ? SurfaceValues.assertions(fields.get("assert"), location + ".assert") : List.of());
+        params.put(YamlStepKeys.CAPTURES, fields.containsKey("capture")
+                ? SurfaceValues.captures(fields.get("capture"), YamlStepKeys.JSON_PATH, location + ".capture") : List.of());
+        SurfaceValues.putInlineOrResource(params, fields, "body", "bodyResource",
+                YamlStepKeys.BODY, YamlStepKeys.BODY_RESOURCE, false, location);
+        if (fields.containsKey("expectStatus")) {
+            params.put(YamlStepKeys.EXPECTED_STATUS, SurfaceValues.requireInteger(fields, "expectStatus", location));
+        }
+        return params;
+    }
+}

@@ -22,6 +22,11 @@ h2 = "2.3.232"
 # that actually opens the Allure test case) is a consumer-side wiring concern, deliberately NOT a
 # dependency of this mapping module — it would pull JUnit onto a pure reporting adapter's classpath.
 allure = "2.29.1"
+# stand-test-scenario-yaml engine: SnakeYAML parses declarative scenarios into the generic Scenario model.
+# Jackson is deliberately avoided repo-wide (json-path uses json-smart), so SnakeYAML (a plain map/list/scalar
+# tree that maps straight onto GenericStep parameters) is the lightweight fit. Loaded via SafeConstructor +
+# LoaderOptions (no arbitrary type instantiation — mitigates the CVE-2022-1471 class of issues).
+snakeYaml = "2.3"
 # Reserved for later phases (not applied at the skeleton stage):
 springBoot = "3.5.14"
 springDependencyManagement = "1.1.7"
@@ -38,3 +43,4 @@ json-path = { module = "com.jayway.jsonpath:json-path", version.ref = "jsonPath"
 kafka-clients = { module = "org.apache.kafka:kafka-clients", version.ref = "kafkaClients" }
 h2 = { module = "com.h2database:h2", version.ref = "h2" }
 allure-java-commons = { module = "io.qameta.allure:allure-java-commons", version.ref = "allure" }
+snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeYaml" }
