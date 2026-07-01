@@ -325,11 +325,27 @@ flowchart TD
 - **Входит (будущие возможности).** Каждый шаг как Allure step; attachments REST request/response;
   attachments Kafka-сообщений; attachments SQL query/result; attachments gRPC request/response;
   переменные; `testRunId`/`correlationId`/`scenarioId` в отчёте; timeout-diagnostics из await в отчёт.
+  **Контракт доставки attachments к консьюмеру (`Attachment` + редактирование секретов) — §8.9, prerequisite Итерации 7.**
 - **Не должно входить.** Транспорт; ассерты; бизнес-логика — только отчётность/диагностика.
 - **Внутренние зависимости.** `stand-test-core` (метаданные/события шагов через reporting-event SPI).
 - **Внешние зависимости.** `allure-java-commons` / `allure-junit5`.
 - **MVP.** Да — step-репортинг, attachments, метаданные сценария, проброс timeout-диагностики.
 - **Отложено.** Кастомные категории дефектов, агрегированные дашборды.
+
+### stand-test-example
+
+- **Назначение.** Технические примеры использования SDK (Итерация 8) — образец того, как потребитель
+  пишет сценарии. TEST-ONLY: сценарии в `src/test`, исполняются через публичный API как чёрный ящик
+  против in-process doubles (JDK `HttpServer` для REST, H2 для DB), поэтому `./gradlew build` зелёный
+  офлайн без реального стенда. Детальный план: `docs/arch/stand-test-example-implementation-plan.md`.
+- **Входит.** REST/DB smoke-сценарии; capture/resolve между шагами; await/timeout; демонстрация
+  Allure-репортинга. **Phase 1** — REST+DB; `@StandTest`-автопроводка и Kafka — **Phase 2**.
+- **Не должно входить.** Бизнес-логика реального проекта; реальные стендовые конфиги; публикуемый
+  артефакт; смешивание SDK и тестов конкретного проекта (§20).
+- **Внутренние зависимости (test).** `stand-test-core`, `stand-test-rest`, `stand-test-db`,
+  `stand-test-allure` (Phase 2 добавит `junit`/`kafka`). `await` — транзитивно.
+- **Внешние зависимости (test).** JUnit 5, AssertJ, H2 (DB double); REST-double — JDK `HttpServer`.
+- **MVP.** Да — закрывает сквозной usage-срез и §18-DoD (примеры usage + Allure-диагностика).
 
 ### stand-test-spring-boot-starter
 
@@ -403,6 +419,11 @@ flowchart LR
     grpc --> core
     grpc --> await
     allure --> core
+    example --> core
+    example --> junit
+    example --> rest
+    example --> db
+    example --> allure
     scenario_yaml["scenario-yaml"] --> core
     ai_schema["ai-schema"] --> core
     starter["spring-boot-starter"] --> core
@@ -427,6 +448,8 @@ flowchart LR
 - `stand-test-db` → `core`, `await`.
 - `stand-test-grpc` → `core`, `await`.
 - `stand-test-allure` → `core`.
+- `stand-test-example` → `core`, `junit`, `rest`, `db`, `allure` (всё как `testImplementation`; TEST-ONLY
+  потребитель-сток, от него никто не зависит; Phase 2 добавит ещё `kafka` в Шаге 2.3).
 - `stand-test-scenario-yaml` → **только `core`** (адаптеры — через core-SPI в рантайме, **без**
   compile-time ребра на конкретные адаптеры → нет дублирования раннера).
 - `stand-test-ai-schema` → **только модель `core`**, **не** зависит от runtime/адаптеров и от
@@ -497,7 +520,9 @@ flowchart LR
   требуется (`DatasourceDefinition` уже есть, §9). Затем: `db.query`; `db.expectEventually` (await-query,
   expect single value); `db.seed` (write-allow); schema/datasource-whitelist; черновик `db.cleanup` по
   `testRunId` (§8.8).
-- **Итерация 7 — Allure.** step-репортинг; attachments; метаданные сценария; проброс timeout-диагностики.
+- **Итерация 7 — Allure.** *Prerequisite (core):* value-type `Attachment` + поле `attachments` на
+  `StepResult`/`StepEvent` с редактированием секретов (§8.9). step-репортинг; attachments (REST/Kafka/SQL);
+  метаданные сценария; проброс timeout-диагностики.
 - **Итерация 8 — Example tests.** Только технические примеры использования SDK; **без** бизнес-логики
   реального проекта.
 - **Итерация 9 — YAML DSL design.** Черновик схемы; план парсера; план раннера (без реализации).
@@ -790,13 +815,19 @@ SQL *семантически* («`delete`/`update` без фильтра по `
 DEV/IFT-стенде → потеря данных). Это DB-аналог `KAFKA-SEEK-RACE` (§8.7): нетривиальный механизм,
 объявленный обязательным, но не специфицированный. Здесь он фиксируется до старта реализации.
 
-**Где форсятся guardrails (нормативно).** Проверки, выводимые из **модели сценария** без IO, выполняет
-**`ScenarioValidator` статически до прогона**, потребляя `ForbiddenOperation` (§8.6) — это сохраняет
-единый источник истины и переиспользование в `ai-schema` (§4 stand-test-ai-schema). DB-адаптер форсит те же инварианты
-**повторно в рантайме** (defense-in-depth: эффективная схема соединения, параметризованный bind). Для
-этого core получает **statement-классификатор** (`SqlGuard`/правила в `core.validation`, потребляемые
-валидатором) — **prerequisite Итерации 6** (§7). Новый env-контракт **не** требуется: `DatasourceDefinition`
-(`allowedSchemas`/`writeAllowed`, §9) уже реализован.
+**Где форсятся guardrails (нормативно — и текущий статус).** Целевая модель — defense-in-depth в два слоя:
+проверки, выводимые из **модели сценария** без IO, выполняет **`ScenarioValidator` статически до прогона**,
+потребляя `ForbiddenOperation` (§8.6; это сохраняет единый источник истины и переиспользование в `ai-schema`,
+§4 stand-test-ai-schema), а DB-адаптер форсит те же инварианты **повторно в рантайме** (эффективная схема
+соединения, параметризованный bind). Для этого core получает **statement-классификатор**
+(`SqlStatementClassifier` + `SqlClassification`/`SqlStatementKind` в `core.validation`, поверх общего
+`SqlSpanScanner`) — **prerequisite Итерации 6** (§7), потребляемый и валидатором, и рантайм-guard'ом адаптера.
+**Статус (2026-06-30): статическая половина отложена** — `ScenarioValidator` ещё **не** потребляет
+классификатор (нужен registry-aware проход, которого пока нет; согласовано с уже существующей отсрочкой
+env/forbidden-op-проверок), а DB `prepare` остаётся no-op (§8.7). Гарантия безопасности (destructive SQL не
+доходит до стенда) держится **рантайм-guard'ом в адаптере** уже сейчас; статический wiring — known follow-up
+(переиспользовать тот же классификатор, чтобы исключить дрейф статики и рантайма). Новый env-контракт **не**
+требуется: `DatasourceDefinition` (`allowedSchemas`/`writeAllowed`, §9) уже реализован.
 
 **Ограниченная грамматика (MVP — fail-closed):**
 
@@ -805,16 +836,29 @@ DEV/IFT-стенде → потеря данных). Это DB-аналог `KAF
   «allow по умолчанию».
 - **Классификация по ведущему ключевому слову:** `SELECT`/`WITH … SELECT` → **read**;
   `INSERT`/`UPDATE`/`DELETE` → **write**; `TRUNCATE`/`DROP`/`ALTER`/`CREATE`/`GRANT`/… → **DDL/destructive**.
+- **Fail-closed уточнения (ведущее слово обманчиво):** `SELECT … INTO` → **reject** (он пишет, несмотря на
+  ведущий `SELECT`); `INSERT … ON CONFLICT` / `ON DUPLICATE KEY` (upsert) → **reject**; `WITH …`, встраивающий
+  data-modifying-ключевое слово (`INSERT`/`UPDATE`/`DELETE`) или `INTO`, → **reject** (а не «read по ведущему
+  `WITH`»). Лексер вырезает комментарии/литералы/кавычки/`$$…$$` через общий `core.validation.SqlSpanScanner`;
+  полный перечень осознанных fail-closed-кейсов и dialect-trade-offs (dollar-quoting, backtick-идентификаторы,
+  `GO`/`/` batch-сепараторы, `[bracketed]` как array-subscript) — в `docs/arch/stand-test-db-decisions.md`.
 - **readonly по умолчанию:** read разрешён всегда; write разрешён **только** на шаге `db.seed`/`db.cleanup`
   **и** при `DatasourceDefinition.writeAllowed == true` (иначе `DESTRUCTIVE_SQL_WITHOUT_ALLOW`). DDL/destructive
   в MVP запрещены всегда (отдельного destructive-allow-флага MVP не вводит).
-- **Schema-whitelist:** таблица в write-statement обязана быть **schema-qualified** (`test_data.orders`),
-  и эта схема ∈ `allowedSchemas`; неквалифицированная таблица в write → reject (схему нельзя доказать).
-  Для read квалификация не требуется.
-- **`testRunId`-предикат для `UPDATE`/`DELETE`:** вместо парсинга `WHERE` шаг обязан **декларировать** предикат
-  явным маркером (`DbStep.whereTestRunId("test_run_id")`, биндящим колонку к `${testRunId}`); классификатор
-  проверяет, что statement ссылается на этот bind. `UPDATE`/`DELETE` без декларированного `testRunId`-предиката
-  → destructive → запрет.
+- **Schema-whitelist:** таблица в write-statement обязана быть **schema-qualified ровно 2 частями**
+  (`schema.table`, напр. `test_data.orders`), и эта схема ∈ `allowedSchemas`; неквалифицированная таблица
+  **или** 3-частная `catalog.schema.table` в write → reject (доказуемо безопасна только 2-частная форма).
+  Сравнение схемы — по **lower-case целевого** идентификатора (`Locale.ROOT`), поэтому `allowedSchemas`
+  держит физические нижне-регистровые имена (как фолдит unquoted-идентификатор PostgreSQL). Для read
+  квалификация не требуется.
+- **`testRunId`-предикат для `UPDATE`/`DELETE`:** вместо парсинга авторского `WHERE` шаг обязан **декларировать**
+  предикат явным маркером (`DbStep.whereTestRunId("test_run_id")`). Write-guard гейтит по **самому факту**
+  объявленного маркера (булев признак «шаг несёт `WHERE_TEST_RUN_ID_COLUMN`»), а **не** по текстовому наличию
+  `:testRunId` в SQL: подстрочный матч тривиально обходится (`UPDATE t SET note = :testRunId` или
+  `DELETE … WHERE id = :testRunId OR 1=1` содержат подстроку, но не ограничивают строки по прогону). Адаптер
+  **сам дописывает** `where <col> = :testRunId` и **запрещает** собственный `WHERE` в SQL шага (механизм — ниже,
+  «Чтение и assertion»); `UPDATE`/`DELETE` без объявленного маркера → destructive → запрет. **Не регрессировать**
+  к подстрочной проверке — это была CRITICAL-дыра, найденная post-impl ревью (`docs/arch/stand-test-db-decisions.md`, §8.8).
 - **Только параметризованные binds.** Значения подставляются через `PreparedStatement` (`:name` → `?`,
   см. §4 stand-test-db), не строковой склейкой; это и закрывает SQL-инъекцию.
 
@@ -842,6 +886,76 @@ SELECT и **каптит** значения колонок в `VariableStore` (`
 > short-circuit'ит на первом падении и не имеет teardown-хука (§8.3), поэтому cleanup **не отработает после
 > упавшего шага**. Для «черновика cleanup» это приемлемо; полноценный безопасный cleanup-движок и
 > finally/teardown-хук — отложены (§4 stand-test-db).
+
+### 8.9 Отчётность Allure: контракт attachments (prerequisite Итерации 7)
+
+Снимаем блокер уровня контракта для Итерации 7 (Allure). **Проблема:** §4 `stand-test-allure` помечает
+**обязательными** attachments REST request/response, Kafka-сообщений, SQL query/result, gRPC и «переменные
+в отчёте», но **не задаёт, как payload доходит до Allure-консьюмера**. Единственный канал отчётности —
+`ReportingEventPublisher` → `StepEvent`, а адаптеры кладут в `StepEvent.diagnostics` лишь *метаданные*
+(`http.method/path/status`, `kafka.topic/key/offset`, `db.operation/datasource/…`) — тел запросов/ответов,
+payload сообщений, текста SQL и строк результата там нет. Это DB/Kafka-аналог `KAFKA-SEEK-RACE` (§8.7) и
+DB-write-guard (§8.8): нетривиальный механизм, объявленный обязательным, но не специфицированный.
+Фиксируется до старта реализации.
+
+**Где владеется (нормативно).** Attachments — **first-class контракт core**, а не свободные значения в
+`diagnostics` (которые принадлежат логам, §17). Core получает иммутабельный value-type `Attachment` и поле
+`attachments` на `StepResult` и `StepEvent` — **prerequisite Итерации 7** (§7), как `ResourceScope`/
+`StepExecutor.prepare` был prerequisite Итерации 5, а `SqlStatementClassifier` — Итерации 6. Адаптеры
+**производят** attachments (у них есть request/response/SQL/payload); раннер копирует
+`StepResult.attachments` в `StepEvent(FINISHED).attachments`; **`stand-test-allure` потребляет** их из
+события и рендерит как Allure-attachments. Core по-прежнему не зависит ни от Allure, ни от транспортов.
+
+**Контракт `Attachment` (MVP — text-first).**
+
+- `Attachment` = иммутабельный `record(String name, String mediaType, String content)`: имя для отчёта,
+  MIME (`application/json` / `text/plain` / `application/sql`) и **текстовое** содержимое. Текст покрывает
+  MVP-кейсы (JSON request/response, SQL, string-payload Kafka); бинарные (`byte[]`) и ленивые
+  (`Supplier`-провайдеры) вложения — отложены.
+- Attachments едут на **FINISHED**-событии (`StepEvent.phase == FINISHED` и соответствующем `StepResult`);
+  STARTED их не несёт (к финишу адаптер знает и запрос, и ответ).
+- `attachments` — defensively-copied `List<Attachment>`, по умолчанию пустой; `NoOpReportingEventPublisher`
+  игнорирует его с нулевой стоимостью.
+
+**Что прикладывает каждый адаптер (MVP).**
+
+- **REST:** request (метод+путь+**редактированные** заголовки+тело) и response (статус+**редактированные**
+  заголовки+тело).
+- **Kafka:** send → produced key/headers/value; expect → consumed key/headers/value совпавшего сообщения.
+- **DB:** **итоговый** SQL (после append `testRunId`-предиката), **имена** binds (не значения) и
+  **ограниченный** preview результата (захваченные колонки / наблюдённое значение, не полный набор строк).
+- **gRPC:** request/response — когда появится адаптер; контракт тот же.
+
+**Редактирование секретов (нормативно — security-gate вложений).** Attachment строится через core-хелпер
+`Attachments`, который **обязан**: (1) редактировать значения чувствительных заголовков по deny-list
+(`Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`, `X-Api-Key` + настраиваемые имена) в
+`***`; (2) **никогда** не прикладывать резолвнутые секреты (`ResolvedDatasource`/`ResolvedKafkaCluster`
+url/user/password/jaas, §9) и значения binds из secret-ссылок; (3) ограничивать размер тела (truncate с
+маркером `…[truncated N bytes]`). Это прямое продолжение §17 «не логировать secrets» на канал вложений —
+логи такое уже не печатают, attachments не должны стать лазейкой.
+
+**Переменные в отчёте (§4 stand-test-allure).** Снимок `VariableStore` (редактированный по тем же
+правилам) прикладывается **одним** scenario-level attachment на FINISHED-сценарии — через тот же
+`Attachment`-контракт, без отдельного механизма.
+
+**Маппинг на Allure.** `stand-test-allure` реализует `ReportingEventPublisher`: `StepEvent(STARTED)` →
+`AllureLifecycle.startStep` (имя = `stepType`/`stepId`); `StepEvent(FINISHED)` → статус из `StepStatus`
+(FAILED/BROKEN), приложить `event.attachments()`, `stopStep`; `ScenarioEvent` → границы Allure-теста +
+метки `scenarioId`/`testRunId`/`correlationId`; timeout-diagnostics берутся из `diagnostics`
+FINISHED-события. Thread-confined: один прогон — один поток (как awaiter/`ResourceScope`), поэтому
+STARTED/FINISHED-пары на thread-bound `AllureLifecycle` безопасны.
+
+**Проводка.** Allure-publisher инжектится в раннер тем, кто строит прогон: junit-extension (plain JUnit)
+или `spring-boot-starter`; дефолт остаётся `NoOpReportingEventPublisher` (Allure — не hard-dep core).
+Адаптеры **не** знают про Allure — они лишь наполняют `StepResult.attachments`.
+
+**Failure-mapping (§8.3).** Построение attachment — **best-effort, не влияет на pass/fail**: ошибка
+редактирования/кодирования/обрезки **молча отбрасывает это вложение** (по возможности с
+diagnostic-маркером), но **никогда** не роняет шаг и не подменяет `StepStatus`. Attachment — диагностика,
+не ассерт; новой константы `ForbiddenOperation` не требуется.
+
+**Отложено (post-MVP).** Бинарные/ленивые (`Supplier<byte[]>`) attachments; настраиваемые паттерны
+редактирования; кастомные категории дефектов; агрегированные дашборды; полный дамп result-set.
 
 ---
 
@@ -919,21 +1033,24 @@ class ExampleFlowTest {
     @Test
     void shouldProcessFlow(StandClient stand) {                 // resolved by StandTestExtension (no Spring)
         var scenario = Scenario.builder("example-flow")
-                .env("ift")
+                .environment("ift")
                 .step(RestStep.post("client-service", "/api/request")   // RestStep — из stand-test-rest
-                        .body("fixtures/request.json")
+                        .bodyFromResource("fixtures/request.json")
                         .injectCorrelationId()                          // SDK-owned correlationId → outbound header
                         .expectStatus(200)
-                        .capture("requestId", "$.requestId"))           // service-generated id
+                        .capture("requestId", "$.requestId")            // service-generated id
+                        .build())
                 .step(KafkaStep.expect("response-topic")                // KafkaStep — из stand-test-kafka
                         .correlationIdFromContext()
                         .withinSeconds(30)
-                        .assertPath("$.status", "SUCCESS"))
+                        .assertPath("$.status", "SUCCESS")
+                        .build())
                 .step(DbStep.expectEventually("mainDb")                 // DbStep — из stand-test-db
-                        .query("select status from request where id = :requestId")
-                        .paramFromContext("requestId")
+                        .sql("select status from request where id = :requestId")
+                        .param("requestId", "${requestId}")
                         .withinSeconds(20)
-                        .expectSingleValue("SUCCESS"))
+                        .expectValue("SUCCESS")
+                        .build())
                 .build();                                               // immutable Scenario Model
 
         stand.run(scenario);   // Validator → Runner → StepExecutor SPI → adapters
@@ -949,9 +1066,10 @@ class ExampleFlowTest {
 
 ```java
 .step(KafkaStep.send("request-topic")
-        .body("fixtures/event.json")        // inline или bodyResource (classpath)
+        .bodyFromResource("fixtures/event.json")   // или .body(inline) — classpath resource
         .key("${requestId}")                // опц. ключ партиционирования
-        .injectCorrelationId())             // SDK-owned correlationId → носитель из конфига топика (§8.4)
+        .injectCorrelationId()              // SDK-owned correlationId → носитель из конфига топика (§8.4)
+        .build())
 ```
 
 **`db.seed` / `db.cleanup`** (write-сторона, только при `writeAllowed`; см. [§8.8](#88-безопасность-db-классификация-sql-и-write-guard)) —
@@ -960,10 +1078,12 @@ class ExampleFlowTest {
 ```java
 .step(DbStep.seed("mainDb")                  // write — только на seed/cleanup + writeAllowed (§8.8)
         .sql("insert into test_data.request(id, test_run_id, status) values (:requestId, :testRunId, 'NEW')")
-        .paramFromContext("requestId"))      // :testRunId — built-in ${testRunId}, проставляет автор (§8.8)
+        .param("requestId", "${requestId}")  // :testRunId — built-in ${testRunId}, проставляет автор (§8.8)
+        .build())
 .step(DbStep.cleanup("mainDb")               // явный soft-cleanup по testRunId (не авто-teardown, §8.8)
         .sql("delete from test_data.request")            // без своего WHERE — предикат дописывает маркер
-        .whereTestRunId("test_run_id"))      // → where test_run_id = :testRunId, иначе destructive
+        .whereTestRunId("test_run_id")       // → where test_run_id = :testRunId, иначе destructive
+        .build())
 ```
 
 ---

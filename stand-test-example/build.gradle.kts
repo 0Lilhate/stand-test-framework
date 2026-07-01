@@ -1,0 +1,43 @@
+import org.gradle.api.publish.maven.tasks.AbstractPublishToMaven
+
+// stand-test-example — technical usage examples (Iteration 8, docs/arch/stand-test-example-implementation-plan.md).
+// TEST-ONLY: the scenarios live in src/test and run through the public SDK API as a black box against
+// in-process doubles (JDK HttpServer for REST, H2 for DB), so `./gradlew build` is green offline without
+// a real DEV/IFT stand (test doubles are allowed by plan §16). It is a pure consumer (a sink) of the SDK
+// modules; nothing depends on it. No business logic, no real-stand config, no published artifact
+// (plan §6/§7/§20). Phase 1 covers REST+DB via the manual runner; Phase 2 adds the canonical @StandTest
+// path (this module's StandTestExampleTest); kafka remains Phase 2.
+
+dependencies {
+    testImplementation(project(":stand-test-core"))
+    testImplementation(project(":stand-test-junit"))
+    testImplementation(project(":stand-test-rest"))
+    testImplementation(project(":stand-test-db"))
+    testImplementation(project(":stand-test-allure"))
+
+    testImplementation(platform(libs.junit.bom))
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.assertj.core)
+    testImplementation(libs.h2)
+    testRuntimeOnly(libs.junit.platform.launcher)
+}
+
+// env-ref wiring for the doubles. DB: DbStepExecutor's no-arg form resolves datasource refs from the
+// process environment (its passthrough-resolver ctor is package-private, so env-ref is the only
+// cross-module path). REST on the @StandTest path: the default no-arg RestStepExecutor resolves the
+// service base URL from CLIENT_SERVICE_URL via System.getenv, so the HTTP double must listen on a fixed
+// port — pinned here and overridable in CI with -PexampleRestPort=NNNN (avoids port-collision). The
+// manual-runner examples ignore CLIENT_SERVICE_URL (they use the passthrough seam on an ephemeral port).
+// H2 stays in-memory for the JVM via DB_CLOSE_DELAY=-1.
+val exampleRestPort = (findProperty("exampleRestPort") as String?)?.toInt() ?: 18080
+tasks.withType<Test>().configureEach {
+    environment("MAIN_DB_URL", "jdbc:h2:mem:exampledb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL")
+    environment("MAIN_DB_USER", "sa")
+    environment("MAIN_DB_PASSWORD", "sa")
+    environment("CLIENT_SERVICE_URL", "http://127.0.0.1:$exampleRestPort")
+}
+
+// Examples are demonstrations, not production code: src/main is empty, so the 80% coverage gate is not
+// applicable, and the module is not a consumable artifact.
+tasks.withType<JacocoCoverageVerification>().configureEach { enabled = false }
+tasks.withType<AbstractPublishToMaven>().configureEach { enabled = false }

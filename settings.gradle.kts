@@ -24,6 +24,7 @@ include(
   "stand-test-db",
   "stand-test-grpc",
   "stand-test-allure",
+  "stand-test-example",
   "stand-test-spring-boot-starter",
   "stand-test-scenario-yaml",
   "stand-test-ai-schema"
