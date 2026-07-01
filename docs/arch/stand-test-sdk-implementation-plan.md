@@ -377,7 +377,8 @@ flowchart TD
 - **Внутренние зависимости.** **Только `stand-test-core`** (раннер достаёт адаптеры через core-SPI,
   инжектируемые в рантайме, — это **не** compile-time ребро на адаптеры).
 - **Внешние зависимости.** SnakeYAML / `jackson-dataformat-yaml`.
-- **MVP.** Не входит в MVP (только дизайн на итерации 9, §7).
+- **MVP.** Не входит в MVP (только дизайн на итерации 9, §7 — дизайн-документ:
+  `docs/arch/stand-test-scenario-yaml-design.md`).
 - **Отложено.** Полноценный YAML-runner.
 
 ### stand-test-ai-schema
@@ -1095,6 +1096,11 @@ class ExampleFlowTest {
 > **Черновик / draft — НЕ реализуется на этом этапе.** Будущий декларативный формат (вход в ту же
 > `Scenario Model`, §3). YAML-runner на этом этапе не создаётся. `correlationId` — **SDK-owned** и
 > инжектится outbound; из ответа каптятся только service-generated id.
+>
+> **Формализация (Итерация 9):** `docs/arch/stand-test-scenario-yaml-design.md` — этот surface-синтаксис
+> формализован там, вместе с отображением surface→internal на `GenericStep`, планом парсера (SnakeYAML) и
+> раннера. Surface-имена ниже (`expectStatus`/`equals`/`assert`/`capture`/`timeout: 30s`) переводятся
+> парсером во внутренние ключи `*StepParameters`.
 
 ```yaml
 id: example-flow
