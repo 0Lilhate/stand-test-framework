@@ -3,6 +3,7 @@ package ru.alfa.stand.test.junit;
 import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.ServiceLoader;
 import java.util.function.Function;
 import org.junit.jupiter.api.extension.ExtensionContext;
@@ -15,9 +16,14 @@ import org.junit.platform.commons.support.SearchOption;
 import ru.alfa.stand.test.await.Awaiter;
 import ru.alfa.stand.test.core.DefaultStandClient;
 import ru.alfa.stand.test.core.StandClient;
+import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
+import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
+import ru.alfa.stand.test.core.event.NoOpReportingEventPublisher;
+import ru.alfa.stand.test.core.event.ReportingEventPublisher;
 import ru.alfa.stand.test.core.execution.DefaultScenarioRunner;
 import ru.alfa.stand.test.core.execution.ScenarioRunner;
 import ru.alfa.stand.test.core.execution.StepExecutor;
+import ru.alfa.stand.test.core.validation.DefaultScenarioValidator;
 
 /**
  * JUnit 5 extension that bridges the test lifecycle to the stand-test SDK (wired by {@link StandTest}).
@@ -25,8 +31,11 @@ import ru.alfa.stand.test.core.execution.StepExecutor;
  * <p>It resolves these parameter types, without Spring:
  * <ul>
  *   <li>{@link StandClient} — assembled from the {@link StepExecutor}s discovered on the test classpath
- *   via {@link ServiceLoader} (the SPI wiring point: each adapter registers its executor), behind a
- *   {@link DefaultScenarioRunner}. The client is built once and cached for the engine run.</li>
+ *   via {@link ServiceLoader} (the SPI wiring point: each adapter registers its executor), plus a
+ *   {@link ReportingEventPublisher} and an {@link EnvironmentRegistry} discovered the same way (first
+ *   provider wins; a {@link NoOpReportingEventPublisher} and an empty {@link InMemoryEnvironmentRegistry}
+ *   when none is present), behind a {@link DefaultScenarioRunner}. The client is built once and cached
+ *   for the engine run.</li>
  *   <li>{@link Awaiter} — a fresh system-backed awaiter for ad-hoc waits in a test.</li>
  *   <li>{@code String} annotated with {@link ScenarioId @ScenarioId} — the declared scenario id.</li>
  *   <li>{@code String} annotated with {@link StandEnv @StandEnv} — the declared logical environment.</li>
@@ -143,7 +152,14 @@ public final class StandTestExtension implements ParameterResolver {
     private static StandClient buildStandClient() {
         List<StepExecutor> executors = new ArrayList<>();
         ServiceLoader.load(StepExecutor.class).forEach(executors::add);
-        ScenarioRunner runner = new DefaultScenarioRunner(executors);
+        // Reporting and environment wiring are discovered through the same SPI as the executors, so junit
+        // gains no compile-time edge to any adapter (plan §8.5/§17). First provider wins (single-provider
+        // assumption — the iteration order is classpath-dependent, not prioritised; a composite/priority
+        // policy is a later concern), and the defaults (NoOp publisher, empty registry) keep behaviour
+        // unchanged when no provider is on the classpath.
+        ReportingEventPublisher publisher = ServiceLoader.load(ReportingEventPublisher.class).findFirst().orElse(NoOpReportingEventPublisher.INSTANCE);
+        EnvironmentRegistry registry = ServiceLoader.load(EnvironmentRegistry.class).findFirst().orElseGet(() -> new InMemoryEnvironmentRegistry(Map.of()));
+        ScenarioRunner runner = new DefaultScenarioRunner(executors, new DefaultScenarioValidator(), registry, publisher);
         return new DefaultStandClient(runner);
     }
 }

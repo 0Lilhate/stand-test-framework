@@ -225,6 +225,23 @@ class StandTestExtensionTest {
                 .assertStatistics(stats -> stats.started(1).succeeded(1));
     }
 
+    @Test
+    @DisplayName("a ReportingEventPublisher discovered via ServiceLoader receives the run's events")
+    void reportingPublisher_isDiscoveredAndReceivesEvents() {
+        CountingReportingEventPublisher.reset();
+
+        EngineTestKit.engine("junit-jupiter")
+                .selectors(selectClass(ReportingFixture.class))
+                .execute()
+                .testEvents()
+                .assertStatistics(stats -> stats.started(1).succeeded(1));
+
+        // The single-step fake.ok run publishes exactly four lifecycle events — ScenarioEvent
+        // STARTED/FINISHED plus the step's StepEvent STARTED/FINISHED — so an exact count (rather than
+        // just > 0) also catches a dropped or duplicated event, not only a wholesale missing publisher.
+        assertThat(CountingReportingEventPublisher.published()).isEqualTo(4);
+    }
+
     private static Scenario scenario(String type) {
         return Scenario.builder("fixture").environment("ift").step(GenericStep.of("s1", type)).build();
     }
@@ -426,6 +443,16 @@ class StandTestExtensionTest {
         @Test
         void envDoesNotLeakToId(@ScenarioId String id) {
             assertThat(id).isNull();
+        }
+    }
+
+    @StandTest
+    @Tag("standtest-fixture")
+    static class ReportingFixture {
+
+        @Test
+        void publishesEvents(StandClient stand) {
+            stand.run(scenario("fake.ok"));
         }
     }
 
