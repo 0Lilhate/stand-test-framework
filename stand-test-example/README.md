@@ -1,6 +1,6 @@
 # stand-test-example
 
-**Group:** examples · **Gradle plugin:** `java-library` · **Internal dependencies (test):** `stand-test-core`, `stand-test-junit`, `stand-test-rest`, `stand-test-db`, `stand-test-allure`
+**Group:** examples · **Gradle plugin:** `java-library` · **Internal dependencies (test):** `stand-test-core`, `stand-test-junit`, `stand-test-rest`, `stand-test-db`, `stand-test-kafka`, `stand-test-allure`
 
 Technical **usage examples** for the stand-test SDK (Iteration 8). They show how a consuming team writes
 scenarios with the SDK and run green offline through the public API against in-process doubles — there is
@@ -18,6 +18,7 @@ The examples live in `src/test/java` (there is no production code):
 | `NegativeTimeoutExampleTest` | the await/timeout path — `expectEventually` times out as a `StandTestAssertionError` (no `Thread.sleep`). |
 | `ReportingExampleTest` | how the Allure adapter renders a run (steps, status, labels, parameters, diagnostics). |
 | `StandTestExampleTest` | the canonical `@StandTest` path — inject a `StandClient` whose `EnvironmentRegistry` and Allure publisher are discovered via `ServiceLoader`, then run the REST→DB scenario. |
+| `KafkaExampleTest` | `KafkaStep.send` → `expect` — inject the SDK correlation header, match it, JSON-path assert + capture. **Needs a broker** (tagged `requires-broker`, excluded from the default run). |
 
 ## Execution model (why it runs offline)
 
@@ -53,7 +54,22 @@ Two differences from the manual-runner examples above:
   collisions), and `ExampleDoublesExtension` starts the HTTP double + H2 schema once per class, binding
   the port parsed from that env var.
 
-> Still Phase 2: the Kafka example (see `docs/arch/stand-test-example-next-steps.md`, Шаг 2.3).
+### The Kafka example (requires a broker)
+
+`KafkaExampleTest` shows `KafkaStep.send` → `expect`. Unlike REST/DB it **cannot** run against an
+in-process double: `kafka.expect` arms a real `KafkaConsumer` and the fake client factory is
+package-private to the adapter's own tests. So it is tagged `@Tag("requires-broker")` and **excluded from
+the default run** — the offline build only compiles it. The scenario is a self-contained round-trip on one
+topic: `send` publishes a message with the SDK correlation id injected as a header, and `expect` (whose
+consumer the runner armed at the log end during `prepare`) matches it by that id, asserts `$.status` and
+captures `$.entityId`.
+
+Run it against a reachable broker (the topic must already exist, or the broker must auto-create topics):
+
+```bash
+KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew :stand-test-example:test -PincludeRequiresBroker
+# override the broker address with -PkafkaBootstrapServers=host:port
+```
 
 ## Running
 

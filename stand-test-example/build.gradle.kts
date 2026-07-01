@@ -6,13 +6,15 @@ import org.gradle.api.publish.maven.tasks.AbstractPublishToMaven
 // a real DEV/IFT stand (test doubles are allowed by plan §16). It is a pure consumer (a sink) of the SDK
 // modules; nothing depends on it. No business logic, no real-stand config, no published artifact
 // (plan §6/§7/§20). Phase 1 covers REST+DB via the manual runner; Phase 2 adds the canonical @StandTest
-// path (this module's StandTestExampleTest); kafka remains Phase 2.
+// path (StandTestExampleTest) and a tagged Kafka example (KafkaExampleTest, requires a broker — excluded
+// from the default run).
 
 dependencies {
     testImplementation(project(":stand-test-core"))
     testImplementation(project(":stand-test-junit"))
     testImplementation(project(":stand-test-rest"))
     testImplementation(project(":stand-test-db"))
+    testImplementation(project(":stand-test-kafka"))
     testImplementation(project(":stand-test-allure"))
 
     testImplementation(platform(libs.junit.bom))
@@ -31,10 +33,19 @@ dependencies {
 // H2 stays in-memory for the JVM via DB_CLOSE_DELAY=-1.
 val exampleRestPort = (findProperty("exampleRestPort") as String?)?.toInt() ?: 18080
 tasks.withType<Test>().configureEach {
+    // The Kafka example needs a live broker (kafka.expect arms a real KafkaConsumer), so it is tagged
+    // `requires-broker` and excluded from the default offline run. Opt in with -PincludeRequiresBroker
+    // against a reachable broker (override its address with -PkafkaBootstrapServers).
+    useJUnitPlatform {
+        if (!project.hasProperty("includeRequiresBroker")) {
+            excludeTags("requires-broker")
+        }
+    }
     environment("MAIN_DB_URL", "jdbc:h2:mem:exampledb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL")
     environment("MAIN_DB_USER", "sa")
     environment("MAIN_DB_PASSWORD", "sa")
     environment("CLIENT_SERVICE_URL", "http://127.0.0.1:$exampleRestPort")
+    environment("KAFKA_BOOTSTRAP_SERVERS", (findProperty("kafkaBootstrapServers") as String?) ?: "localhost:9092")
 }
 
 // Examples are demonstrations, not production code: src/main is empty, so the 80% coverage gate is not

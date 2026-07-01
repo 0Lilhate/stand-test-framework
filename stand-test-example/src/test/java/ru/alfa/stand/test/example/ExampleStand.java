@@ -11,13 +11,16 @@ import ru.alfa.stand.test.core.environment.DatasourceDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
+import ru.alfa.stand.test.core.environment.KafkaClusterDefinition;
 import ru.alfa.stand.test.core.environment.ServiceEndpointDefinition;
+import ru.alfa.stand.test.core.environment.TopicDefinition;
 import ru.alfa.stand.test.core.event.NoOpReportingEventPublisher;
 import ru.alfa.stand.test.core.event.ReportingEventPublisher;
 import ru.alfa.stand.test.core.execution.DefaultScenarioRunner;
 import ru.alfa.stand.test.core.execution.StepExecutor;
 import ru.alfa.stand.test.core.validation.DefaultScenarioValidator;
 import ru.alfa.stand.test.db.DbStepExecutor;
+import ru.alfa.stand.test.kafka.KafkaStepExecutor;
 import ru.alfa.stand.test.rest.RestStepExecutor;
 import ru.alfa.stand.test.rest.WebClientHttpCaller;
 
@@ -35,6 +38,8 @@ final class ExampleStand {
     static final String DATASOURCE = "mainDb";
     static final String SCHEMA = "test_data";
     static final String CORRELATION_HEADER = "X-Correlation-Id";
+    static final String TOPIC = "events";
+    static final String TOPIC_NAME = "stand-test-example-events";
 
     private ExampleStand() {
     }
@@ -53,6 +58,15 @@ final class ExampleStand {
         return new InMemoryEnvironmentRegistry(Map.of(ENVIRONMENT, environment));
     }
 
+    static EnvironmentRegistry kafkaRegistry() {
+        TopicDefinition topic = new TopicDefinition(
+                TOPIC, TOPIC_NAME, new CorrelationConfig(CorrelationSource.HEADER, CORRELATION_HEADER));
+        EnvironmentDefinition environment = new EnvironmentDefinition(
+                ENVIRONMENT, Map.of(), Map.of(TOPIC, topic), Map.of(), Map.of(),
+                KafkaClusterDefinition.of("KAFKA_BOOTSTRAP_SERVERS"));
+        return new InMemoryEnvironmentRegistry(Map.of(ENVIRONMENT, environment));
+    }
+
     static StandClient stand(EnvironmentRegistry registry) {
         return stand(registry, NoOpReportingEventPublisher.INSTANCE);
     }
@@ -63,6 +77,13 @@ final class ExampleStand {
                 new DbStepExecutor());
         DefaultScenarioRunner runner = new DefaultScenarioRunner(
                 executors, new DefaultScenarioValidator(), registry, publisher);
+        return new DefaultStandClient(runner);
+    }
+
+    static StandClient kafkaStand(EnvironmentRegistry registry) {
+        List<StepExecutor> executors = List.of(new KafkaStepExecutor());
+        DefaultScenarioRunner runner = new DefaultScenarioRunner(
+                executors, new DefaultScenarioValidator(), registry, NoOpReportingEventPublisher.INSTANCE);
         return new DefaultStandClient(runner);
     }
 

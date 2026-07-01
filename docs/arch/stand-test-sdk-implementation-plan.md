@@ -422,6 +422,7 @@ flowchart LR
     example --> core
     example --> junit
     example --> rest
+    example --> kafka
     example --> db
     example --> allure
     scenario_yaml["scenario-yaml"] --> core
@@ -448,8 +449,9 @@ flowchart LR
 - `stand-test-db` → `core`, `await`.
 - `stand-test-grpc` → `core`, `await`.
 - `stand-test-allure` → `core`.
-- `stand-test-example` → `core`, `junit`, `rest`, `db`, `allure` (всё как `testImplementation`; TEST-ONLY
-  потребитель-сток, от него никто не зависит; Phase 2 добавит ещё `kafka` в Шаге 2.3).
+- `stand-test-example` → `core`, `junit`, `rest`, `kafka`, `db`, `allure` (всё как `testImplementation`;
+  TEST-ONLY потребитель-сток, от него никто не зависит; Kafka-пример тегирован `requires-broker` и
+  исключён из дефолтного прогона).
 - `stand-test-scenario-yaml` → **только `core`** (адаптеры — через core-SPI в рантайме, **без**
   compile-time ребра на конкретные адаптеры → нет дублирования раннера).
 - `stand-test-ai-schema` → **только модель `core`**, **не** зависит от runtime/адаптеров и от
