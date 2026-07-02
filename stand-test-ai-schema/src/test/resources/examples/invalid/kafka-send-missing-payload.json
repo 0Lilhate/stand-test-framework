@@ -1,0 +1,14 @@
+{
+  "id": "kafka-send-missing-payload",
+  "title": "Rejected: kafka.send has no payload (schema fail-closed, matches runtime)",
+  "environment": "ift",
+  "steps": [
+    {
+      "id": "send-command",
+      "type": "kafka.send",
+      "topic": "command-topic",
+      "key": "${correlationId}",
+      "correlation": { "inject": true }
+    }
+  ]
+}

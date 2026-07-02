@@ -1,0 +1,15 @@
+{
+  "id": "jdbc-url",
+  "title": "Rejected: db.expectEventually uses a JDBC URL instead of a datasource alias",
+  "environment": "ift",
+  "steps": [
+    {
+      "id": "verify-projection",
+      "type": "db.expectEventually",
+      "datasource": "jdbc:postgresql://db:5432/app",
+      "timeout": "10s",
+      "query": "SELECT status FROM requests WHERE request_id = :requestId",
+      "expect": { "singleValue": "DONE" }
+    }
+  ]
+}

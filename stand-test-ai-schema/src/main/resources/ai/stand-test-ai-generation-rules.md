@@ -56,12 +56,18 @@ These are provided by the SDK and may be referenced with `${...}`:
 
 ## Assertions
 
-Assertions attach to `kafka.expect` (and, as a draft, `grpc.unary`) as
-`assert: [ { "path": "$.x", "equals": ... } ]`. Each targets a `path` (JSONPath). The schema accepts the
-matchers `equals`, `exists`, `notNull`, `contains`, `matches`, but **the current runtime executes only
-`equals`** — the parser rejects the others as not-yet-executable (see *Schema vs runtime* below). No
-expression language, no script/Java/Groovy/JS matchers. `rest.get`/`rest.post` currently assert only the
-response `expect.status`, not the body.
+Assertions attach to `kafka.expect`, `rest.get`/`rest.post` (over the response body), and, as a draft,
+`grpc.unary`, as `assert: [ { "path": "$.x", "equals": ... } ]`. Each targets a `path` (JSONPath). The
+schema accepts the matchers `equals`, `exists`, `notNull`, `contains`, `matches`, but **the current
+runtime executes only `equals`** — the parser rejects the others as not-yet-executable (see *Schema vs
+runtime* below). No expression language, no script/Java/Groovy/JS matchers. REST steps always assert the
+response `expect.status`; the optional `assert` list adds response-body checks.
+
+## REST query parameters
+
+`rest.get`/`rest.post` accept an optional `query` object — a flat `string -> string` map of query
+parameters (e.g. `"query": { "status": "NEW", "correlationId": "${correlationId}" }`). Values are plain
+strings; use `${variable}` references, never endpoints or secrets. Non-string values are rejected.
 
 ## Forbidden operations (single source of truth: core `ForbiddenOperation`)
 
@@ -91,8 +97,11 @@ The parser (`AiScenarioParser`) fails closed on schema-valid constructs it canno
 executable forms:
 
 - **Bodies/payloads:** use `body.fixture` / `payload.fixture` (a classpath resource). Inline `body.json` /
-  `payload.json` is not executable yet.
-- **Assertions:** use `equals`. `exists` / `notNull` / `contains` / `matches` are not executable yet.
+  `payload.json` is not executable yet. `kafka.send` requires a `payload` (schema fail-closed, matching the
+  runtime translator).
+- **Assertions:** use `equals`. `exists` / `notNull` / `contains` / `matches` are not executable yet. This
+  applies to REST-body `assert` too — the schema accepts the list, the runtime currently runs `equals` only.
+- **REST query:** `query` is a `string -> string` map; the runtime passes it through as query parameters.
 - **DB expectation:** use `expect.singleValue` (equals the first column). `expect.rowExists` is not
   executable yet.
 - **gRPC:** `grpc.unary` is a draft — shape only, no execution yet.

@@ -1,0 +1,17 @@
+{
+  "id": "unbounded-timeout",
+  "title": "Rejected: kafka.expect timeout is effectively unbounded",
+  "environment": "ift",
+  "steps": [
+    {
+      "id": "await-response-event",
+      "type": "kafka.expect",
+      "topic": "response-topic",
+      "correlation": { "fromContext": true },
+      "timeout": "999999m",
+      "assert": [
+        { "path": "$.status", "equals": "SUCCESS" }
+      ]
+    }
+  ]
+}

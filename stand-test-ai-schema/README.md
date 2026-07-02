@@ -49,6 +49,13 @@ and `grpc.unary` (**draft**: shape only — execution ships with the `stand-test
 Each step is an object with a `type` discriminator (`{ "type": "rest.post", ... }`), never a single-key
 map. Fail-closed: every step object sets `additionalProperties: false`.
 
+REST steps accept `service` (alias), a relative `path`, an optional `query` (`string -> string` map),
+`headers`, `body.fixture`/`body.json`, `expect.status`, an optional `assert` list over the response body
+(same matcher shape as `kafka.expect`), `correlation.inject`, and `capture`. `kafka.send` requires a
+`payload` (schema is fail-closed to match the runtime). The schema accepts the full matcher set
+(`equals`/`exists`/`notNull`/`contains`/`matches`) while the current runtime executes `equals` only — see
+the *Schema vs runtime* section of the generation rules.
+
 ## Forbidden by the schema
 
 Arbitrary URLs / hosts / connection strings (only logical aliases: `service`/`topic`/`datasource`/

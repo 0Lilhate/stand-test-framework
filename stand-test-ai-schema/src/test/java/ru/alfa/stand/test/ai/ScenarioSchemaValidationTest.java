@@ -61,7 +61,7 @@ class ScenarioSchemaValidationTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"rest-kafka-db-flow.json", "kafka-response-flow.json", "rest-get-flow.json", "grpc-unary-draft.json"})
+    @ValueSource(strings = {"rest-kafka-db-flow.json", "kafka-response-flow.json", "rest-get-flow.json", "grpc-unary-draft.json", "rest-query-and-assert-flow.json"})
     @DisplayName("valid examples pass schema validation with no messages")
     void validExamples_pass(String file) {
         Set<ValidationMessage> messages = validateExample("/examples/valid/" + file);
@@ -74,7 +74,13 @@ class ScenarioSchemaValidationTest {
         "inline-secret.json, Authorization",
         "missing-timeout.json, timeout",
         "destructive-sql.json, query",
-        "unknown-step-type.json, type"
+        "unknown-step-type.json, type",
+        "kafka-send-missing-payload.json, payload",
+        "direct-broker.json, bootstrapServers",
+        "jdbc-url.json, datasource",
+        "script-assertion.json, script",
+        "unbounded-timeout.json, timeout",
+        "invalid-variable-capture.json, capture"
     })
     @DisplayName("invalid examples are rejected for the intended reason, not just any reason")
     void invalidExamples_failForReason(String file, String expectedToken) {
@@ -106,6 +112,44 @@ class ScenarioSchemaValidationTest {
         String doc = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"rest.get\","
                 + "\"service\":\"svc\",\"path\":\"/a\",\"body\":{\"fixture\":\"fixtures/x.json\"}}]}";
         assertThat(validateJson(doc)).as("rest.get with a body should be rejected").isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("F1: rest.post may carry response-body assertions; a script matcher is rejected")
+    void restAssert() {
+        String withAssert = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"rest.post\","
+                + "\"service\":\"svc\",\"path\":\"/a\",\"expect\":{\"status\":200},"
+                + "\"assert\":[{\"path\":\"$.status\",\"equals\":\"OK\"}]}]}";
+        assertThat(validateJson(withAssert)).as("rest.post with a declarative assert should pass").isEmpty();
+
+        String scriptAssert = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"rest.post\","
+                + "\"service\":\"svc\",\"path\":\"/a\",\"expect\":{\"status\":200},"
+                + "\"assert\":[{\"path\":\"$.status\",\"script\":\"x\"}]}]}";
+        assertThat(validateJson(scriptAssert)).as("rest assert with a script matcher should be rejected").isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("F2: rest.get may carry a string->string query map; a non-string value is rejected")
+    void restQuery() {
+        String withQuery = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"rest.get\","
+                + "\"service\":\"svc\",\"path\":\"/a\",\"query\":{\"status\":\"NEW\"}}]}";
+        assertThat(validateJson(withQuery)).as("rest.get with a string query map should pass").isEmpty();
+
+        String numericQuery = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"rest.get\","
+                + "\"service\":\"svc\",\"path\":\"/a\",\"query\":{\"page\":1}}]}";
+        assertThat(validateJson(numericQuery)).as("a non-string query value should be rejected").isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("F3: kafka.send without a payload is rejected; with a payload it passes")
+    void kafkaSendPayloadRequired() {
+        String noPayload = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"kafka.send\","
+                + "\"topic\":\"t\"}]}";
+        assertThat(validateJson(noPayload)).as("kafka.send without payload should be rejected").isNotEmpty();
+
+        String withPayload = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"kafka.send\","
+                + "\"topic\":\"t\",\"payload\":{\"fixture\":\"fixtures/c.json\"}}]}";
+        assertThat(validateJson(withPayload)).as("kafka.send with a fixture payload should pass").isEmpty();
     }
 
     @Test

@@ -1,0 +1,33 @@
+{
+  "id": "rest-query-and-assert-flow",
+  "title": "REST GET with query params, REST POST with body assertions",
+  "environment": "ift",
+  "tags": ["smoke"],
+  "steps": [
+    {
+      "id": "search-requests",
+      "type": "rest.get",
+      "description": "Read a filtered projection using query parameters",
+      "service": "client-service",
+      "path": "/api/requests",
+      "query": { "status": "NEW", "correlationId": "${correlationId}" },
+      "correlation": { "inject": true },
+      "expect": { "status": 200 },
+      "capture": { "requestId": "$.items[0].requestId" }
+    },
+    {
+      "id": "create-request",
+      "type": "rest.post",
+      "description": "Create a request and assert on the response body",
+      "service": "client-service",
+      "path": "/api/requests",
+      "correlation": { "inject": true },
+      "body": { "fixture": "fixtures/create-request.json" },
+      "expect": { "status": 200 },
+      "assert": [
+        { "path": "$.status", "equals": "ACCEPTED" }
+      ],
+      "capture": { "createdId": "$.requestId" }
+    }
+  ]
+}

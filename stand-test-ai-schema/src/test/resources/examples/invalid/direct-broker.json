@@ -1,0 +1,14 @@
+{
+  "id": "direct-broker",
+  "title": "Rejected: kafka.send declares raw bootstrapServers instead of a topic alias",
+  "environment": "ift",
+  "steps": [
+    {
+      "id": "send-command",
+      "type": "kafka.send",
+      "topic": "command-topic",
+      "bootstrapServers": "broker-1:9092,broker-2:9092",
+      "payload": { "fixture": "fixtures/command.json" }
+    }
+  ]
+}

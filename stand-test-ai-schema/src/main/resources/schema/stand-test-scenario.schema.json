@@ -140,6 +140,12 @@
           "type": "string",
           "pattern": "^/($|[^/])"
         },
+        "query": {
+          "description": "Optional query parameters as a flat string->string map. Values are plain strings (use ${variable} references, not endpoints or secrets).",
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "type": "string" }
+        },
         "headers": { "$ref": "#/$defs/headerMap" },
         "correlation": { "$ref": "#/$defs/correlationInject" },
         "body": { "$ref": "#/$defs/payloadSource" },
@@ -150,6 +156,10 @@
           "properties": {
             "status": { "type": "integer", "minimum": 100, "maximum": 599 }
           }
+        },
+        "assert": {
+          "description": "Optional assertions over the response body (JSONPath). Same shape as kafka.expect: the schema accepts equals/exists/notNull/contains/matches, the runtime currently executes equals-only.",
+          "$ref": "#/$defs/assertionList"
         },
         "capture": { "$ref": "#/$defs/captureMap" }
       },
@@ -163,7 +173,7 @@
     "kafkaSendStep": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "type", "topic"],
+      "required": ["id", "type", "topic", "payload"],
       "properties": {
         "id": { "$ref": "#/$defs/identifier" },
         "type": { "const": "kafka.send" },
