@@ -3,6 +3,9 @@ package ru.alfa.stand.test.ai;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
 import org.junit.jupiter.api.DisplayName;
@@ -22,6 +25,18 @@ class AiSchemaResourcesTest {
     void rulesResource_present() {
         String rules = AiSchemaResources.generationRules();
         assertThat(rules).contains("declarative scenario document");
+    }
+
+    @Test
+    @DisplayName("an unreadable stream is wrapped as UncheckedIOException")
+    void unreadableStream_wrapped() {
+        InputStream broken = new InputStream() {
+            @Override
+            public int read() throws IOException {
+                throw new IOException("boom");
+            }
+        };
+        assertThatThrownBy(() -> AiSchemaResources.readAll(broken)).isInstanceOf(UncheckedIOException.class);
     }
 
     @Test

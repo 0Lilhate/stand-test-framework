@@ -42,7 +42,7 @@
 | G6 | **P2** | `capture` value не ограничен JSONPath | schema | S |
 | G7 | **P2** | `rest.get` с `body` принимается | schema | S |
 | G4 ✅ | **P2** | Дубли `step.id` — документировано (runtime ловит) | doc | S |
-| C1 | **P2** | Хрупкость coverage-гейта (82.9%, непокрыт `catch`) | test/build | S |
+| C1 ✅ | **P2** | Хрупкость coverage-гейта (82.9%→**100%**, `catch` покрыт) | test/build | S |
 | R2/D1/consistency | **P2** | Мелкие: cross-check слабый, core как test-dep, рассинхрон `id`-паттернов | doc/build | S |
 
 Оценка: S ≈ ≤0.5 дня, M ≈ 1–2 дня.
@@ -218,10 +218,11 @@ GET с телом семантически странен (`body` общий д�
 Задокументировано в rules-доке (раздел *Schema vs runtime*): id уникальны, проверяет рантайм-валидатор
 (`STEP_ID_DUPLICATE`), не схема.
 
-### C1. Хрупкость coverage-гейта
-Покрытие `AiSchemaResources` = 82.9%, непокрыт только `catch (IOException)`; запас 2.9 п.п. **Фикс (одно).**
-(a) покрыть `catch` через fault-injecting `InputStream` (реально тестируемо); либо (b) осознанно принять и
-зафиксировать риск. **DoD.** ≥85% с запасом, либо явная запись о принятии риска.
+### C1. Хрупкость coverage-гейта  ✅ ВЫПОЛНЕНО (2026-07-02)
+**Сделано (вариант a).** Тело чтения потока вынесено в package-private `AiSchemaResources.readAll(InputStream)`;
+тест `unreadableStream_wrapped` подаёт поток, чей `read()` бросает `IOException`, и проверяет
+`UncheckedIOException` — покрыт ранее недостижимый `catch`. Покрытие `AiSchemaResources` теперь **100%**
+(было 82.9%); хрупкости 80%-гейта больше нет. `./gradlew :stand-test-ai-schema:build` зелёный.
 
 ### R2 / D1 / consistency (мелочи)
 - **R2.** Cross-check-тест проверяет лишь наличие подстроки `.code()` в markdown — усилить до «код + слой

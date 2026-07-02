@@ -47,6 +47,10 @@ public final class AiSchemaResources {
         if (in == null) {
             throw new IllegalStateException("Resource not found on classpath: " + resource);
         }
+        return readAll(in);
+    }
+
+    static String readAll(InputStream in) {
         try (in) {
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
