@@ -38,10 +38,10 @@
 | G5 | **P1** | Path traversal в `body.fixture` (`../../etc/passwd`) | schema | S |
 | T2 | **P2** | Нет valid-примеров для `rest.get` и `grpc.unary` | test | S |
 | T3 ✅ | **P2** | `oneOf` → взрыв сообщений (25–32/док); перейти на `if/then` — **сделано (1–2/док)** | schema | M |
-| R1 | **P2** | Rules-док завышает, что энфорсит схема (после G1/G2) | doc | S |
+| R1 ✅ | **P2** | Rules-док завышает, что энфорсит схема — **сделано** | doc | S |
 | G6 | **P2** | `capture` value не ограничен JSONPath | schema | S |
 | G7 | **P2** | `rest.get` с `body` принимается | schema | S |
-| G4 | **P2** | Дубли `step.id` (schema не выражает; runtime ловит) — документировать | doc | S |
+| G4 ✅ | **P2** | Дубли `step.id` — документировано (runtime ловит) | doc | S |
 | C1 | **P2** | Хрупкость coverage-гейта (82.9%, непокрыт `catch`) | test/build | S |
 | R2/D1/consistency | **P2** | Мелкие: cross-check слабый, core как test-dep, рассинхрон `id`-паттернов | doc/build | S |
 
@@ -195,10 +195,14 @@ propertyNames; required `timeout`; SQL start-SELECT + not-destructive; type-enum
 `ScenarioSchemaValidationTest` проверяет отсутствие кросс-веточного шума. **Замерено:** invalid-примеры теперь
 дают **1–2** сообщения (было 25–32). Все valid/invalid/T1/parity тесты зелёные, `./gradlew build` зелёный.
 
-### R1. Синхронизировать rules-док с реальным энфорсментом
-После G1/G2 обновить таблицу forbidden-ops: `THREAD_SLEEP`/`HARDCODED_STAND_URL` — уточнить слой (schema с
-оговорёнными паттернами + runtime-добор). Убрать завышенные обещания. **DoD.** Каждая строка «schema»
-подтверждается invalid-примером/тестом.
+### R1. Синхронизировать rules-док с реальным энфорсментом  ✅ ВЫПОЛНЕНО (2026-07-02)
+**Сделано.** В `stand-test-ai-generation-rules.md`: уточнены строки forbidden-ops (`THREAD_SLEEP` — +SQL
+sleep-функции; `HARDCODED_STAND_URL` — +relative `path`/no `//host`; `SECRET_IN_SOURCE` → «schema (keys) +
+prompt», т.к. схема ловит имена secret-заголовков, не значения); раздел *Assertions* уточнён (схема
+принимает 5 matcher'ов, рантайм исполняет только `equals`; assertions — на `kafka.expect`, REST — только
+`expect.status`); добавлен раздел *Schema vs runtime (executable subset)* (fixture-only тела, equals-only,
+`singleValue` вместо `rowExists`, grpc draft, **уникальность `step.id` — рантайм, не схема** → закрывает
+**G4**); минимальный пример переведён на `body.fixture`. `ForbiddenOperationCoverageTest` (11 кодов) зелёный.
 
 ### G6. `capture` value → JSONPath-паттерн
 `capture: {"x": "not a jsonpath"}` принимается, хотя схема обещает JSONPath. **Фикс.** `additionalProperties`
@@ -210,10 +214,9 @@ GET с телом семантически странен (`body` общий д�
 `$defs` (getStep без `body`, postStep с `body`), либо задокументировать как допустимое. **DoD.** поведение
 осознанное и покрыто тестом.
 
-### G4. Уникальность `step.id`
-Схемой не выражается; ловится рантайм-валидатором (`STEP_ID_DUPLICATE`). **Фикс.** Явно задокументировать в
-rules-доке: «id должны быть уникальны; проверяется рантайм-валидатором, не схемой». **DoD.** строка в
-rules-доке есть.
+### G4. Уникальность `step.id`  ✅ ВЫПОЛНЕНО (2026-07-02, вместе с R1)
+Задокументировано в rules-доке (раздел *Schema vs runtime*): id уникальны, проверяет рантайм-валидатор
+(`STEP_ID_DUPLICATE`), не схема.
 
 ### C1. Хрупкость coverage-гейта
 Покрытие `AiSchemaResources` = 82.9%, непокрыт только `catch (IOException)`; запас 2.9 п.п. **Фикс (одно).**

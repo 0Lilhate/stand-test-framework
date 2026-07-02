@@ -56,8 +56,12 @@ These are provided by the SDK and may be referenced with `${...}`:
 
 ## Assertions
 
-Use simple declarative matchers only: `equals`, `exists`, `notNull`, `contains`, `matches`. Each
-assertion targets a `path` (JSONPath). No expression language, no script/Java/Groovy/JS matchers.
+Assertions attach to `kafka.expect` (and, as a draft, `grpc.unary`) as
+`assert: [ { "path": "$.x", "equals": ... } ]`. Each targets a `path` (JSONPath). The schema accepts the
+matchers `equals`, `exists`, `notNull`, `contains`, `matches`, but **the current runtime executes only
+`equals`** — the parser rejects the others as not-yet-executable (see *Schema vs runtime* below). No
+expression language, no script/Java/Groovy/JS matchers. `rest.get`/`rest.post` currently assert only the
+response `expect.status`, not the body.
 
 ## Forbidden operations (single source of truth: core `ForbiddenOperation`)
 
@@ -68,10 +72,10 @@ structurally by the JSON Schema; **runtime** = enforced by the core `ScenarioVal
 
 | Code | Meaning | Layer |
 |------|---------|-------|
-| `THREAD_SLEEP` | No fixed sleeps/delays — the only wait is a declarative `timeout` on async steps. | schema |
+| `THREAD_SLEEP` | No fixed sleeps/delays — the only wait is a declarative `timeout`; SQL sleep functions (`pg_sleep`, `sleep(`, `waitfor`, …) are rejected too. | schema |
 | `FIXED_TEST_DATA_ID` | Do not hardcode test-data identifiers; generate or capture them. | prompt |
-| `HARDCODED_STAND_URL` | No stand URLs/hosts — use environment and service aliases. | schema |
-| `SECRET_IN_SOURCE` | No inline secrets (tokens/passwords/Authorization) — use secret references. | schema + runtime |
+| `HARDCODED_STAND_URL` | No stand URLs/hosts — only environment/service aliases; `path` is relative (a leading `//host` is rejected). | schema |
+| `SECRET_IN_SOURCE` | No inline secrets. The schema rejects secret-bearing header *names* (Authorization/token/password/…); secret *values* under innocuous keys are your responsibility and are re-checked at runtime. | schema (keys) + prompt |
 | `RAW_KAFKA_CLIENT` | No raw Kafka producer/consumer — only `kafka.send` / `kafka.expect`. | schema |
 | `RAW_JDBC_CLIENT` | No raw JDBC — only the declarative `db.expectEventually` probe. | schema |
 | `NON_WHITELISTED_ENVIRONMENT` | Use only whitelisted environment aliases (resolved at runtime). | runtime |
@@ -79,6 +83,21 @@ structurally by the JSON Schema; **runtime** = enforced by the core `ScenarioVal
 | `DESTRUCTIVE_SQL_WITHOUT_ALLOW` | No `drop`/`truncate`/`delete`/`update`/`alter` — read-only `SELECT` only. | schema + runtime |
 | `BUSINESS_LOGIC_IN_SDK` | Keep service-specific business logic out of the scenario/SDK. | prompt |
 | `IMPERATIVE_EAGER_IO` | No imperative eager-IO — the document is fully declarative. | schema |
+
+## Schema vs runtime (executable subset)
+
+The JSON Schema describes the full space of *safe* documents; the current runtime executes a subset of it.
+The parser (`AiScenarioParser`) fails closed on schema-valid constructs it cannot yet run, so prefer the
+executable forms:
+
+- **Bodies/payloads:** use `body.fixture` / `payload.fixture` (a classpath resource). Inline `body.json` /
+  `payload.json` is not executable yet.
+- **Assertions:** use `equals`. `exists` / `notNull` / `contains` / `matches` are not executable yet.
+- **DB expectation:** use `expect.singleValue` (equals the first column). `expect.rowExists` is not
+  executable yet.
+- **gRPC:** `grpc.unary` is a draft — shape only, no execution yet.
+- **Step ids** must be unique within a scenario. Uniqueness is enforced by the runtime `ScenarioValidator`,
+  not by the schema, so keep them distinct.
 
 ## Minimal valid example
 
@@ -95,7 +114,7 @@ structurally by the JSON Schema; **runtime** = enforced by the core `ScenarioVal
       "service": "client-service",
       "path": "/api/requests",
       "correlation": { "inject": true },
-      "body": { "json": { "amount": 100 } },
+      "body": { "fixture": "fixtures/create-request.json" },
       "expect": { "status": 200 },
       "capture": { "requestId": "$.requestId" }
     },
