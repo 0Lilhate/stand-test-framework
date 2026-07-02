@@ -36,7 +36,7 @@
 | G1 | **P1** | Обход `THREAD_SLEEP` через SQL (`pg_sleep`) | schema/doc | S |
 | G3 | **P1** | `timeout: 9999999m` (≈unbounded) принимается | schema | S |
 | G5 | **P1** | Path traversal в `body.fixture` (`../../etc/passwd`) | schema | S |
-| T2 | **P2** | Нет valid-примеров для `rest.get` и `grpc.unary` | test | S |
+| T2 ✅ | **P2** | Нет valid-примеров для `rest.get` и `grpc.unary` — **добавлены** | test | S |
 | T3 ✅ | **P2** | `oneOf` → взрыв сообщений (25–32/док); перейти на `if/then` — **сделано (1–2/док)** | schema | M |
 | R1 ✅ | **P2** | Rules-док завышает, что энфорсит схема — **сделано** | doc | S |
 | G6 | **P2** | `capture` value не ограничен JSONPath | schema | S |
@@ -182,10 +182,12 @@ propertyNames; required `timeout`; SQL start-SELECT + not-destructive; type-enum
 
 ## P2 — полнота, usability, синхронизация
 
-### T2. Positive-покрытие всех MVP-типов шагов
-`rest.get` и `grpc.unary` не покрыты ни одним valid-примером (draft-gRPC вообще не доказан на приёмку).
-**Фикс.** Добавить `examples/valid/rest-get-flow.json` и `examples/valid/grpc-unary-draft.json`; включить в
-`validExamples_pass`. **DoD.** Каждый MVP-тип имеет ≥1 valid-пример, проходящий схему.
+### T2. Positive-покрытие всех MVP-типов шагов  ✅ ВЫПОЛНЕНО (2026-07-02)
+**Сделано.** Добавлены `examples/valid/rest-get-flow.json` и `examples/valid/grpc-unary-draft.json`,
+включены в `validExamples_pass` (теперь 4 valid-примера, каждый — 0 сообщений). Все MVP-типы шагов имеют
+≥1 valid-пример; draft-`grpc.unary` доказан на приёмку схемой.
+**Побочная находка:** схема `restStep` **не содержит `query`**, хотя парсер/wire его поддерживают — пример
+`rest.get` пришлось делать без `query`. Кандидат в схемные follow-up рядом с «REST body assertions».
 
 ### T3. `oneOf` → `if/then` дискриминатор (usability для AI)  ✅ ВЫПОЛНЕНО (2026-07-02)
 `oneOf` выдавал 25–32 сообщения на документ — релевантны 1–2, остальное шум по чужим веткам. **Сделано.**

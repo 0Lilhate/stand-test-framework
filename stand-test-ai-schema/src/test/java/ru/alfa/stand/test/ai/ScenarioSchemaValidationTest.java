@@ -61,7 +61,7 @@ class ScenarioSchemaValidationTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"rest-kafka-db-flow.json", "kafka-response-flow.json"})
+    @ValueSource(strings = {"rest-kafka-db-flow.json", "kafka-response-flow.json", "rest-get-flow.json", "grpc-unary-draft.json"})
     @DisplayName("valid examples pass schema validation with no messages")
     void validExamples_pass(String file) {
         Set<ValidationMessage> messages = validateExample("/examples/valid/" + file);
