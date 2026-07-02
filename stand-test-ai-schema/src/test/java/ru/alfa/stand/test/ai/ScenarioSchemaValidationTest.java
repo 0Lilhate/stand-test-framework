@@ -85,6 +85,22 @@ class ScenarioSchemaValidationTest {
     }
 
     @Test
+    @DisplayName("a capture value that is not a JSONPath is rejected (G6)")
+    void nonJsonPathCapture_rejected() {
+        String doc = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"rest.get\","
+                + "\"service\":\"svc\",\"path\":\"/a\",\"capture\":{\"x\":\"not a jsonpath\"}}]}";
+        assertThat(validateJson(doc)).as("capture value without a leading $ should be rejected").isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("a rest.get carrying a body is rejected (G7)")
+    void restGetWithBody_rejected() {
+        String doc = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"rest.get\","
+                + "\"service\":\"svc\",\"path\":\"/a\",\"body\":{\"fixture\":\"fixtures/x.json\"}}]}";
+        assertThat(validateJson(doc)).as("rest.get with a body should be rejected").isNotEmpty();
+    }
+
+    @Test
     @DisplayName("an invalid step reports only its own type's errors, not every step type (T3)")
     void invalidStep_reportsFocusedErrors() {
         String doc = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"rest.post\","

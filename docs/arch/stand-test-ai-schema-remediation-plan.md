@@ -39,8 +39,8 @@
 | T2 ✅ | **P2** | Нет valid-примеров для `rest.get` и `grpc.unary` — **добавлены** | test | S |
 | T3 ✅ | **P2** | `oneOf` → взрыв сообщений (25–32/док); перейти на `if/then` — **сделано (1–2/док)** | schema | M |
 | R1 ✅ | **P2** | Rules-док завышает, что энфорсит схема — **сделано** | doc | S |
-| G6 | **P2** | `capture` value не ограничен JSONPath | schema | S |
-| G7 | **P2** | `rest.get` с `body` принимается | schema | S |
+| G6 ✅ | **P2** | `capture` value не ограничен JSONPath — **^\$ добавлен** | schema | S |
+| G7 ✅ | **P2** | `rest.get` с `body` — **запрещён (allOf)** | schema | S |
 | G4 ✅ | **P2** | Дубли `step.id` — документировано (runtime ловит) | doc | S |
 | C1 ✅ | **P2** | Хрупкость coverage-гейта (82.9%→**100%**, `catch` покрыт) | test/build | S |
 | R2/D1/consistency | **P2** | Мелкие: cross-check слабый, core как test-dep, рассинхрон `id`-паттернов | doc/build | S |
@@ -206,15 +206,15 @@ prompt», т.к. схема ловит имена secret-заголовков, �
 `singleValue` вместо `rowExists`, grpc draft, **уникальность `step.id` — рантайм, не схема** → закрывает
 **G4**); минимальный пример переведён на `body.fixture`. `ForbiddenOperationCoverageTest` (11 кодов) зелёный.
 
-### G6. `capture` value → JSONPath-паттерн
-`capture: {"x": "not a jsonpath"}` принимается, хотя схема обещает JSONPath. **Фикс.** `additionalProperties`
-value: `"pattern": "^\\$"` (JSONPath начинается с `$`) как минимальная проверка. **DoD.** значение без `$`
-отвергается; `$.requestId` принимается.
+### G6. `capture` value → JSONPath-паттерн  ✅ ВЫПОЛНЕНО (2026-07-02)
+**Сделано.** В `$defs.captureMap.additionalProperties` добавлен `"pattern": "^\\$"` (значение должно
+начинаться с `$`). Действует на все capture-мапы (rest/kafka.expect/grpc) через `$ref`. Тест
+`nonJsonPathCapture_rejected`; valid-примеры (`$.requestId`, …) без изменений.
 
-### G7. `rest.get` с `body`
-GET с телом семантически странен (`body` общий для get/post). **Фикс (решить).** Либо разнести на два
-`$defs` (getStep без `body`, postStep с `body`), либо задокументировать как допустимое. **DoD.** поведение
-осознанное и покрыто тестом.
+### G7. `rest.get` с `body`  ✅ ВЫПОЛНЕНО (2026-07-02, решение: deny)
+**Решено — запретить.** В `$defs.restStep` добавлен `allOf` c `if type==rest.get then not(required body)`;
+`rest.post` не затронут. Тест `restGetWithBody_rejected`. Побочно: `GuardrailHoleTest.g5` переведён на
+`rest.post` (его benign-кейс раньше опирался на GET+body — теперь корректно отвергается).
 
 ### G4. Уникальность `step.id`  ✅ ВЫПОЛНЕНО (2026-07-02, вместе с R1)
 Задокументировано в rules-доке (раздел *Schema vs runtime*): id уникальны, проверяет рантайм-валидатор

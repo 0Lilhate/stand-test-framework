@@ -38,6 +38,11 @@ class GuardrailHoleTest {
                 + field + ":" + value + "}]}";
     }
 
+    private static String restPostBody(String fixtureValue) {
+        return "{\"id\":\"a\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"rest.post\",\"service\":\"svc\","
+                + "\"path\":\"/a\",\"body\":{\"fixture\":\"" + fixtureValue + "\"}}]}";
+    }
+
     private static String dbQuery(String query) {
         return "{\"id\":\"a\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"db.expectEventually\","
                 + "\"datasource\":\"d\",\"timeout\":\"5s\",\"query\":\"" + query + "\",\"expect\":{\"rowExists\":true}}]}";
@@ -77,7 +82,7 @@ class GuardrailHoleTest {
     @Test
     @DisplayName("G5: fixture path traversal is rejected, a relative fixture path passes")
     void g5_fixtureTraversal() {
-        assertThat(validate(restStep("\"path\":\"/a\",\"body\"", "{\"fixture\":\"../../../etc/passwd\"}"))).isNotEmpty();
-        assertThat(validate(restStep("\"path\":\"/a\",\"body\"", "{\"fixture\":\"fixtures/request.json\"}"))).isEmpty();
+        assertThat(validate(restPostBody("../../../etc/passwd"))).isNotEmpty();
+        assertThat(validate(restPostBody("fixtures/request.json"))).isEmpty();
     }
 }

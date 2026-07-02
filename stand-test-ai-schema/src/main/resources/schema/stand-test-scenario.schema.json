@@ -98,7 +98,7 @@
       "type": "object",
       "minProperties": 1,
       "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
-      "additionalProperties": { "type": "string", "minLength": 1 }
+      "additionalProperties": { "type": "string", "minLength": 1, "pattern": "^\\$" }
     },
     "assertion": {
       "description": "A single declarative assertion over a JSONPath. Exactly one matcher besides `path`. No expression/script matchers.",
@@ -146,7 +146,13 @@
           }
         },
         "capture": { "$ref": "#/$defs/captureMap" }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "rest.get" } }, "required": ["type"] },
+          "then": { "not": { "required": ["body"] } }
+        }
+      ]
     },
     "kafkaSendStep": {
       "type": "object",
