@@ -9,13 +9,14 @@ import org.junit.jupiter.api.Test;
 class ForbiddenOperationCoverageTest {
 
     @Test
-    @DisplayName("every core ForbiddenOperation code is documented in the AI generation rules")
-    void everyForbiddenOperation_isDocumented() {
+    @DisplayName("every core ForbiddenOperation code is catalogued as a row of the forbidden-ops table")
+    void everyForbiddenOperation_isCatalogued() {
         String rules = AiSchemaResources.generationRules();
+        assertThat(rules).as("the forbidden-operations table must exist").contains("| Code | Meaning | Layer |");
         for (ForbiddenOperation op : ForbiddenOperation.values()) {
             assertThat(rules)
-                    .as("generation rules must reference ForbiddenOperation %s", op.code())
-                    .contains(op.code());
+                    .as("ForbiddenOperation %s must be catalogued as a table row, not merely mentioned", op.code())
+                    .contains("| `" + op.code() + "` |");
         }
     }
 }

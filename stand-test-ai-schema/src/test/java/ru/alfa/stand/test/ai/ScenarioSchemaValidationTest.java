@@ -93,6 +93,14 @@ class ScenarioSchemaValidationTest {
     }
 
     @Test
+    @DisplayName("a step id that breaks the identifier pattern is rejected (consistency)")
+    void malformedStepId_rejected() {
+        String doc = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"bad id\",\"type\":\"rest.get\","
+                + "\"service\":\"svc\",\"path\":\"/a\"}]}";
+        assertThat(validateJson(doc)).as("a step id with a space should be rejected").isNotEmpty();
+    }
+
+    @Test
     @DisplayName("a rest.get carrying a body is rejected (G7)")
     void restGetWithBody_rejected() {
         String doc = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"rest.get\","

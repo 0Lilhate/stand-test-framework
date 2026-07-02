@@ -22,7 +22,9 @@
 >   зелёный. Схема (`steps/type`) — надмножество исполнимого; gap → follow-ups ниже.
 > - **P1: ВЫПОЛНЕНО** — G1/G2/G3/G5 закрыты в схеме, T1 усилен, добавлен регрессионный `GuardrailHoleTest`.
 >   16 тестов зелёные, `./gradlew build` зелёный. Детали — в статус-пометках ниже.
-> - **P2: не начато.**
+> - **P2: ВЫПОЛНЕНО** — T2, T3, R1, G4, G6, G7, C1, R2/D1/consistency закрыты (см. пометки ниже).
+>   Открытыми остаются только **schema-follow-ups** (`restStep.query`, REST body assertions) и крупные
+>   кросс-модульные (inline JSON body, rich matchers/`rowExists`, grpc execution, hoist surface-ключей).
 
 ---
 
@@ -43,7 +45,7 @@
 | G7 ✅ | **P2** | `rest.get` с `body` — **запрещён (allOf)** | schema | S |
 | G4 ✅ | **P2** | Дубли `step.id` — документировано (runtime ловит) | doc | S |
 | C1 ✅ | **P2** | Хрупкость coverage-гейта (82.9%→**100%**, `catch` покрыт) | test/build | S |
-| R2/D1/consistency | **P2** | Мелкие: cross-check слабый, core как test-dep, рассинхрон `id`-паттернов | doc/build | S |
+| R2/D1/consistency ✅ | **P2** | cross-check усилен, core-dep зафиксирован, `id`-паттерн унифицирован | doc/build | S |
 
 Оценка: S ≈ ≤0.5 дня, M ≈ 1–2 дня.
 
@@ -226,13 +228,16 @@ prompt», т.к. схема ловит имена secret-заголовков, �
 `UncheckedIOException` — покрыт ранее недостижимый `catch`. Покрытие `AiSchemaResources` теперь **100%**
 (было 82.9%); хрупкости 80%-гейта больше нет. `./gradlew :stand-test-ai-schema:build` зелёный.
 
-### R2 / D1 / consistency (мелочи)
-- **R2.** Cross-check-тест проверяет лишь наличие подстроки `.code()` в markdown — усилить до «код + слой
-  присутствуют в таблице forbidden-ops» (опц.).
-- **D1.** `stand-test-core` подключён `testImplementation`; при появлении Java-`GuardrailCatalog` поднять до
-  `api` (тогда «единый источник» станет и рантайм-привязкой, не только тестовой).
-- **consistency.** Согласовать паттерны `id`: top-level `id` имеет `^[A-Za-z0-9][...]`, `step.id` — только
-  `minLength:1`. Привести к одному правилу.
+### R2 / D1 / consistency (мелочи)  ✅ ВЫПОЛНЕНО (2026-07-02)
+- **R2.** ✅ `ForbiddenOperationCoverageTest` усилен: проверяет заголовок таблицы `| Code | Meaning | Layer |`
+  и что каждый `ForbiddenOperation.code()` присутствует **как ячейка строки** (`` | `CODE` | ``), а не просто
+  где-то в prose. Код, выпавший из каталога-таблицы, теперь ломает сборку.
+- **D1.** ✅ (решение зафиксировано) `stand-test-core` остаётся `testImplementation` у ai-schema — main-код
+  его не использует; поднять до `api` только когда появится программный Java-`GuardrailCatalog` (тогда
+  «единый источник» станет и рантайм-привязкой). Кода не меняем.
+- **consistency.** ✅ Введён `$defs/identifier` (`minLength:1` + `^[A-Za-z0-9][A-Za-z0-9._-]*$`); на него
+  ссылаются top-level `id` и все 5 step-`id`. Тест `malformedStepId_rejected` (id с пробелом → отклонён).
+  Сгенерированные парсером id (`rest.get#0`) — post-validation, паттерн их не затрагивает.
 
 ---
 

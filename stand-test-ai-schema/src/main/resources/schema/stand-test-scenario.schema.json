@@ -7,7 +7,7 @@
   "additionalProperties": false,
   "required": ["id", "environment", "steps"],
   "properties": {
-    "id": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+    "id": { "$ref": "#/$defs/identifier" },
     "title": { "type": "string" },
     "description": { "type": "string" },
     "environment": {
@@ -38,6 +38,12 @@
         { "if": { "properties": { "type": { "const": "db.expectEventually" } }, "required": ["type"] }, "then": { "$ref": "#/$defs/dbExpectEventuallyStep" } },
         { "if": { "properties": { "type": { "const": "grpc.unary" } }, "required": ["type"] }, "then": { "$ref": "#/$defs/grpcUnaryStep" } }
       ]
+    },
+    "identifier": {
+      "description": "A scenario or step identifier: starts with a letter/digit, then letters/digits/dot/underscore/hyphen.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
     },
     "alias": {
       "description": "A logical alias resolved to an endpoint + secret reference at runtime. Must NOT be a URL, host, or connection string.",
@@ -125,7 +131,7 @@
       "additionalProperties": false,
       "required": ["id", "type", "service", "path"],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
+        "id": { "$ref": "#/$defs/identifier" },
         "type": { "enum": ["rest.get", "rest.post"] },
         "description": { "type": "string" },
         "service": { "$ref": "#/$defs/alias" },
@@ -159,7 +165,7 @@
       "additionalProperties": false,
       "required": ["id", "type", "topic"],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
+        "id": { "$ref": "#/$defs/identifier" },
         "type": { "const": "kafka.send" },
         "description": { "type": "string" },
         "topic": { "$ref": "#/$defs/alias" },
@@ -173,7 +179,7 @@
       "additionalProperties": false,
       "required": ["id", "type", "topic", "timeout", "assert"],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
+        "id": { "$ref": "#/$defs/identifier" },
         "type": { "const": "kafka.expect" },
         "description": { "type": "string" },
         "topic": { "$ref": "#/$defs/alias" },
@@ -188,7 +194,7 @@
       "additionalProperties": false,
       "required": ["id", "type", "datasource", "timeout", "query", "expect"],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
+        "id": { "$ref": "#/$defs/identifier" },
         "type": { "const": "db.expectEventually" },
         "description": { "type": "string" },
         "datasource": { "$ref": "#/$defs/alias" },
@@ -224,7 +230,7 @@
       "additionalProperties": false,
       "required": ["id", "type", "target", "method", "timeout"],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
+        "id": { "$ref": "#/$defs/identifier" },
         "type": { "const": "grpc.unary" },
         "description": { "type": "string" },
         "target": { "$ref": "#/$defs/alias" },
