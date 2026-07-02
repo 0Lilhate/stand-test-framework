@@ -8,9 +8,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import org.yaml.snakeyaml.LoaderOptions;
-import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.constructor.SafeConstructor;
 import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.scenario.GenericStep;
 import ru.alfa.stand.test.core.scenario.Scenario;
@@ -45,7 +42,7 @@ public final class YamlScenarioParser {
      */
     public Scenario parse(String yaml) {
         Objects.requireNonNull(yaml, "yaml must not be null");
-        Map<String, Object> document = SurfaceValues.asMap(load(yaml), "<document>");
+        Map<String, Object> document = SurfaceValues.asMap(SafeYaml.load(yaml), "<document>");
         SurfaceValues.checkKnownKeys(document, KNOWN_TOP_LEVEL, "<document>");
 
         var builder = Scenario.builder(SurfaceValues.requireString(document, "id", "<document>"))
@@ -107,19 +104,5 @@ public final class YamlScenarioParser {
     private static List<Object> tags(Map<String, Object> document) {
         Object tags = document.get("tags");
         return (tags == null) ? List.of() : SurfaceValues.asList(tags, "tags");
-    }
-
-    private static Object load(String yaml) {
-        LoaderOptions options = new LoaderOptions();
-        options.setAllowDuplicateKeys(false);
-        // Explicit, conservative limits: this format is aimed at AI-generated scenarios (plan §4), so
-        // reject alias/nesting bombs at parse time rather than relying on library defaults.
-        options.setMaxAliasesForCollections(10);
-        options.setNestingDepthLimit(50);
-        try {
-            return new Yaml(new SafeConstructor(options)).load(yaml);
-        } catch (RuntimeException parseFailure) {
-            throw new StandTestException("Failed to parse YAML: " + parseFailure.getMessage(), parseFailure);
-        }
     }
 }

@@ -16,6 +16,14 @@ dependencies {
     testImplementation(project(":stand-test-db"))
     testImplementation(project(":stand-test-kafka"))
     testImplementation(project(":stand-test-allure"))
+    // AI-format parity: the scenario-yaml engine (AiScenarioParser) parses the AI document, and the
+    // ai-schema module ships the JSON Schema it must first validate against. Both are core-only and
+    // test-only here. The JSON Schema validator (networknt) + Jackson are declared directly: ai-schema
+    // keeps them in its own test scope, so they do NOT reach this module transitively.
+    testImplementation(project(":stand-test-scenario-yaml"))
+    testImplementation(project(":stand-test-ai-schema"))
+    testImplementation(libs.networknt.json.schema.validator)
+    testImplementation(libs.jackson.databind)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)

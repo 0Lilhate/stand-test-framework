@@ -1,0 +1,42 @@
+{
+  "id": "rest-kafka-db-flow",
+  "title": "Create request, await response event, verify projection",
+  "environment": "ift",
+  "tags": ["integration", "smoke"],
+  "steps": [
+    {
+      "id": "create-request",
+      "type": "rest.post",
+      "description": "Create a request via the client service",
+      "service": "client-service",
+      "path": "/api/requests",
+      "headers": { "Content-Type": "application/json" },
+      "correlation": { "inject": true },
+      "body": { "fixture": "fixtures/create-request.json" },
+      "expect": { "status": 200 },
+      "capture": { "requestId": "$.requestId" }
+    },
+    {
+      "id": "await-response-event",
+      "type": "kafka.expect",
+      "description": "Wait for the response event correlated with the request",
+      "topic": "response-topic",
+      "correlation": { "fromContext": true },
+      "timeout": "30s",
+      "assert": [
+        { "path": "$.status", "equals": "SUCCESS" }
+      ],
+      "capture": { "eventId": "$.eventId" }
+    },
+    {
+      "id": "verify-projection",
+      "type": "db.expectEventually",
+      "description": "Verify the read model eventually reflects the request",
+      "datasource": "main-db",
+      "timeout": "10s",
+      "query": "SELECT status FROM requests WHERE request_id = :requestId",
+      "params": { "requestId": "${requestId}" },
+      "expect": { "singleValue": "DONE" }
+    }
+  ]
+}

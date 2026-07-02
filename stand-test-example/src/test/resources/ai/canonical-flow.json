@@ -1,0 +1,37 @@
+{
+  "id": "canonical-ai-flow",
+  "title": "Canonical AI flow (schema + parser parity)",
+  "environment": "ift",
+  "tags": ["integration"],
+  "steps": [
+    {
+      "id": "create-request",
+      "type": "rest.post",
+      "service": "client-service",
+      "path": "/api/requests",
+      "correlation": { "inject": true },
+      "body": { "fixture": "fixtures/create-request.json" },
+      "expect": { "status": 200 },
+      "capture": { "requestId": "$.requestId" }
+    },
+    {
+      "id": "await-response-event",
+      "type": "kafka.expect",
+      "topic": "response-topic",
+      "correlation": { "fromContext": true },
+      "timeout": "30s",
+      "assert": [
+        { "path": "$.status", "equals": "SUCCESS" }
+      ]
+    },
+    {
+      "id": "verify-projection",
+      "type": "db.expectEventually",
+      "datasource": "main-db",
+      "timeout": "10s",
+      "query": "SELECT status FROM requests WHERE request_id = :requestId",
+      "params": { "requestId": "${requestId}" },
+      "expect": { "singleValue": "DONE" }
+    }
+  ]
+}

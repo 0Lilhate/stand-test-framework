@@ -1,0 +1,15 @@
+{
+  "id": "arbitrary-url",
+  "title": "Rejected: REST step hardcodes an absolute URL instead of a service alias",
+  "environment": "ift",
+  "steps": [
+    {
+      "id": "call-service",
+      "type": "rest.post",
+      "service": "client-service",
+      "url": "http://10.0.0.5:8080/api/requests",
+      "path": "/api/requests",
+      "expect": { "status": 200 }
+    }
+  ]
+}

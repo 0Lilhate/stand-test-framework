@@ -1,0 +1,13 @@
+{
+  "id": "unknown-step-type",
+  "title": "Rejected: step declares an unsupported type",
+  "environment": "ift",
+  "steps": [
+    {
+      "id": "do-something",
+      "type": "http.call",
+      "service": "client-service",
+      "path": "/api/requests"
+    }
+  ]
+}

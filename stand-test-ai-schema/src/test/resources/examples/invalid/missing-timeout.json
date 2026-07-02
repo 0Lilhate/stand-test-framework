@@ -1,0 +1,16 @@
+{
+  "id": "missing-timeout",
+  "title": "Rejected: kafka.expect async wait has no timeout",
+  "environment": "ift",
+  "steps": [
+    {
+      "id": "await-response-event",
+      "type": "kafka.expect",
+      "topic": "response-topic",
+      "correlation": { "fromContext": true },
+      "assert": [
+        { "path": "$.status", "equals": "SUCCESS" }
+      ]
+    }
+  ]
+}

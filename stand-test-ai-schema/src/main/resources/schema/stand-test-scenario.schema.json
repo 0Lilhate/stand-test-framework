@@ -1,0 +1,236 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://alfa.ru/stand-test/schema/stand-test-scenario.schema.json",
+  "title": "Stand-test AI scenario",
+  "description": "Declarative scenario document an AI agent may generate for the stand-test SDK. It is a STATIC guardrail: it constrains structure, step types, per-type fields and value shapes, and forbids by construction the operations the SDK bans (arbitrary URLs, inline secrets, sleeps, destructive SQL, unknown fields). Environment/alias whitelisting and SQL semantics are enforced separately at runtime by the core ScenarioValidator and the adapters. MVP scope: rest.get/rest.post, kafka.send/kafka.expect, db.expectEventually (read-only), grpc.unary (draft).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "environment", "steps"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+    "title": { "type": "string" },
+    "description": { "type": "string" },
+    "environment": {
+      "description": "Logical environment alias (e.g. dev, ift). Never a URL. Whitelisting is enforced at runtime by the EnvironmentRegistry.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z][A-Za-z0-9._-]*$"
+    },
+    "tags": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/step" }
+    }
+  },
+  "$defs": {
+    "step": {
+      "description": "A single declarative step, discriminated by its `type` field. Exactly one step shape must match.",
+      "oneOf": [
+        { "$ref": "#/$defs/restStep" },
+        { "$ref": "#/$defs/kafkaSendStep" },
+        { "$ref": "#/$defs/kafkaExpectStep" },
+        { "$ref": "#/$defs/dbExpectEventuallyStep" },
+        { "$ref": "#/$defs/grpcUnaryStep" }
+      ]
+    },
+    "alias": {
+      "description": "A logical alias resolved to an endpoint + secret reference at runtime. Must NOT be a URL, host, or connection string.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z][A-Za-z0-9._-]*$"
+    },
+    "duration": {
+      "description": "Bounded, positive timeout: <n>ms | <n>s | <n>m. No zero, no negatives, no empty values, and coarse upper bounds per unit (<=99999ms, <=9999s, <=999m) to reject effectively-unbounded values.",
+      "type": "string",
+      "oneOf": [
+        { "pattern": "^[1-9][0-9]{0,4}ms$" },
+        { "pattern": "^[1-9][0-9]{0,3}s$" },
+        { "pattern": "^[1-9][0-9]{0,2}m$" }
+      ]
+    },
+    "correlationInject": {
+      "description": "SDK-owned correlationId injected outbound (header/key/metadata).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "inject": { "type": "boolean" } }
+    },
+    "correlationFromContext": {
+      "description": "Await/match on the correlationId established earlier in the scenario.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "fromContext": { "type": "boolean" } }
+    },
+    "payloadSource": {
+      "description": "Request/message payload: either a fixture path or an inline JSON object, never both.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "fixture": {
+          "description": "Relative fixture path. No absolute paths and no parent-directory (..) traversal.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./-]*$",
+          "not": { "pattern": "\\.\\." }
+        },
+        "json": { "type": "object" }
+      },
+      "not": { "required": ["fixture", "json"] }
+    },
+    "headerMap": {
+      "description": "Optional headers. Secret-bearing header names (authorization/token/password/secret/api-key/cookie) are forbidden — secrets are supplied by the SDK from secret references, never inline.",
+      "type": "object",
+      "propertyNames": {
+        "not": {
+          "pattern": "[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[Tt][Oo][Kk][Ee][Nn]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Aa][Pp][Ii][-_]?[Kk][Ee][Yy]|[Cc][Oo][Oo][Kk][Ii][Ee]"
+        }
+      },
+      "additionalProperties": { "type": "string" }
+    },
+    "captureMap": {
+      "description": "Capture map: variableName -> JSONPath. Variable names are plain identifiers; values are JSONPath strings.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+    "assertion": {
+      "description": "A single declarative assertion over a JSONPath. Exactly one matcher besides `path`. No expression/script matchers.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "minProperties": 2,
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "equals": { "type": ["string", "number", "boolean", "null"] },
+        "exists": { "type": "boolean" },
+        "notNull": { "type": "boolean" },
+        "contains": { "type": ["string", "number", "boolean"] },
+        "matches": { "type": "string", "minLength": 1 }
+      }
+    },
+    "assertionList": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/assertion" }
+    },
+    "restStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "service", "path"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["rest.get", "rest.post"] },
+        "description": { "type": "string" },
+        "service": { "$ref": "#/$defs/alias" },
+        "path": {
+          "description": "Relative path only — must start with a single '/'. Absolute URLs and protocol-relative '//host' paths are rejected.",
+          "type": "string",
+          "pattern": "^/($|[^/])"
+        },
+        "headers": { "$ref": "#/$defs/headerMap" },
+        "correlation": { "$ref": "#/$defs/correlationInject" },
+        "body": { "$ref": "#/$defs/payloadSource" },
+        "expect": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {
+            "status": { "type": "integer", "minimum": 100, "maximum": 599 }
+          }
+        },
+        "capture": { "$ref": "#/$defs/captureMap" }
+      }
+    },
+    "kafkaSendStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "topic"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "const": "kafka.send" },
+        "description": { "type": "string" },
+        "topic": { "$ref": "#/$defs/alias" },
+        "key": { "type": "string" },
+        "correlation": { "$ref": "#/$defs/correlationInject" },
+        "payload": { "$ref": "#/$defs/payloadSource" }
+      }
+    },
+    "kafkaExpectStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "topic", "timeout", "assert"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "const": "kafka.expect" },
+        "description": { "type": "string" },
+        "topic": { "$ref": "#/$defs/alias" },
+        "correlation": { "$ref": "#/$defs/correlationFromContext" },
+        "timeout": { "$ref": "#/$defs/duration" },
+        "assert": { "$ref": "#/$defs/assertionList" },
+        "capture": { "$ref": "#/$defs/captureMap" }
+      }
+    },
+    "dbExpectEventuallyStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "datasource", "timeout", "query", "expect"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "const": "db.expectEventually" },
+        "description": { "type": "string" },
+        "datasource": { "$ref": "#/$defs/alias" },
+        "timeout": { "$ref": "#/$defs/duration" },
+        "query": {
+          "description": "Read-only probe query. Must start with SELECT and must not contain destructive statements. DB writes/seed are out of MVP scope for the AI schema.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\s*[Ss][Ee][Ll][Ee][Cc][Tt]\\b",
+          "not": {
+            "pattern": "\\b([Dd][Rr][Oo][Pp]|[Tt][Rr][Uu][Nn][Cc][Aa][Tt][Ee]|[Dd][Ee][Ll][Ee][Tt][Ee]|[Uu][Pp][Dd][Aa][Tt][Ee]|[Aa][Ll][Tt][Ee][Rr]|[Ii][Nn][Ss][Ee][Rr][Tt]|[Mm][Ee][Rr][Gg][Ee]|[Gg][Rr][Aa][Nn][Tt]|[Rr][Ee][Vv][Oo][Kk][Ee]|[Pp][Gg]_[Ss][Ll][Ee][Ee][Pp]|[Ss][Ll][Ee][Ee][Pp]|[Ww][Aa][Ii][Tt][Ff][Oo][Rr]|[Bb][Ee][Nn][Cc][Hh][Mm][Aa][Rr][Kk]|[Dd][Bb][Mm][Ss]_[Ll][Oo][Cc][Kk])\\b"
+          }
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": { "type": ["string", "number", "boolean", "null"] }
+        },
+        "expect": {
+          "description": "Read-only expectation: a single scalar value or a row-existence check.",
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "singleValue": { "type": ["string", "number", "boolean", "null"] },
+            "rowExists": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "grpcUnaryStep": {
+      "description": "DRAFT: gRPC unary step. The shape is stabilised here for AI guidance, but execution ships with the stand-test-grpc adapter in a later iteration.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "target", "method", "timeout"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "const": "grpc.unary" },
+        "description": { "type": "string" },
+        "target": { "$ref": "#/$defs/alias" },
+        "method": { "type": "string", "minLength": 1 },
+        "correlation": { "$ref": "#/$defs/correlationInject" },
+        "request": { "$ref": "#/$defs/payloadSource" },
+        "timeout": { "$ref": "#/$defs/duration" },
+        "expect": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "status": { "type": "string" },
+            "assert": { "$ref": "#/$defs/assertionList" }
+          }
+        },
+        "capture": { "$ref": "#/$defs/captureMap" }
+      }
+    }
+  }
+}

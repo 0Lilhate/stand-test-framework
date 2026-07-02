@@ -27,6 +27,13 @@ allure = "2.29.1"
 # tree that maps straight onto GenericStep parameters) is the lightweight fit. Loaded via SafeConstructor +
 # LoaderOptions (no arbitrary type instantiation — mitigates the CVE-2022-1471 class of issues).
 snakeYaml = "2.3"
+# stand-test-ai-schema module: JSON Schema tooling used ONLY in that module's tests to validate the
+# example scenarios against the shipped schema resource. networknt transitively pulls jackson-databind,
+# so both are kept strictly in `testImplementation` there — Jackson never reaches the main graph (the
+# repo otherwise avoids Jackson; json-path uses json-smart). The published artifact is the schema
+# resource itself, which needs no runtime dependency.
+networknt = "1.5.6"
+jackson = "2.18.2"
 # Reserved for later phases (not applied at the skeleton stage):
 springBoot = "3.5.14"
 springDependencyManagement = "1.1.7"
@@ -44,3 +51,5 @@ kafka-clients = { module = "org.apache.kafka:kafka-clients", version.ref = "kafk
 h2 = { module = "com.h2database:h2", version.ref = "h2" }
 allure-java-commons = { module = "io.qameta.allure:allure-java-commons", version.ref = "allure" }
 snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeYaml" }
+networknt-json-schema-validator = { module = "com.networknt:json-schema-validator", version.ref = "networknt" }
+jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }

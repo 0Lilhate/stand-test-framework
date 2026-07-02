@@ -45,9 +45,10 @@ final class StepNodeTranslator {
 
     /**
      * Builds a readable step description (the Allure step subtitle), mirroring the Java DSL: REST as
-     * {@code "<METHOD> <service> <path>"}, Kafka/DB as {@code "<type> <topic|datasource>"}.
+     * {@code "<METHOD> <service> <path>"}, Kafka/DB as {@code "<type> <topic|datasource>"}. Package-private
+     * so {@link AiScenarioParser} produces the same subtitle from the same wire parameters.
      */
-    private static String describe(String type, Map<String, Object> params) {
+    static String describe(String type, Map<String, Object> params) {
         if (type.startsWith("rest.")) {
             return params.get(YamlStepKeys.METHOD) + " " + params.get(YamlStepKeys.SERVICE) + " " + params.get(YamlStepKeys.PATH);
         }

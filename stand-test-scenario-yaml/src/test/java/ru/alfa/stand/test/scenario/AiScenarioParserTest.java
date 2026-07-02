@@ -1,0 +1,213 @@
+package ru.alfa.stand.test.scenario;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import ru.alfa.stand.test.core.exception.StandTestException;
+import ru.alfa.stand.test.core.scenario.GenericStep;
+import ru.alfa.stand.test.core.scenario.Scenario;
+import ru.alfa.stand.test.core.scenario.ScenarioStep;
+import ru.alfa.stand.test.core.validation.DefaultScenarioValidator;
+
+class AiScenarioParserTest {
+
+    private final AiScenarioParser parser = new AiScenarioParser();
+
+    private static Map<String, Object> params(ScenarioStep step) {
+        return ((GenericStep) step).parameters();
+    }
+
+    @Test
+    @DisplayName("a full rest/kafka/db flow maps AI fields onto the exact wire keys")
+    void fullFlow_mapsToWireKeys() {
+        Scenario scenario = parser.parse("""
+                {
+                  "id": "flow", "environment": "ift", "title": "T", "description": "D", "tags": ["integration"],
+                  "steps": [
+                    {"id":"create","type":"rest.post","service":"client-service","path":"/api/requests",
+                     "query":{"q":"1"},"headers":{"Accept":"application/json"},
+                     "correlation":{"inject":true},"body":{"fixture":"fixtures/request.json"},
+                     "expect":{"status":200},"capture":{"requestId":"$.requestId"}},
+                    {"id":"await","type":"kafka.expect","topic":"response-topic",
+                     "correlation":{"fromContext":true},"timeout":"30s",
+                     "assert":[{"path":"$.status","equals":"SUCCESS"}],"capture":{"eventId":"$.eventId"}},
+                    {"id":"verify","type":"db.expectEventually","datasource":"main-db","timeout":"10s",
+                     "query":"SELECT status FROM requests WHERE request_id = :requestId",
+                     "params":{"requestId":"${requestId}"},"expect":{"singleValue":"DONE"}}
+                  ]
+                }
+                """);
+
+        assertThat(scenario.environment()).isEqualTo("ift");
+        assertThat(scenario.title()).contains("T");
+        assertThat(scenario.tags()).containsExactly("integration");
+        assertThat(scenario.steps()).hasSize(3);
+        assertThatCode(() -> new DefaultScenarioValidator().validate(scenario).throwIfInvalid()).doesNotThrowAnyException();
+
+        Map<String, Object> rest = params(scenario.steps().get(0));
+        assertThat(rest).containsEntry("method", "POST").containsEntry("service", "client-service")
+                .containsEntry("path", "/api/requests").containsEntry("injectCorrelationId", true)
+                .containsEntry("expectedStatus", 200).containsEntry("bodyResource", "fixtures/request.json");
+        assertThat(rest).containsEntry("query", Map.of("q", "1"));
+        assertThat(rest.get("captures")).isEqualTo(List.of(Map.of("variableName", "requestId", "jsonPath", "$.requestId")));
+
+        Map<String, Object> kafka = params(scenario.steps().get(1));
+        assertThat(kafka).containsEntry("topic", "response-topic").containsEntry("correlationIdFromContext", true)
+                .containsEntry("timeoutMillis", 30000L);
+        assertThat(kafka.get("assertions")).isEqualTo(List.of(Map.of("jsonPath", "$.status", "expectedValue", "SUCCESS")));
+
+        Map<String, Object> db = params(scenario.steps().get(2));
+        assertThat(db).containsEntry("datasource", "main-db").containsEntry("expectedValue", "DONE")
+                .containsEntry("timeoutMillis", 10000L);
+        assertThat((String) db.get("sql")).startsWith("SELECT");
+        assertThat(db).containsEntry("params", Map.of("requestId", "${requestId}"));
+    }
+
+    @Test
+    @DisplayName("a minimal rest.get and kafka.send parse and default their optional wire keys")
+    void minimalSteps_parse() {
+        Scenario scenario = parser.parse("""
+                id: flow
+                environment: dev
+                steps:
+                  - id: read
+                    type: rest.get
+                    service: svc
+                    path: /a
+                  - id: send
+                    type: kafka.send
+                    topic: commands
+                    key: k
+                    payload:
+                      fixture: fixtures/cmd.json
+                """);
+        assertThat(scenario.steps()).hasSize(2);
+        assertThat(params(scenario.steps().get(0))).containsEntry("method", "GET").containsEntry("injectCorrelationId", false);
+        Map<String, Object> send = params(scenario.steps().get(1));
+        assertThat(send).containsEntry("topic", "commands").containsEntry("key", "k").containsEntry("bodyResource", "fixtures/cmd.json");
+    }
+
+    @Test
+    @DisplayName("an absent step id is generated as <type>#<index>")
+    void absentId_isGenerated() {
+        Scenario scenario = parser.parse("""
+                id: flow
+                environment: ift
+                steps:
+                  - type: rest.get
+                    service: svc
+                    path: /a
+                """);
+        assertThat(scenario.steps().get(0).id()).isEqualTo("rest.get#0");
+    }
+
+    @Test
+    @DisplayName("an explicit description overrides the derived subtitle")
+    void explicitDescription_wins() {
+        Scenario scenario = parser.parse("""
+                id: flow
+                environment: ift
+                steps:
+                  - id: s
+                    type: rest.get
+                    description: custom subtitle
+                    service: svc
+                    path: /a
+                """);
+        assertThat(scenario.steps().get(0).description()).isEqualTo("custom subtitle");
+    }
+
+    @Test
+    @DisplayName("unknown top-level and step fields are rejected fail-closed")
+    void unknownFields_rejected() {
+        assertThatThrownBy(() -> parser.parse("id: f\nenvironment: ift\nsteps: []\nextra: 1\n"))
+                .isInstanceOf(StandTestException.class).hasMessageContaining("extra");
+        assertThatThrownBy(() -> parser.parse("""
+                id: f
+                environment: ift
+                steps:
+                  - id: s
+                    type: rest.get
+                    service: svc
+                    path: /a
+                    bogus: 1
+                """)).isInstanceOf(StandTestException.class).hasMessageContaining("bogus");
+    }
+
+    @Test
+    @DisplayName("missing id/environment/steps are rejected")
+    void missingEnvelope_rejected() {
+        assertThatThrownBy(() -> parser.parse("environment: ift\nsteps: []\n")).isInstanceOf(StandTestException.class);
+        assertThatThrownBy(() -> parser.parse("id: f\nsteps: []\n")).isInstanceOf(StandTestException.class);
+        assertThatThrownBy(() -> parser.parse("id: f\nenvironment: ift\n")).isInstanceOf(StandTestException.class).hasMessageContaining("steps");
+        assertThatThrownBy(() -> parser.parse("id: f\nenvironment: ift\nsteps: []\n")).isInstanceOf(StandTestException.class).hasMessageContaining("at least one");
+    }
+
+    @Test
+    @DisplayName("a non-string tag is rejected")
+    void nonStringTag_rejected() {
+        assertThatThrownBy(() -> parser.parse("id: f\nenvironment: ift\ntags: [1]\nsteps:\n  - type: rest.get\n    service: s\n    path: /a\n"))
+                .isInstanceOf(StandTestException.class).hasMessageContaining("tags");
+    }
+
+    @Test
+    @DisplayName("inline body.json and payload.json are rejected as not-yet-executable")
+    void inlineJson_rejected() {
+        assertThatThrownBy(() -> parser.parse("id: f\nenvironment: ift\nsteps:\n  - type: rest.post\n    service: s\n    path: /a\n    body:\n      json: {x: 1}\n"))
+                .isInstanceOf(StandTestException.class).hasMessageContaining("body.json");
+        assertThatThrownBy(() -> parser.parse("id: f\nenvironment: ift\nsteps:\n  - type: kafka.send\n    topic: t\n    payload:\n      json: {x: 1}\n"))
+                .isInstanceOf(StandTestException.class).hasMessageContaining("payload.json");
+    }
+
+    @Test
+    @DisplayName("non-equals matchers and rowExists are rejected as not-yet-executable")
+    void unsupportedMatchers_rejected() {
+        assertThatThrownBy(() -> parser.parse("id: f\nenvironment: ift\nsteps:\n  - type: kafka.expect\n    topic: t\n    timeout: 5s\n    assert:\n      - path: $.x\n        exists: true\n"))
+                .isInstanceOf(StandTestException.class).hasMessageContaining("only 'equals'");
+        assertThatThrownBy(() -> parser.parse("id: f\nenvironment: ift\nsteps:\n  - type: db.expectEventually\n    datasource: d\n    timeout: 5s\n    query: SELECT 1\n    expect:\n      rowExists: true\n"))
+                .isInstanceOf(StandTestException.class).hasMessageContaining("rowExists");
+    }
+
+    @Test
+    @DisplayName("an assertion without a non-null equals is rejected")
+    void assertWithoutEquals_rejected() {
+        assertThatThrownBy(() -> parser.parse("id: f\nenvironment: ift\nsteps:\n  - type: kafka.expect\n    topic: t\n    timeout: 5s\n    assert:\n      - path: $.x\n"))
+                .isInstanceOf(StandTestException.class).hasMessageContaining("equals");
+    }
+
+    @Test
+    @DisplayName("grpc.unary, unknown types and db.query are rejected as unsupported")
+    void unsupportedTypes_rejected() {
+        assertThatThrownBy(() -> parser.parse("id: f\nenvironment: ift\nsteps:\n  - type: grpc.unary\n    target: t\n    method: m\n    timeout: 5s\n"))
+                .isInstanceOf(StandTestException.class).hasMessageContaining("grpc.unary");
+        assertThatThrownBy(() -> parser.parse("id: f\nenvironment: ift\nsteps:\n  - type: http.call\n    service: s\n"))
+                .isInstanceOf(StandTestException.class).hasMessageContaining("Unsupported");
+        assertThatThrownBy(() -> parser.parse("id: f\nenvironment: ift\nsteps:\n  - type: db.query\n    datasource: d\n    sql: SELECT 1\n"))
+                .isInstanceOf(StandTestException.class).hasMessageContaining("Unsupported");
+    }
+
+    @Test
+    @DisplayName("db.expectEventually requires expect.singleValue (non-null)")
+    void dbExpect_requiresSingleValue() {
+        assertThatThrownBy(() -> parser.parse("id: f\nenvironment: ift\nsteps:\n  - type: db.expectEventually\n    datasource: d\n    timeout: 5s\n    query: SELECT 1\n"))
+                .isInstanceOf(StandTestException.class).hasMessageContaining("singleValue");
+    }
+
+    @Test
+    @DisplayName("parseResource reads a classpath document and rejects a missing one")
+    void parseResource_behaviour() {
+        assertThatThrownBy(() -> parser.parseResource("ai/does-not-exist.json"))
+                .isInstanceOf(StandTestException.class).hasMessageContaining("not found");
+    }
+
+    @Test
+    @DisplayName("null document is rejected")
+    void nullDocument_rejected() {
+        assertThatThrownBy(() -> parser.parse(null)).isInstanceOf(NullPointerException.class);
+    }
+}
