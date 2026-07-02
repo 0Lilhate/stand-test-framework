@@ -1,0 +1,24 @@
+environments:
+  ift:
+    services:
+      client-service:
+        base-url-ref: CLIENT_SERVICE_URL
+        correlation: { source: HEADER, name: X-Correlation-Id }
+    topics:
+      response-topic:
+        name: pakt.response.ift
+        correlation: { source: HEADER, name: X-Correlation-Id }
+    datasources:
+      main-db:
+        url-ref: MAIN_DB_URL
+        user-ref: MAIN_DB_USER
+        password-ref: MAIN_DB_PASSWORD
+        allowed-schemas: [test_data]
+        write-allowed: true
+    grpc-targets:
+      billing-grpc:
+        target-ref: BILLING_GRPC_TARGET
+        correlation: { source: METADATA, name: x-correlation-id }
+    kafka-cluster:
+      bootstrap-servers-ref: KAFKA_BOOTSTRAP
+      security-protocol-ref: KAFKA_SECURITY_PROTOCOL

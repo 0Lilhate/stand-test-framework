@@ -75,14 +75,14 @@ endpoint. `baseUrlRef` is a **reference** (an environment-variable name) resolve
 URLs and secrets stay out of source (plan §9). Request/response diagnostics attached to the
 `StepResult` (`http.method` / `http.path` / `http.status`) deliberately exclude header values.
 
-## Known gap
+## Environment registry
 
-In the current JUnit wiring `StandTestExtension.buildStandClient()` constructs
-`DefaultScenarioRunner(executors)`, whose single-arg constructor injects an **empty**
-`InMemoryEnvironmentRegistry`. Until that registry is populated (a separate, planned step — likely via
-the Spring starter / the runner's multi-arg constructor), a REST step's alias resolution will fail at
-run time. `RestStepExecutor` is implemented correctly against a populated `EnvironmentRegistry` (its
-tests use one); the wiring is the explicit extension point.
+`RestStepExecutor` resolves the `service` alias through a populated `EnvironmentRegistry`. Provide one via
+either path: the **Spring Boot starter** (`@ConfigurationProperties("stand.test")`), or — for plain JUnit —
+the **`stand-test-config`** module (add it to `testImplementation` and drop a `stand-test-environments.yml`
+on the classpath). Both build the registry from environment-variable *references*, never inline URLs or
+secrets. Without either, `StandTestExtension` falls back to an empty registry and alias resolution fails
+at run time.
 
 ## Not here
 

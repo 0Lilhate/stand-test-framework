@@ -102,13 +102,14 @@ time — broker addresses and secrets stay out of source (plan §9). Diagnostics
 `StepResult` (`kafka.topic` / `kafka.realTopic` / `kafka.partition` / `kafka.offset` / `kafka.key` /
 `kafka.messagesSeen`) deliberately exclude header and value payloads.
 
-## Known gap
+## Environment registry
 
-Same as the REST adapter: in the current JUnit wiring `StandTestExtension.buildStandClient()` constructs
-`DefaultScenarioRunner(executors)` with an **empty** `InMemoryEnvironmentRegistry`. Until that registry
-is populated (a separate, planned step), a Kafka step's alias resolution will fail at run time.
-`KafkaStepExecutor` is implemented correctly against a populated `EnvironmentRegistry` (its tests use
-one); the wiring is the explicit extension point.
+`KafkaStepExecutor` resolves the `topic` alias and the Kafka cluster through a populated
+`EnvironmentRegistry`. Provide one via either path: the **Spring Boot starter**
+(`@ConfigurationProperties("stand.test")`), or — for plain JUnit — the **`stand-test-config`** module
+(add it to `testImplementation` and drop a `stand-test-environments.yml` on the classpath). Both build the
+registry from environment-variable *references*, never inline broker addresses or secrets. Without either,
+`StandTestExtension` falls back to an empty registry and alias resolution fails at run time.
 
 ## Not here
 
