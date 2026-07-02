@@ -37,7 +37,7 @@
 | G3 | **P1** | `timeout: 9999999m` (≈unbounded) принимается | schema | S |
 | G5 | **P1** | Path traversal в `body.fixture` (`../../etc/passwd`) | schema | S |
 | T2 | **P2** | Нет valid-примеров для `rest.get` и `grpc.unary` | test | S |
-| T3 | **P2** | `oneOf` → взрыв сообщений (25–32/док); перейти на `if/then` | schema | M |
+| T3 ✅ | **P2** | `oneOf` → взрыв сообщений (25–32/док); перейти на `if/then` — **сделано (1–2/док)** | schema | M |
 | R1 | **P2** | Rules-док завышает, что энфорсит схема (после G1/G2) | doc | S |
 | G6 | **P2** | `capture` value не ограничен JSONPath | schema | S |
 | G7 | **P2** | `rest.get` с `body` принимается | schema | S |
@@ -187,13 +187,13 @@ propertyNames; required `timeout`; SQL start-SELECT + not-destructive; type-enum
 **Фикс.** Добавить `examples/valid/rest-get-flow.json` и `examples/valid/grpc-unary-draft.json`; включить в
 `validExamples_pass`. **DoD.** Каждый MVP-тип имеет ≥1 valid-пример, проходящий схему.
 
-### T3. `oneOf` → `if/then` дискриминатор (usability для AI)
-`oneOf` выдаёт 25–32 сообщения на документ — релевантны 1–2, остальное шум по чужим веткам, что делает
-фидбек AI почти бесполезным. **Фикс.** Заменить `$defs.step.oneOf` на `allOf` из условных веток:
-`{ "if": {"properties":{"type":{"const":"rest.post"}},"required":["type"]}, "then": {"$ref":".../restStep"} }`
-+ финальная проверка, что `type` ∈ известного enum (иначе явная ошибка). Тогда всплывает только ветка нужного
-типа. **Делать после A1** (формат полей может измениться). **DoD.** Для документа с одной ошибкой в известном
-типе — сообщений ≤ 3, все из его ветки.
+### T3. `oneOf` → `if/then` дискриминатор (usability для AI)  ✅ ВЫПОЛНЕНО (2026-07-02)
+`oneOf` выдавал 25–32 сообщения на документ — релевантны 1–2, остальное шум по чужим веткам. **Сделано.**
+`$defs.step` заменён на `type`-дискриминатор: `type`-enum на уровне шага (ловит unknown/missing `type` одним
+сообщением) + `allOf` из `if/then` (по ветке на тип), каждая ветка ссылается на прежний `*Step`-def с его
+`additionalProperties:false`. `*Step`-def не менялись. Регресс-тест `invalidStep_reportsFocusedErrors` в
+`ScenarioSchemaValidationTest` проверяет отсутствие кросс-веточного шума. **Замерено:** invalid-примеры теперь
+дают **1–2** сообщения (было 25–32). Все valid/invalid/T1/parity тесты зелёные, `./gradlew build` зелёный.
 
 ### R1. Синхронизировать rules-док с реальным энфорсментом
 После G1/G2 обновить таблицу forbidden-ops: `THREAD_SLEEP`/`HARDCODED_STAND_URL` — уточнить слой (schema с

@@ -25,13 +25,18 @@
   },
   "$defs": {
     "step": {
-      "description": "A single declarative step, discriminated by its `type` field. Exactly one step shape must match.",
-      "oneOf": [
-        { "$ref": "#/$defs/restStep" },
-        { "$ref": "#/$defs/kafkaSendStep" },
-        { "$ref": "#/$defs/kafkaExpectStep" },
-        { "$ref": "#/$defs/dbExpectEventuallyStep" },
-        { "$ref": "#/$defs/grpcUnaryStep" }
+      "description": "A single declarative step, dispatched by its `type` field so validation errors come only from the matching step's schema (not from every step type).",
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["rest.get", "rest.post", "kafka.send", "kafka.expect", "db.expectEventually", "grpc.unary"] }
+      },
+      "allOf": [
+        { "if": { "properties": { "type": { "enum": ["rest.get", "rest.post"] } }, "required": ["type"] }, "then": { "$ref": "#/$defs/restStep" } },
+        { "if": { "properties": { "type": { "const": "kafka.send" } }, "required": ["type"] }, "then": { "$ref": "#/$defs/kafkaSendStep" } },
+        { "if": { "properties": { "type": { "const": "kafka.expect" } }, "required": ["type"] }, "then": { "$ref": "#/$defs/kafkaExpectStep" } },
+        { "if": { "properties": { "type": { "const": "db.expectEventually" } }, "required": ["type"] }, "then": { "$ref": "#/$defs/dbExpectEventuallyStep" } },
+        { "if": { "properties": { "type": { "const": "grpc.unary" } }, "required": ["type"] }, "then": { "$ref": "#/$defs/grpcUnaryStep" } }
       ]
     },
     "alias": {

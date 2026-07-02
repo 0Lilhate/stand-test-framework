@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -51,6 +52,14 @@ class ScenarioSchemaValidationTest {
         }
     }
 
+    private static Set<ValidationMessage> validateJson(String json) {
+        try {
+            return SCHEMA.validate(MAPPER.readTree(json));
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to parse JSON", e);
+        }
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"rest-kafka-db-flow.json", "kafka-response-flow.json"})
     @DisplayName("valid examples pass schema validation with no messages")
@@ -73,5 +82,22 @@ class ScenarioSchemaValidationTest {
         assertThat(messages).as("invalid example %s should be rejected", file).isNotEmpty();
         String joined = messages.stream().map(ValidationMessage::getMessage).collect(Collectors.joining("\n"));
         assertThat(joined).as("invalid example %s should fail because of '%s'", file, expectedToken).contains(expectedToken);
+    }
+
+    @Test
+    @DisplayName("an invalid step reports only its own type's errors, not every step type (T3)")
+    void invalidStep_reportsFocusedErrors() {
+        String doc = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"rest.post\","
+                + "\"service\":\"svc\",\"path\":\"/a\",\"expect\":{\"status\":200},\"bogus\":1}]}";
+        Set<ValidationMessage> messages = validateJson(doc);
+        String joined = messages.stream().map(ValidationMessage::getMessage).collect(Collectors.joining("\n"));
+
+        assertThat(messages).isNotEmpty();
+        assertThat(joined).contains("bogus");
+        assertThat(joined)
+                .doesNotContain("kafka.send")
+                .doesNotContain("kafka.expect")
+                .doesNotContain("db.expectEventually")
+                .doesNotContain("grpc.unary");
     }
 }
