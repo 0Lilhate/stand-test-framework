@@ -46,6 +46,10 @@ subprojects {
   tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
     options.compilerArgs.add("-parameters")
+    // Compile with the JDK-24 toolchain but target Java 17 bytecode/API (`--release 17`), so the SDK is
+    // loadable by consumers on JDK 17/21/24 (plan §14). `--release` also bans APIs newer than 17, keeping
+    // the sources 17-compatible.
+    options.release.set(ver("javaRelease").toInt())
   }
 
   tasks.withType<Test>().configureEach {

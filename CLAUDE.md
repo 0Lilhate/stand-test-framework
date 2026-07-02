@@ -62,9 +62,11 @@ Use `--console=plain` for clean CI-style output. Configuration cache, parallel a
     `EmptyLineSeparator` (blank line between members), `MutableException` (exception fields must be
     `final`), no tabs, `System.out/err` forbidden. `LineLength` max is 1000 (so long lines are fine —
     don't wrap method chains, since `SeparatorWrapDot` would then require the `.` at line start).
-- **Java toolchain is 24** (non-LTS) with **no `--release` set**, so bytecode targets Java 24 and
-  consumers on JDK 17/21 cannot load it. This is a known open decision (plan §14) — do not "fix" the
-  Gradle config without that being the task. Gradle wrapper is 9.3.0.
+- **Java toolchain is 24** (non-LTS), but the build compiles with **`--release 17`** (catalog
+  `javaRelease`, applied in the root `subprojects` `JavaCompile` block), so bytecode targets Java 17 and
+  the SDK loads on consumer JDK 17/21/24 (plan §14 resolved). `--release 17` also bans APIs newer than 17,
+  so keep sources 17-compatible (no Sequenced-collection APIs, `Math.clamp`, virtual threads,
+  record-patterns / pattern-switch). To retarget, change `javaRelease` only. Gradle wrapper is 9.3.0.
 - Indentation: **4 spaces** for Java, **2 spaces** for `*.kts`/`*.toml`/`*.yaml` (`.editorconfig`).
 - Coordinates: group `ru.alfa.stand.test`, base package `ru.alfa.stand.test.<module>`.
 
@@ -114,12 +116,19 @@ YAML DSL ────────────────┘                    
 
 ## Current state & where to work
 
-Only **`stand-test-core` is implemented** (Iteration 1: models, value objects, contracts, SPI, unit
-tests). All other modules (`await`, `junit`, `rest`, `kafka`, `db`, `grpc`, `allure`, `scenario-yaml`,
-`ai-schema`, `spring-boot-starter`) are **skeletons** (only `package-info.java`). Follow the plan's
-iteration order (§7: core → await → junit → rest → kafka → db → allure → examples → YAML design → AI
-guardrails); do not start a module before its dependencies are stable, and do not pull adapter/IO,
-Spring, Allure, YAML or business logic into `stand-test-core`.
+**Implemented** (through Iteration 6): **`stand-test-core`** (models, value objects, contracts, SPI,
+unit tests — plus the `core.validation` SQL classifier/`SqlSpanScanner` and the `core.event` reporting
+events), **`stand-test-await`**, **`stand-test-junit`**, **`stand-test-rest`**, **`stand-test-kafka`**,
+and **`stand-test-db`** (the last shipped with `docs/arch/stand-test-db-decisions.md` and a hardening
+pass tracked in `docs/arch/stand-test-db-remediation-plan.md`). Still **skeletons** (only
+`package-info.java`, no impl): **`grpc`**, **`allure`**, **`scenario-yaml`**, **`ai-schema`**,
+**`spring-boot-starter`**; **`bom`** is the `java-platform` (no source).
+
+Next up is **`stand-test-allure`** (Iteration 7) — see `docs/arch/stand-test-allure-implementation-plan.md`,
+which starts with a core prerequisite (the §8.9 `Attachment` contract) before the module itself. Follow
+the plan's iteration order (§7: core → await → junit → rest → kafka → db → allure → examples → YAML
+design → AI guardrails); do not start a module before its dependencies are stable, and do not pull
+adapter/IO, Spring, Allure, YAML or business logic into `stand-test-core`.
 
 ## Project rules
 
