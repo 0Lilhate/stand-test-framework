@@ -1,47 +1,45 @@
 package ru.alfa.stand.test.scenario;
 
+import ru.alfa.stand.test.core.scenario.StepParameterKeys;
+
 /**
- * Internal {@code GenericStep} parameter keys — a deliberate <strong>mirror</strong> of the adapters'
- * {@code RestStepParameters} / {@code DbStepParameters} / {@code KafkaStepParameters} constants.
+ * Internal {@code GenericStep} parameter keys used by the YAML/AI parsers.
  *
- * <p>The YAML engine is <strong>core-only</strong> (plan §4/§5): it must not have a compile-time edge to
- * the adapter modules, so it cannot reference their parameter-key constants directly. These wire keys are
- * therefore duplicated here as literals — they form an implicit contract between the parser and the
- * adapters. Keep them in sync; a renamed key in an adapter would silently break parsing.
- *
- * <p><strong>Follow-up (design doc):</strong> hoist the parameter-key constants into {@code stand-test-core}
- * so both the adapters and this parser reference a single source of truth, removing this duplication.
+ * <p>These now delegate to {@link StepParameterKeys} in {@code stand-test-core} — the single source of
+ * truth also referenced by the adapter parameter schemas ({@code RestStepParameters} /
+ * {@code DbStepParameters} / {@code KafkaStepParameters}). The class is kept as a package-local alias so
+ * the translators read short names; a renamed key changes only the one core constant.
  */
 final class YamlStepKeys {
 
-    static final String METHOD = "method";
-    static final String SERVICE = "service";
-    static final String PATH = "path";
-    static final String QUERY = "query";
-    static final String HEADERS = "headers";
-    static final String BODY = "body";
-    static final String BODY_RESOURCE = "bodyResource";
-    static final String INJECT_CORRELATION_ID = "injectCorrelationId";
-    static final String EXPECTED_STATUS = "expectedStatus";
-    static final String ASSERTIONS = "assertions";
-    static final String CAPTURES = "captures";
-    static final String JSON_PATH = "jsonPath";
-    static final String EXPECTED_VALUE = "expectedValue";
-    static final String VARIABLE_NAME = "variableName";
-    static final String COLUMN = "column";
+    static final String METHOD = StepParameterKeys.METHOD;
+    static final String SERVICE = StepParameterKeys.SERVICE;
+    static final String PATH = StepParameterKeys.PATH;
+    static final String QUERY = StepParameterKeys.QUERY;
+    static final String HEADERS = StepParameterKeys.HEADERS;
+    static final String BODY = StepParameterKeys.BODY;
+    static final String BODY_RESOURCE = StepParameterKeys.BODY_RESOURCE;
+    static final String INJECT_CORRELATION_ID = StepParameterKeys.INJECT_CORRELATION_ID;
+    static final String EXPECTED_STATUS = StepParameterKeys.EXPECTED_STATUS;
+    static final String ASSERTIONS = StepParameterKeys.ASSERTIONS;
+    static final String CAPTURES = StepParameterKeys.CAPTURES;
+    static final String JSON_PATH = StepParameterKeys.JSON_PATH;
+    static final String EXPECTED_VALUE = StepParameterKeys.EXPECTED_VALUE;
+    static final String VARIABLE_NAME = StepParameterKeys.VARIABLE_NAME;
+    static final String COLUMN = StepParameterKeys.COLUMN;
 
-    static final String TOPIC = "topic";
-    static final String KEY = "key";
-    static final String CORRELATION_FROM_CONTEXT = "correlationIdFromContext";
-    static final String TIMEOUT_MILLIS = "timeoutMillis";
-    static final String POLL_TIMEOUT_MILLIS = "pollTimeoutMillis";
+    static final String TOPIC = StepParameterKeys.TOPIC;
+    static final String KEY = StepParameterKeys.KEY;
+    static final String CORRELATION_FROM_CONTEXT = StepParameterKeys.CORRELATION_FROM_CONTEXT;
+    static final String TIMEOUT_MILLIS = StepParameterKeys.TIMEOUT_MILLIS;
+    static final String POLL_TIMEOUT_MILLIS = StepParameterKeys.POLL_TIMEOUT_MILLIS;
 
-    static final String DATASOURCE = "datasource";
-    static final String SQL = "sql";
-    static final String SQL_RESOURCE = "sqlResource";
-    static final String PARAMS = "params";
-    static final String WHERE_TEST_RUN_ID_COLUMN = "whereTestRunIdColumn";
-    static final String POLL_INTERVAL_MILLIS = "pollIntervalMillis";
+    static final String DATASOURCE = StepParameterKeys.DATASOURCE;
+    static final String SQL = StepParameterKeys.SQL;
+    static final String SQL_RESOURCE = StepParameterKeys.SQL_RESOURCE;
+    static final String PARAMS = StepParameterKeys.PARAMS;
+    static final String WHERE_TEST_RUN_ID_COLUMN = StepParameterKeys.WHERE_TEST_RUN_ID_COLUMN;
+    static final String POLL_INTERVAL_MILLIS = StepParameterKeys.POLL_INTERVAL_MILLIS;
 
     private YamlStepKeys() {
     }

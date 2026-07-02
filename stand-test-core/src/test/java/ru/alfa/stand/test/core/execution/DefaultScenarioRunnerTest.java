@@ -15,6 +15,8 @@ import java.util.stream.IntStream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import ru.alfa.stand.test.core.context.ScenarioContext;
+import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
+import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
 import ru.alfa.stand.test.core.event.Attachment;
 import ru.alfa.stand.test.core.event.NoOpReportingEventPublisher;
@@ -45,7 +47,13 @@ class DefaultScenarioRunnerTest {
     }
 
     private static DefaultScenarioRunner runner(StepExecutor... executors) {
-        return new DefaultScenarioRunner(List.of(executors));
+        return new DefaultScenarioRunner(
+                List.of(executors), new DefaultScenarioValidator(), iftRegistry(), NoOpReportingEventPublisher.INSTANCE);
+    }
+
+    private static EnvironmentRegistry iftRegistry() {
+        return new InMemoryEnvironmentRegistry(
+                Map.of("ift", new EnvironmentDefinition("ift", Map.of(), Map.of(), Map.of(), Map.of())));
     }
 
     @Test
@@ -169,7 +177,7 @@ class DefaultScenarioRunnerTest {
         DefaultScenarioRunner runner = new DefaultScenarioRunner(
                 List.of(FakeStepExecutor.succeeding("fake.ok")),
                 new DefaultScenarioValidator(),
-                new InMemoryEnvironmentRegistry(Map.of()),
+                iftRegistry(),
                 recording);
 
         runner.run(scenario(GenericStep.of("s1", "fake.ok")));
@@ -197,7 +205,7 @@ class DefaultScenarioRunnerTest {
         DefaultScenarioRunner runner = new DefaultScenarioRunner(
                 List.of(FakeStepExecutor.failing("fake.fail", "nope")),
                 new DefaultScenarioValidator(),
-                new InMemoryEnvironmentRegistry(Map.of()),
+                iftRegistry(),
                 recording);
 
         assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.fail"))))
@@ -222,7 +230,7 @@ class DefaultScenarioRunnerTest {
         DefaultScenarioRunner runner = new DefaultScenarioRunner(
                 List.of(withDiagnostics),
                 new DefaultScenarioValidator(),
-                new InMemoryEnvironmentRegistry(Map.of()),
+                iftRegistry(),
                 recording);
 
         runner.run(scenario(GenericStep.of("s1", "fake.diag")));
@@ -314,7 +322,7 @@ class DefaultScenarioRunnerTest {
         DefaultScenarioRunner runner = new DefaultScenarioRunner(
                 List.of(FakeStepExecutor.succeeding("fake.ok")),
                 new DefaultScenarioValidator(),
-                new InMemoryEnvironmentRegistry(Map.of()),
+                iftRegistry(),
                 recording,
                 Clock.fixed(fixed, ZoneOffset.UTC));
 
@@ -365,7 +373,7 @@ class DefaultScenarioRunnerTest {
         DefaultScenarioRunner runner = new DefaultScenarioRunner(
                 List.of(FakeStepExecutor.succeeding("fake.ok")),
                 new DefaultScenarioValidator(),
-                new InMemoryEnvironmentRegistry(Map.of()),
+                iftRegistry(),
                 throwing);
 
         ScenarioResult result = runner.run(scenario(GenericStep.of("s1", "fake.ok")));
@@ -381,7 +389,7 @@ class DefaultScenarioRunnerTest {
         DefaultScenarioRunner runner = new DefaultScenarioRunner(
                 List.of(FakeStepExecutor.succeeding("fake.other")),
                 new DefaultScenarioValidator(),
-                new InMemoryEnvironmentRegistry(Map.of()),
+                iftRegistry(),
                 recording);
 
         assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.missing"))))
@@ -405,7 +413,7 @@ class DefaultScenarioRunnerTest {
                     throw new StandTestException("datasource unreachable");
                 })),
                 new DefaultScenarioValidator(),
-                new InMemoryEnvironmentRegistry(Map.of()),
+                iftRegistry(),
                 recording);
 
         assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.infra"))))
@@ -428,7 +436,7 @@ class DefaultScenarioRunnerTest {
                     throw new StandTestAssertionError("boom");
                 })),
                 new DefaultScenarioValidator(),
-                new InMemoryEnvironmentRegistry(Map.of()),
+                iftRegistry(),
                 recording);
 
         assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.throw"))))
@@ -451,7 +459,7 @@ class DefaultScenarioRunnerTest {
         DefaultScenarioRunner runner = new DefaultScenarioRunner(
                 List.of(withAttachments),
                 new DefaultScenarioValidator(),
-                new InMemoryEnvironmentRegistry(Map.of()),
+                iftRegistry(),
                 recording);
 
         runner.run(scenario(GenericStep.of("s1", "fake.att")));
@@ -469,7 +477,7 @@ class DefaultScenarioRunnerTest {
         DefaultScenarioRunner runner = new DefaultScenarioRunner(
                 List.of(FakeStepExecutor.succeeding("fake.ok")),
                 new DefaultScenarioValidator(),
-                new InMemoryEnvironmentRegistry(Map.of()),
+                iftRegistry(),
                 recording);
         Scenario scenario = Scenario.builder("example-flow").environment("ift").tag("smoke")
                 .step(GenericStep.of("s1", "fake.ok")).build();

@@ -2,12 +2,19 @@ package ru.alfa.stand.test.core.validation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import ru.alfa.stand.test.core.environment.DatasourceDefinition;
+import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
+import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
+import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
 import ru.alfa.stand.test.core.identifier.ScenarioId;
 import ru.alfa.stand.test.core.scenario.GenericStep;
 import ru.alfa.stand.test.core.scenario.Scenario;
 import ru.alfa.stand.test.core.scenario.ScenarioStep;
+import ru.alfa.stand.test.core.scenario.StepParameterKeys;
 
 class DefaultScenarioValidatorTest {
 
@@ -89,6 +96,117 @@ class DefaultScenarioValidatorTest {
         ValidationResult result = validator.validate(scenario);
 
         assertThat(result.errors()).extracting(ValidationIssue::code).contains("STEP_ID_REQUIRED");
+    }
+
+    @Test
+    @DisplayName("guardrail: a non-whitelisted environment is a NON_WHITELISTED_ENVIRONMENT error")
+    void guardrail_unknownEnvironment_reportsForbiddenOp() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("prod")
+                .step(GenericStep.of("s1", "rest.post"))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, mainDbRegistry());
+
+        assertThat(result.errors()).extracting(ValidationIssue::code)
+                .contains(ForbiddenOperation.NON_WHITELISTED_ENVIRONMENT.code());
+    }
+
+    @Test
+    @DisplayName("guardrail: an empty registry rejects any environment (strict)")
+    void guardrail_emptyRegistry_reportsForbiddenOp() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(GenericStep.of("s1", "rest.post"))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, new InMemoryEnvironmentRegistry(Map.of()));
+
+        assertThat(result.errors()).extracting(ValidationIssue::code)
+                .contains(ForbiddenOperation.NON_WHITELISTED_ENVIRONMENT.code());
+    }
+
+    @Test
+    @DisplayName("guardrail: a db step on a non-whitelisted datasource is a NON_WHITELISTED_DATASOURCE error")
+    void guardrail_unknownDatasource_reportsForbiddenOp() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(dbStep("s1", "ghost", "SELECT 1"))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, mainDbRegistry());
+
+        assertThat(result.errors()).extracting(ValidationIssue::code)
+                .contains(ForbiddenOperation.NON_WHITELISTED_DATASOURCE.code());
+    }
+
+    @Test
+    @DisplayName("guardrail: destructive inline SQL is a DESTRUCTIVE_SQL_WITHOUT_ALLOW error")
+    void guardrail_destructiveSql_reportsForbiddenOp() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(dbStep("s1", "mainDb", "TRUNCATE TABLE orders"))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, mainDbRegistry());
+
+        assertThat(result.errors()).extracting(ValidationIssue::code)
+                .contains(ForbiddenOperation.DESTRUCTIVE_SQL_WITHOUT_ALLOW.code());
+    }
+
+    @Test
+    @DisplayName("guardrail: multi-statement (unclassifiable) SQL is a DESTRUCTIVE_SQL_WITHOUT_ALLOW error")
+    void guardrail_multiStatementSql_reportsForbiddenOp() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(dbStep("s1", "mainDb", "SELECT 1; DROP TABLE orders"))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, mainDbRegistry());
+
+        assertThat(result.errors()).extracting(ValidationIssue::code)
+                .contains(ForbiddenOperation.DESTRUCTIVE_SQL_WITHOUT_ALLOW.code());
+    }
+
+    @Test
+    @DisplayName("guardrail: a read-only db step on a whitelisted datasource passes")
+    void guardrail_validDbRead_passes() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(dbStep("s1", "mainDb", "SELECT status FROM orders WHERE id = :id"))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, mainDbRegistry());
+
+        assertThat(result.isValid()).isTrue();
+    }
+
+    @Test
+    @DisplayName("the structural-only validate ignores the whitelist (no registry)")
+    void structuralValidate_ignoresWhitelist() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("prod")
+                .step(GenericStep.of("s1", "rest.post"))
+                .build();
+
+        ValidationResult result = validator.validate(scenario);
+
+        assertThat(result.isValid()).isTrue();
+        assertThat(result.errors()).extracting(ValidationIssue::code)
+                .doesNotContain(ForbiddenOperation.NON_WHITELISTED_ENVIRONMENT.code());
+    }
+
+    private static EnvironmentRegistry mainDbRegistry() {
+        DatasourceDefinition datasource = new DatasourceDefinition(
+                "mainDb", "MAIN_DB_URL", "MAIN_DB_USER", "MAIN_DB_PASSWORD", Set.of("public"), true);
+        EnvironmentDefinition environment = new EnvironmentDefinition(
+                "ift", Map.of(), Map.of(), Map.of("mainDb", datasource), Map.of());
+        return new InMemoryEnvironmentRegistry(Map.of("ift", environment));
+    }
+
+    private static GenericStep dbStep(String id, String datasource, String sql) {
+        return new GenericStep(id, "db.query", "",
+                Map.of(StepParameterKeys.DATASOURCE, datasource, StepParameterKeys.SQL, sql));
     }
 
     /** Test double that allows a blank type, which {@link GenericStep} would reject. */

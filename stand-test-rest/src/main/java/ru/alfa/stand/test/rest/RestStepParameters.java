@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import ru.alfa.stand.test.core.exception.StandTestException;
+import ru.alfa.stand.test.core.scenario.StepParameterKeys;
 
 /**
  * The shared parameter-map schema for a REST {@code ScenarioStep}.
@@ -22,37 +23,37 @@ import ru.alfa.stand.test.core.exception.StandTestException;
 public final class RestStepParameters {
 
     /** Prefix of the core step type produced for a REST step (for example {@code rest.get}). */
-    public static final String TYPE_PREFIX = "rest.";
+    public static final String TYPE_PREFIX = StepParameterKeys.REST_PREFIX;
 
     /** Parameter key: HTTP method name (see {@link RestMethod}). */
-    public static final String METHOD = "method";
+    public static final String METHOD = StepParameterKeys.METHOD;
     /** Parameter key: logical service alias resolved via the environment registry. */
-    public static final String SERVICE = "service";
+    public static final String SERVICE = StepParameterKeys.SERVICE;
     /** Parameter key: request path appended to the resolved base URL. */
-    public static final String PATH = "path";
+    public static final String PATH = StepParameterKeys.PATH;
     /** Parameter key: query parameters as a string-to-string map. */
-    public static final String QUERY = "query";
+    public static final String QUERY = StepParameterKeys.QUERY;
     /** Parameter key: request headers as a string-to-string map. */
-    public static final String HEADERS = "headers";
+    public static final String HEADERS = StepParameterKeys.HEADERS;
     /** Parameter key: inline request body. */
-    public static final String BODY = "body";
+    public static final String BODY = StepParameterKeys.BODY;
     /** Parameter key: classpath resource whose content is the request body. */
-    public static final String BODY_RESOURCE = "bodyResource";
+    public static final String BODY_RESOURCE = StepParameterKeys.BODY_RESOURCE;
     /** Parameter key: whether to inject the SDK correlation id into the outbound request. */
-    public static final String INJECT_CORRELATION_ID = "injectCorrelationId";
+    public static final String INJECT_CORRELATION_ID = StepParameterKeys.INJECT_CORRELATION_ID;
     /** Parameter key: expected HTTP status code. */
-    public static final String EXPECTED_STATUS = "expectedStatus";
+    public static final String EXPECTED_STATUS = StepParameterKeys.EXPECTED_STATUS;
     /** Parameter key: list of JSONPath assertions. */
-    public static final String ASSERTIONS = "assertions";
+    public static final String ASSERTIONS = StepParameterKeys.ASSERTIONS;
     /** Parameter key: list of response captures. */
-    public static final String CAPTURES = "captures";
+    public static final String CAPTURES = StepParameterKeys.CAPTURES;
 
     /** Nested key (assertion / capture): JSONPath expression. */
-    public static final String JSON_PATH = "jsonPath";
+    public static final String JSON_PATH = StepParameterKeys.JSON_PATH;
     /** Nested key (assertion): expected value. */
-    public static final String EXPECTED_VALUE = "expectedValue";
+    public static final String EXPECTED_VALUE = StepParameterKeys.EXPECTED_VALUE;
     /** Nested key (capture): target variable name. */
-    public static final String VARIABLE_NAME = "variableName";
+    public static final String VARIABLE_NAME = StepParameterKeys.VARIABLE_NAME;
 
     private RestStepParameters() {
     }

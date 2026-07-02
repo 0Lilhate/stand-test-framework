@@ -23,8 +23,17 @@
 > - **P1: ВЫПОЛНЕНО** — G1/G2/G3/G5 закрыты в схеме, T1 усилен, добавлен регрессионный `GuardrailHoleTest`.
 >   16 тестов зелёные, `./gradlew build` зелёный. Детали — в статус-пометках ниже.
 > - **P2: ВЫПОЛНЕНО** — T2, T3, R1, G4, G6, G7, C1, R2/D1/consistency закрыты (см. пометки ниже).
+> - **Companion (core runtime-энфорсмент, §Решение 6): ВЫПОЛНЕНО (2026-07-02).** Двухслойность
+>   guardrail'а реализована: `DefaultScenarioValidator.validate(scenario, EnvironmentRegistry)` даёт
+>   **pre-flight**-гейт (до запуска шагов), ключуя по `ForbiddenOperation` —
+>   `NON_WHITELISTED_ENVIRONMENT`, `NON_WHITELISTED_DATASOURCE`, `DESTRUCTIVE_SQL_WITHOUT_ALLOW` (через
+>   core `SqlStatementClassifier`); рунер вызывает 2-арг форму. **Strict**: пустой registry отвергает env.
+>   Заодно закрыт **hoist**: wire-ключи вынесены в core `StepParameterKeys`, адаптеры + `YamlStepKeys`
+>   делегируют (mirrors устранены). Service/topic-whitelist и DB write-allow остаются в адаптерах (defense
+>   in depth). `./gradlew build` зелёный.
 >   Открытыми остаются только **schema-follow-ups** (`restStep.query`, REST body assertions) и крупные
->   кросс-модульные (inline JSON body, rich matchers/`rowExists`, grpc execution, hoist surface-ключей).
+>   кросс-модульные (inline JSON body, rich matchers/`rowExists`, grpc execution; enum-коды для
+>   service/topic/grpc-whitelist, если нужен их pre-flight).
 
 ---
 

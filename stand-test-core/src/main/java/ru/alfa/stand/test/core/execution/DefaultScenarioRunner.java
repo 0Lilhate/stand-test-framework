@@ -117,7 +117,7 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
     @Override
     public ScenarioResult run(Scenario scenario) {
         Objects.requireNonNull(scenario, "scenario must not be null");
-        validator.validate(scenario).throwIfInvalid();
+        validator.validate(scenario, environmentRegistry).throwIfInvalid();
 
         ScenarioContext context = ScenarioContext.start(scenario.id(), scenario.environment(), scenario.tags());
         ResourceScope resourceScope = new ResourceScope();

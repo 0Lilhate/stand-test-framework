@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import ru.alfa.stand.test.core.exception.StandTestException;
+import ru.alfa.stand.test.core.scenario.StepParameterKeys;
 
 /**
  * The shared parameter-map schema for a DB {@code ScenarioStep}.
@@ -21,31 +22,31 @@ import ru.alfa.stand.test.core.exception.StandTestException;
 public final class DbStepParameters {
 
     /** Prefix of the core step type produced for a DB step (for example {@code db.query}). */
-    public static final String TYPE_PREFIX = "db.";
+    public static final String TYPE_PREFIX = StepParameterKeys.DB_PREFIX;
 
     /** Parameter key: logical datasource alias resolved via the environment registry. */
-    public static final String DATASOURCE = "datasource";
+    public static final String DATASOURCE = StepParameterKeys.DATASOURCE;
     /** Parameter key: inline SQL (a single statement). */
-    public static final String SQL = "sql";
+    public static final String SQL = StepParameterKeys.SQL;
     /** Parameter key: classpath resource whose content is the SQL (a single statement). */
-    public static final String SQL_RESOURCE = "sqlResource";
+    public static final String SQL_RESOURCE = StepParameterKeys.SQL_RESOURCE;
     /** Parameter key: named bind values as a name-to-value map. */
-    public static final String PARAMS = "params";
+    public static final String PARAMS = StepParameterKeys.PARAMS;
     /** Parameter key (query): list of column captures into the variable store. */
-    public static final String CAPTURES = "captures";
+    public static final String CAPTURES = StepParameterKeys.CAPTURES;
     /** Parameter key (expectEventually): the single value the first column must eventually equal. */
-    public static final String EXPECTED_VALUE = "expectedValue";
+    public static final String EXPECTED_VALUE = StepParameterKeys.EXPECTED_VALUE;
     /** Parameter key (cleanup / optional): the column the appended {@code testRunId} predicate binds. */
-    public static final String WHERE_TEST_RUN_ID_COLUMN = "whereTestRunIdColumn";
+    public static final String WHERE_TEST_RUN_ID_COLUMN = StepParameterKeys.WHERE_TEST_RUN_ID_COLUMN;
     /** Parameter key (expectEventually): maximum time to wait for a match, in milliseconds. */
-    public static final String TIMEOUT_MILLIS = "timeoutMillis";
+    public static final String TIMEOUT_MILLIS = StepParameterKeys.TIMEOUT_MILLIS;
     /** Parameter key (expectEventually): the poll interval between probes, in milliseconds. */
-    public static final String POLL_INTERVAL_MILLIS = "pollIntervalMillis";
+    public static final String POLL_INTERVAL_MILLIS = StepParameterKeys.POLL_INTERVAL_MILLIS;
 
     /** Nested key (capture): target variable name. */
-    public static final String VARIABLE_NAME = "variableName";
+    public static final String VARIABLE_NAME = StepParameterKeys.VARIABLE_NAME;
     /** Nested key (capture): result-set column label. */
-    public static final String COLUMN = "column";
+    public static final String COLUMN = StepParameterKeys.COLUMN;
 
     /** Default {@code db.expectEventually} timeout when none is set, in milliseconds. */
     public static final long DEFAULT_TIMEOUT_MILLIS = 30_000L;

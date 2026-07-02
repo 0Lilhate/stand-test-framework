@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import ru.alfa.stand.test.core.exception.StandTestException;
+import ru.alfa.stand.test.core.scenario.StepParameterKeys;
 
 /**
  * The shared parameter-map schema for a Kafka {@code ScenarioStep}.
@@ -21,37 +22,37 @@ import ru.alfa.stand.test.core.exception.StandTestException;
 public final class KafkaStepParameters {
 
     /** Prefix of the core step type produced for a Kafka step (for example {@code kafka.send}). */
-    public static final String TYPE_PREFIX = "kafka.";
+    public static final String TYPE_PREFIX = StepParameterKeys.KAFKA_PREFIX;
 
     /** Parameter key: logical topic alias resolved via the environment registry. */
-    public static final String TOPIC = "topic";
+    public static final String TOPIC = StepParameterKeys.TOPIC;
     /** Parameter key: inline message value (JSON as a string). */
-    public static final String BODY = "body";
+    public static final String BODY = StepParameterKeys.BODY;
     /** Parameter key: classpath resource whose content is the message value. */
-    public static final String BODY_RESOURCE = "bodyResource";
+    public static final String BODY_RESOURCE = StepParameterKeys.BODY_RESOURCE;
     /** Parameter key: message key (partitioning key / discriminator). */
-    public static final String KEY = "key";
+    public static final String KEY = StepParameterKeys.KEY;
     /** Parameter key: message headers as a string-to-string map. */
-    public static final String HEADERS = "headers";
+    public static final String HEADERS = StepParameterKeys.HEADERS;
     /** Parameter key (send): whether to inject the SDK correlation id into the outbound message. */
-    public static final String INJECT_CORRELATION_ID = "injectCorrelationId";
+    public static final String INJECT_CORRELATION_ID = StepParameterKeys.INJECT_CORRELATION_ID;
     /** Parameter key (expect): whether to select messages by the SDK-owned correlation id. */
-    public static final String CORRELATION_FROM_CONTEXT = "correlationIdFromContext";
+    public static final String CORRELATION_FROM_CONTEXT = StepParameterKeys.CORRELATION_FROM_CONTEXT;
     /** Parameter key (expect): maximum time to wait for a matching message, in milliseconds. */
-    public static final String TIMEOUT_MILLIS = "timeoutMillis";
+    public static final String TIMEOUT_MILLIS = StepParameterKeys.TIMEOUT_MILLIS;
     /** Parameter key (expect): the per-probe consumer poll timeout, in milliseconds. */
-    public static final String POLL_TIMEOUT_MILLIS = "pollTimeoutMillis";
+    public static final String POLL_TIMEOUT_MILLIS = StepParameterKeys.POLL_TIMEOUT_MILLIS;
     /** Parameter key (expect): list of JSONPath assertions against the matched message value. */
-    public static final String ASSERTIONS = "assertions";
+    public static final String ASSERTIONS = StepParameterKeys.ASSERTIONS;
     /** Parameter key (expect): list of captures from the matched message value. */
-    public static final String CAPTURES = "captures";
+    public static final String CAPTURES = StepParameterKeys.CAPTURES;
 
     /** Nested key (assertion / capture): JSONPath expression. */
-    public static final String JSON_PATH = "jsonPath";
+    public static final String JSON_PATH = StepParameterKeys.JSON_PATH;
     /** Nested key (assertion): expected value. */
-    public static final String EXPECTED_VALUE = "expectedValue";
+    public static final String EXPECTED_VALUE = StepParameterKeys.EXPECTED_VALUE;
     /** Nested key (capture): target variable name. */
-    public static final String VARIABLE_NAME = "variableName";
+    public static final String VARIABLE_NAME = StepParameterKeys.VARIABLE_NAME;
 
     /** Default {@code kafka.expect} timeout when none is set, in milliseconds. */
     public static final long DEFAULT_TIMEOUT_MILLIS = 30_000L;
