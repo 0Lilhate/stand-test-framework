@@ -17,6 +17,8 @@ public final class StepParameterKeys {
     public static final String KAFKA_PREFIX = "kafka.";
     /** Prefix of the core step type produced for a DB step (for example {@code db.query}). */
     public static final String DB_PREFIX = "db.";
+    /** Prefix of the core step type produced for a gRPC step (for example {@code grpc.unary}). */
+    public static final String GRPC_PREFIX = "grpc.";
 
     /** Parameter key: HTTP method name. */
     public static final String METHOD = "method";
@@ -73,6 +75,17 @@ public final class StepParameterKeys {
     public static final String WHERE_TEST_RUN_ID_COLUMN = "whereTestRunIdColumn";
     /** Parameter key (expectEventually): the poll interval between probes, in milliseconds. */
     public static final String POLL_INTERVAL_MILLIS = "pollIntervalMillis";
+
+    /** Parameter key: logical gRPC target alias resolved via the environment registry. */
+    public static final String TARGET = "target";
+    /** Parameter key: fully-qualified gRPC method name ({@code package.Service/Method}). */
+    public static final String METHOD_FULL_NAME = "methodFullName";
+    /** Parameter key: unary call deadline, in milliseconds. */
+    public static final String DEADLINE_MILLIS = "deadlineMillis";
+    /** Parameter key: inline request payload (JSON as a string). */
+    public static final String REQUEST = "request";
+    /** Parameter key: classpath resource whose content is the request payload (JSON). */
+    public static final String REQUEST_RESOURCE = "requestResource";
 
     private StepParameterKeys() {
     }

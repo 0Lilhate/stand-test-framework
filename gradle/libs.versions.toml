@@ -1,5 +1,9 @@
 [versions]
+# `java` is the Gradle toolchain (which JDK compiles the build); `javaRelease` is the bytecode/API level
+# (`--release`). Keeping the toolchain on 24 while releasing to 17 lets the build run on the newest JDK yet
+# produce artifacts loadable by consumers on JDK 17/21/24 (plan §14 resolution).
 java = "24"
+javaRelease = "17"
 checkstyle = "10.18.2"
 junit = "5.11.4"
 assertj = "3.26.3"
@@ -34,6 +38,12 @@ snakeYaml = "2.3"
 # resource itself, which needs no runtime dependency.
 networknt = "1.5.6"
 jackson = "2.18.2"
+# stand-test-grpc adapter: grpc-java runtime/stub/protobuf + server-reflection client + JSON<->protobuf
+# (JsonFormat) so declarative scenarios call unary methods via DynamicMessage without generated stubs.
+# The transport (grpc-netty-shaded) is runtimeOnly — it stays off the consumer's compile graph — and the
+# in-process transport is test-only. Pinned as a compatible pair (grpc-java 1.68.x ships protobuf 3.25.x).
+grpc = "1.68.1"
+protobuf = "3.25.5"
 # Reserved for later phases (not applied at the skeleton stage):
 springBoot = "3.5.14"
 springDependencyManagement = "1.1.7"
@@ -53,6 +63,14 @@ allure-java-commons = { module = "io.qameta.allure:allure-java-commons", version
 snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeYaml" }
 networknt-json-schema-validator = { module = "com.networknt:json-schema-validator", version.ref = "networknt" }
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
+grpc-api = { module = "io.grpc:grpc-api", version.ref = "grpc" }
+grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
+grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }
+grpc-services = { module = "io.grpc:grpc-services", version.ref = "grpc" }
+grpc-netty-shaded = { module = "io.grpc:grpc-netty-shaded", version.ref = "grpc" }
+grpc-inprocess = { module = "io.grpc:grpc-inprocess", version.ref = "grpc" }
+protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
+protobuf-java-util = { module = "com.google.protobuf:protobuf-java-util", version.ref = "protobuf" }
 # stand-test-spring-boot-starter: Spring Boot auto-configuration. The library ships only the
 # `spring-boot`/`spring-boot-autoconfigure` API (the `org.springframework.boot` plugin is NOT applied —
 # this is a library, not a bootable app). `configuration-processor` is an annotationProcessor that
