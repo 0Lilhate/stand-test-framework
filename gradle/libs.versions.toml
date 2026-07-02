@@ -53,3 +53,12 @@ allure-java-commons = { module = "io.qameta.allure:allure-java-commons", version
 snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeYaml" }
 networknt-json-schema-validator = { module = "com.networknt:json-schema-validator", version.ref = "networknt" }
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
+# stand-test-spring-boot-starter: Spring Boot auto-configuration. The library ships only the
+# `spring-boot`/`spring-boot-autoconfigure` API (the `org.springframework.boot` plugin is NOT applied —
+# this is a library, not a bootable app). `configuration-processor` is an annotationProcessor that
+# generates IDE metadata for `@ConfigurationProperties`; `spring-boot-test` (ApplicationContextRunner)
+# is test-only.
+spring-boot = { module = "org.springframework.boot:spring-boot", version.ref = "springBoot" }
+spring-boot-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure", version.ref = "springBoot" }
+spring-boot-configuration-processor = { module = "org.springframework.boot:spring-boot-configuration-processor", version.ref = "springBoot" }
+spring-boot-test = { module = "org.springframework.boot:spring-boot-test", version.ref = "springBoot" }

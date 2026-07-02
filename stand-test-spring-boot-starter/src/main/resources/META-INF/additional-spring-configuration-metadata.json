@@ -1,0 +1,34 @@
+{
+  "properties": [
+    {
+      "name": "stand.test.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Master switch for the stand-test auto-configuration. When false, no SDK beans are contributed.",
+      "defaultValue": true
+    },
+    {
+      "name": "stand.test.await.timeout",
+      "type": "java.time.Duration",
+      "description": "Default total wait for the reusable AwaitPolicy bean.",
+      "defaultValue": "30s"
+    },
+    {
+      "name": "stand.test.await.poll-interval",
+      "type": "java.time.Duration",
+      "description": "Default poll interval for the reusable AwaitPolicy bean.",
+      "defaultValue": "500ms"
+    },
+    {
+      "name": "stand.test.reporting.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Whether SDK reporting is enabled (best-effort side-channel).",
+      "defaultValue": true
+    },
+    {
+      "name": "stand.test.reporting.allure.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Whether the Allure reporting publisher is preferred when stand-test-allure is on the classpath. Falls back to the no-op publisher when false.",
+      "defaultValue": true
+    }
+  ]
+}
