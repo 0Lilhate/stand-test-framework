@@ -1,10 +1,13 @@
 # stand-test-example
 
-**Group:** examples · **Gradle plugin:** `java-library` · **Internal dependencies (test):** `stand-test-core`, `stand-test-junit`, `stand-test-rest`, `stand-test-db`, `stand-test-kafka`, `stand-test-allure`
+**Group:** examples · **Gradle plugin:** `java-library` · **Internal dependencies (test):** `stand-test-core`, `stand-test-await`, `stand-test-junit`, `stand-test-rest`, `stand-test-db`, `stand-test-kafka`, `stand-test-grpc`, `stand-test-allure`, `stand-test-config`, `stand-test-scenario-yaml`, `stand-test-ai-schema`, `stand-test-spring-boot-starter`
 
-Technical **usage examples** for the stand-test SDK (Iteration 8). They show how a consuming team writes
-scenarios with the SDK and run green offline through the public API against in-process doubles — there is
-**no business logic and no real-stand configuration** here.
+Technical **usage examples and a verification module** for the stand-test SDK (Iteration 8). They show
+how a consuming team writes scenarios with the SDK, prove the published modules compose into one working
+pipeline, and run green offline through the public API against in-process doubles — there is
+**no business logic and no real-stand configuration** here. The examples demonstrate SDK composition;
+they are not a 1-to-1 template for a business test (a real test keeps the same scenario shape but points
+the registry refs at a real DEV/IFT stand).
 
 ## What this module shows
 
@@ -18,6 +21,10 @@ The examples live in `src/test/java` (there is no production code):
 | `NegativeTimeoutExampleTest` | the await/timeout path — `expectEventually` times out as a `StandTestAssertionError` (no `Thread.sleep`). |
 | `ReportingExampleTest` | how the Allure adapter renders a run (steps, status, labels, parameters, diagnostics). |
 | `StandTestExampleTest` | the canonical `@StandTest` path — inject a `StandClient` whose `EnvironmentRegistry` and Allure publisher are discovered via `ServiceLoader`, then run the REST→DB scenario. |
+| `FullStandTestFrameworkExampleTest` | **the composition proof**: one scenario through model → validator → runner → `StepExecutor` SPI (REST + DB + gRPC + a test-only variable-snapshot probe) → await (`db.expectEventually`) → variable capture/`${…}` resolve → correlation propagation (REST header **and** gRPC metadata carry the same SDK-owned id) → Allure mapping; plus per-run `VariableStore` isolation (a second run starts empty, fresh `testRunId`) and a deterministic `Awaiter` demo on a fake `TimeSource` (3 poll attempts, zero wall-clock time). |
+| `FrameworkFailureSemanticsExampleTest` | failure semantics — an unmet step assertion surfaces as `StandTestAssertionError` (an `AssertionError`, so JUnit fails the test) while the Allure side-channel still renders the step FAILED with its diagnostics attachment. |
+| `StandTestSpringBootStarterExampleTest` | the Spring consumer path — `ApplicationContextRunner` over the starter's auto-configuration: beans by default, nothing on `stand.test.enabled=false`, `stand.test.environments.*` binding, user bean wins. Offline, no bootable app. |
+| `AiSchemaParityTest` | AI-format guardrail parity — the canonical/gRPC documents pass the `stand-test-ai-schema` JSON Schema **and** parse into validator-clean scenarios, while `ai/invalid-flow.json` (destructive step type, hardcoded URL, unbounded timeout) is rejected by the schema. No runner involved. |
 | `KafkaExampleTest` | `KafkaStep.send` → `expect` — inject the SDK correlation header, match it, JSON-path assert + capture. **Needs a broker** (tagged `requires-broker`, excluded from the default run). |
 
 ## Execution model (why it runs offline)
@@ -36,8 +43,39 @@ Testcontainers and are allowed for SDK self-tests (plan §16):
   The H2 schema/table is created **out-of-band** in `@BeforeAll` (DDL is forbidden through the SDK
   write-guard, plan §8.8), then the scenarios only seed/query/expect/cleanup.
 
+- **gRPC** → an in-JVM `io.grpc` server (`ExampleGrpcServer`) with the bundled Health service + Server
+  Reflection on a loopback port pinned by the `GRPC_TARGET` env-ref. It also records the ASCII metadata
+  of the last call, so the composition example can assert the SDK injected its correlation id.
+
 Endpoints are never hardcoded in the scenarios — they come from the `EnvironmentRegistry`
 (`ExampleStand`), exactly as a real consumer would whitelist aliases.
+
+### What is a fake here — and why only in `src/test`
+
+All doubles and probes (`ExampleHttpServer`, `ExampleGrpcServer`, `ExampleH2`,
+`CapturingAllureLifecycleFacade`, `VariableSnapshotProbe`, `AdvancingTimeSource`) are **test classes of
+this module only**: `src/main/java` stays empty, nothing is published, and no fake can leak onto a
+consumer's classpath or into the SDK modules. They plug into *public SDK seams* (the `StepExecutor` SPI,
+the Allure lifecycle facade, the await `TimeSource`) and never re-implement adapter logic.
+`VariableSnapshotProbe` exists because the per-run `VariableStore` is deliberately owned by the runner
+and not exposed on `ScenarioResult` — a custom executor is the sanctioned way to observe it.
+
+### SDK modules in this example
+
+| Module | Used | How |
+| --- | --- | --- |
+| `stand-test-core` | yes | model/builder, validator, runner, SPI, results, events — every test |
+| `stand-test-await` | yes | inside `db.expectEventually`/timeouts + directly (`Awaiter` on a fake `TimeSource`) |
+| `stand-test-junit` | yes | `@StandTest` injection path (`StandTestExampleTest`) |
+| `stand-test-rest` | yes | `RestStep` + real `RestStepExecutor` against the HTTP double |
+| `stand-test-db` | yes | `DbStep` seed/expectEventually/cleanup against H2 |
+| `stand-test-grpc` | yes | `grpc.unary` over reflection against the local gRPC double |
+| `stand-test-kafka` | partially | compile + tagged `requires-broker` test only: `kafka.expect` arms a real consumer, no offline double exists |
+| `stand-test-allure` | yes | `AllureReportingEventPublisher` over a capturing lifecycle facade |
+| `stand-test-config` | yes | `FileEnvironmentRegistry` SPI provider loads `application.yml` for `@StandTest` |
+| `stand-test-scenario-yaml` | yes | `AiScenarioParser` (AI-format documents → core `Scenario`) |
+| `stand-test-ai-schema` | yes | shipped JSON Schema validates the valid/invalid example documents |
+| `stand-test-spring-boot-starter` | yes | `ApplicationContextRunner` context checks (no bootable app) |
 
 ### The `@StandTest` path (Phase 2)
 
@@ -82,7 +120,13 @@ KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew :stand-test-example:test -Pincl
 ./gradlew :stand-test-example:test     # all examples, green offline (no external stand)
 ./gradlew :stand-test-example:build
 ./gradlew :stand-test-example:test -PexampleRestPort=18099   # override the @StandTest REST port (CI)
+./gradlew :stand-test-example:test -PexampleGrpcPort=18091   # override the gRPC double port (CI)
 ```
+
+Reading order for a first-time consumer: start with `RestExampleTest` (one step), then
+`RestToDbExampleTest` (variables across transports), then `FullStandTestFrameworkExampleTest` (the whole
+pipeline at once), then the `@StandTest`/starter tests for the two wiring styles (ServiceLoader vs
+Spring beans).
 
 This module is build-only: it produces no published artifact and is excluded from the coverage gate
 (there is no production code to cover). Checkstyle still applies to the example sources.

@@ -32,6 +32,7 @@ class AiSchemaParityTest {
 
     private static final String DOCUMENT = "/ai/canonical-flow.json";
     private static final String GRPC_DOCUMENT = "/ai/grpc-flow.json";
+    private static final String INVALID_DOCUMENT = "/ai/invalid-flow.json";
 
     private static String readDocument(String path) {
         try (InputStream in = AiSchemaParityTest.class.getResourceAsStream(path)) {
@@ -81,6 +82,21 @@ class AiSchemaParityTest {
         Map<String, Object> db = ((GenericStep) scenario.steps().get(2)).parameters();
         assertThat(db).containsEntry("expectedValue", "DONE").containsEntry("timeoutMillis", 10000L);
         assertThat((String) db.get("sql")).startsWith("SELECT");
+    }
+
+    @Test
+    @DisplayName("a document violating the guardrails is rejected by the ai-schema JSON Schema")
+    void invalidDocument_failsSchema() {
+        Set<ValidationMessage> messages = validateAgainstSchema(INVALID_DOCUMENT);
+
+        // Three independent guardrails must each produce a message anchored at its own step: the unknown
+        // (destructive) step type, the URL where a logical alias is required, and the timeout whose unit
+        // the duration format does not allow (only ms|s|m).
+        assertThat(messages).as("schema validation messages").isNotEmpty();
+        String rendered = messages.toString();
+        assertThat(rendered).contains("$.steps[0].type");
+        assertThat(rendered).contains("$.steps[1].service");
+        assertThat(rendered).contains("$.steps[2].timeout");
     }
 
     @Test

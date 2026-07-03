@@ -1,5 +1,6 @@
 package ru.alfa.stand.test.example;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,6 +44,7 @@ final class ExampleStand {
     static final String TOPIC = "events";
     static final String TOPIC_NAME = "stand-test-example-events";
     static final String GRPC_TARGET = "health-grpc";
+    static final String GRPC_CORRELATION_METADATA = "x-correlation-id";
 
     private ExampleStand() {
     }
@@ -90,9 +92,39 @@ final class ExampleStand {
         return new DefaultStandClient(runner);
     }
 
+    /**
+     * The whole whitelist in one environment — REST service (live double URL), datasource (env refs) and
+     * gRPC target ({@code GRPC_TARGET} env ref) — for the full-composition example.
+     */
+    static EnvironmentRegistry fullRegistry(String restBaseUrl) {
+        ServiceEndpointDefinition service = new ServiceEndpointDefinition(
+                SERVICE, restBaseUrl, new CorrelationConfig(CorrelationSource.HEADER, CORRELATION_HEADER));
+        GrpcTargetDefinition grpc = new GrpcTargetDefinition(
+                GRPC_TARGET, "GRPC_TARGET", new CorrelationConfig(CorrelationSource.METADATA, GRPC_CORRELATION_METADATA));
+        EnvironmentDefinition environment = new EnvironmentDefinition(
+                ENVIRONMENT, Map.of(SERVICE, service), Map.of(), Map.of(DATASOURCE, datasource()), Map.of(GRPC_TARGET, grpc));
+        return new InMemoryEnvironmentRegistry(Map.of(ENVIRONMENT, environment));
+    }
+
+    /**
+     * A client over ALL offline-capable executors (REST, DB, gRPC) plus any extra test-only executors
+     * (the variable-snapshot probe), reporting into the given publisher — the composition the
+     * full-framework example runs.
+     */
+    static StandClient fullStand(EnvironmentRegistry registry, ReportingEventPublisher publisher, StepExecutor... extraExecutors) {
+        List<StepExecutor> executors = new ArrayList<>(List.of(
+                new RestStepExecutor(new WebClientHttpCaller(), reference -> reference),
+                new DbStepExecutor(),
+                new GrpcStepExecutor()));
+        executors.addAll(List.of(extraExecutors));
+        DefaultScenarioRunner runner = new DefaultScenarioRunner(
+                executors, new DefaultScenarioValidator(), registry, publisher);
+        return new DefaultStandClient(runner);
+    }
+
     static EnvironmentRegistry grpcRegistry() {
         GrpcTargetDefinition grpc = new GrpcTargetDefinition(
-                GRPC_TARGET, "GRPC_TARGET", new CorrelationConfig(CorrelationSource.METADATA, "x-correlation-id"));
+                GRPC_TARGET, "GRPC_TARGET", new CorrelationConfig(CorrelationSource.METADATA, GRPC_CORRELATION_METADATA));
         EnvironmentDefinition environment = new EnvironmentDefinition(
                 ENVIRONMENT, Map.of(), Map.of(), Map.of(), Map.of(GRPC_TARGET, grpc));
         return new InMemoryEnvironmentRegistry(Map.of(ENVIRONMENT, environment));

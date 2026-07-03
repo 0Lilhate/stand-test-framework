@@ -9,6 +9,9 @@
 
 dependencies {
     testImplementation(project(":stand-test-core"))
+    // Declared directly (not just transitively via junit/db): FullStandTestFrameworkExampleTest drives
+    // Awaiter/AwaitPolicy/TimeSource deterministically with a fake time source — no wall-clock waits.
+    testImplementation(project(":stand-test-await"))
     testImplementation(project(":stand-test-junit"))
     testImplementation(project(":stand-test-rest"))
     testImplementation(project(":stand-test-db"))
@@ -34,6 +37,11 @@ dependencies {
     testImplementation(project(":stand-test-ai-schema"))
     testImplementation(libs.networknt.json.schema.validator)
     testImplementation(libs.jackson.databind)
+    // Spring Boot starter example: StandTestSpringBootStarterExampleTest wires the auto-configuration
+    // through ApplicationContextRunner (spring-boot-test) — offline bean-presence/binding checks only,
+    // no bootable app and no real application context.
+    testImplementation(project(":stand-test-spring-boot-starter"))
+    testImplementation(libs.spring.boot.test)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
