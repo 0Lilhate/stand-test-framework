@@ -45,14 +45,15 @@ Endpoints are never hardcoded in the scenarios — they come from the `Environme
 hand-built runner) whose `EnvironmentRegistry` and Allure publisher are discovered via `ServiceLoader`.
 Two differences from the manual-runner examples above:
 
-- **Registry via `stand-test-environments.yml`** — the `ift` environment is declared in
-  `src/test/resources/stand-test-environments.yml` (the full surface: services, datasources, topics,
-  grpc-targets, kafka-cluster) and loaded by `stand-test-config`'s `FileEnvironmentRegistry` SPI provider —
-  the exact wiring a real consumer uses, no Java registry code. The file stores **env-refs** only
-  (`base-url-ref: CLIENT_SERVICE_URL`), which the default `RestStepExecutor` resolves via `System.getenv`;
-  a URL or secret value in a `*-ref` field is rejected fail-closed. Note the SDK allows exactly ONE
-  `EnvironmentRegistry` provider on the classpath — a second (hand-written) provider next to
-  `stand-test-config` fails loudly.
+- **Registry via `application.yml`** — the `ift` environment is declared in the familiar
+  `src/test/resources/application.yml` under `stand.test.environments` (the full surface: services,
+  datasources, topics, grpc-targets, kafka-cluster) and loaded by `stand-test-config`'s
+  `FileEnvironmentRegistry` SPI provider — the exact wiring a real consumer uses, no Java registry code.
+  The same tree binds natively in a Spring Boot project via the starter. `*-ref` fields hold env-var
+  references — a bare NAME or the `${NAME:default}` placeholder (the env var wins when set; the inline
+  default is a conscious value-in-repo trade-off for non-secret DEV endpoints); a bare URL or secret
+  value is rejected fail-closed. Note the SDK allows exactly ONE `EnvironmentRegistry` provider on the
+  classpath — a second (hand-written) provider next to `stand-test-config` fails loudly.
 - **Fixed REST port** — the double must therefore listen on a stable address. `build.gradle.kts` sets
   `CLIENT_SERVICE_URL=http://127.0.0.1:18080` (override in CI with `-PexampleRestPort=NNNN` to avoid
   collisions), and `ExampleDoublesExtension` starts the HTTP double + H2 schema once per class, binding

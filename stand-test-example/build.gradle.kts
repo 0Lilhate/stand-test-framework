@@ -15,8 +15,9 @@ dependencies {
     testImplementation(project(":stand-test-kafka"))
     testImplementation(project(":stand-test-grpc"))
     testImplementation(project(":stand-test-allure"))
-    // The @StandTest path resolves its EnvironmentRegistry from src/test/resources/stand-test-environments.yml
-    // through stand-test-config's FileEnvironmentRegistry SPI provider — the same wiring a real consumer uses.
+    // The @StandTest path resolves its EnvironmentRegistry from the stand.test.environments section of
+    // src/test/resources/application.yml through stand-test-config's FileEnvironmentRegistry SPI
+    // provider — the same wiring (and the same familiar file) a real consumer uses.
     testImplementation(project(":stand-test-config"))
     // gRPC example: the grpc adapter keeps grpc-api/services/transport as implementation/runtimeOnly, so
     // the example declares what it needs at compile time to stand up a local gRPC double — grpc-api

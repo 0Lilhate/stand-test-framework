@@ -10,8 +10,9 @@ import org.junit.jupiter.api.extension.ExtensionContext;
  * Starts the in-process doubles the {@code @StandTest} example needs, once per test class: the H2 schema
  * (bootstrapped out-of-band via raw JDBC, since DDL is forbidden through the SDK write-guard) and the
  * HTTP double. The double binds the fixed port pinned by the build's {@code CLIENT_SERVICE_URL} env-ref,
- * which the registry loaded from {@code stand-test-environments.yml} (stand-test-config's
- * {@code FileEnvironmentRegistry} SPI provider) also resolves through {@code System.getenv} — so the
+ * which the registry loaded from {@code application.yml} ({@code stand.test.environments} section,
+ * stand-test-config's {@code FileEnvironmentRegistry} SPI provider) also resolves through
+ * {@code System.getenv} — so the
  * registry never needs to know the runtime address. No {@code Thread.sleep}: both doubles start
  * synchronously.
  *

@@ -1,0 +1,42 @@
+# Stand environment whitelist for the @StandTest examples — in the familiar application.yml, the way
+# a consumer team configures its stand autotests. stand-test-config's FileEnvironmentRegistry
+# (ServiceLoader SPI) reads the stand.test.environments section below; the exact same tree binds
+# natively in a Spring Boot test project via the stand-test-spring-boot-starter.
+#
+# Every *-ref names an environment variable — a bare NAME or the ${NAME}/${NAME:default} placeholder
+# (the env var wins when set; the inline default applies only when it is missing). An inline default
+# is a value in the repository, so use it for non-secret DEV endpoints only. The example build pins
+# the variables to the in-process doubles' fixed addresses (see build.gradle.kts:
+# CLIENT_SERVICE_URL, MAIN_DB_URL/USER/PASSWORD, GRPC_TARGET, KAFKA_BOOTSTRAP_SERVERS).
+stand:
+  test:
+    environments:
+      ift:
+        services:
+          client-service:
+            base-url-ref: ${CLIENT_SERVICE_URL:http://127.0.0.1:18080}
+            correlation:
+              source: HEADER
+              name: X-Correlation-Id
+        datasources:
+          mainDb:
+            url-ref: MAIN_DB_URL
+            user-ref: MAIN_DB_USER
+            password-ref: MAIN_DB_PASSWORD
+            allowed-schemas:
+              - test_data
+            write-allowed: true
+        topics:
+          events:
+            name: stand-test-example-events
+            correlation:
+              source: HEADER
+              name: X-Correlation-Id
+        grpc-targets:
+          health-grpc:
+            target-ref: GRPC_TARGET
+            correlation:
+              source: METADATA
+              name: x-correlation-id
+        kafka-cluster:
+          bootstrap-servers-ref: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
