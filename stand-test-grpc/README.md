@@ -98,10 +98,11 @@ path, a non-JSON/empty response, or a mismatch is a `StandTestAssertionError`.
 
 `execute` returns a `StepResult` carrying diagnostics (`grpc.target`, `grpc.method`, `grpc.deadlineMillis`,
 `grpc.correlationId`, `grpc.metadata` with secret values masked, `grpc.elapsedMillis`) and **attachments**
-(`grpc-request` / `grpc-response` JSON). Note the request/response **attachments are published
-verbatim** — the payload is the assertion target, so it is not masked; the protection against secrets
-in the report is the inline-secret rejection at build time (secret-bearing metadata keys) plus the
-rule that scenarios never carry secret values. Per the SDK's design the adapter does **not** publish reporting
+(`grpc-request` / `grpc-response` JSON). Note the request/response **attachments are not masked by this
+adapter** — the payload is the assertion target; the protection against secrets in the report is the
+inline-secret rejection at build time (secret-bearing metadata keys) plus the rule that scenarios never
+carry secret values, and the Allure sink additionally applies a best-effort secret mask to attachment
+bodies before publishing. Per the SDK's design the adapter does **not** publish reporting
 events itself — the `DefaultScenarioRunner` emits the `StepEvent`s and threads the diagnostics/attachments
 into them, so this module has **no dependency on Allure** (or JUnit/Spring).
 

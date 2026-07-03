@@ -91,18 +91,30 @@ publisher.publish(stepEvent);                                           // asser
 Attachments are **generic** — there are no REST/Kafka/DB-specific attachment types (plan §8.9). Kinds
 (`AttachmentType`): `TEXT`, `JSON`, `XML`, `SQL`, `BINARY`, `KEY_VALUE`. The adapter:
 
-- publishes the core `Attachment`s carried on a finished step verbatim (file extension derived from the
-  attachment's media type) — those are expected to be **pre-redacted by the producing adapter**;
+- publishes the core `Attachment`s carried on a finished step (file extension derived from the
+  attachment's media type) with their bodies passed through the sink-side secret mask — producers are
+  still expected to **pre-redact** (that contract is unchanged), the sink mask is the second echelon;
 - renders a step's `diagnostics` map (including await/timeout diagnostics) as a masked `KEY_VALUE`
   attachment named `diagnostics`.
 
 ## Secret masking
 
-`SecretMasker` replaces the **value** of any key/value entry whose **key** names a secret
-(`password`, `secret`, `token`, `authorization`, `apiKey`, `cookie`) before publishing. Matching is
-case-insensitive and ignores separators, so `X-Api-Key`, `Set-Cookie` and `Proxy-Authorization` are
-caught too. Masking is key-based (it never rewrites free-form bodies, which could corrupt JSON/XML), and
-it is a defence-in-depth net at the sink — adapters are still expected to redact at the source.
+Masking is two-echelon: adapters redact at the source (the core `Attachment` pre-redaction contract),
+and `SecretMasker` re-masks at the sink so **no content leaves the publisher unmasked**.
+
+- **Key/value surfaces** (step parameters, `KEY_VALUE` diagnostics): the **value** of any entry whose
+  **key** names a secret (`password`, `secret`, `token`, `authorization`, `apiKey`, `cookie`) is
+  replaced with `***`. Matching is case-insensitive and ignores separators, so `X-Api-Key`,
+  `Set-Cookie` and `Proxy-Authorization` are caught too. A value that *is* a single `Bearer`/`Basic`
+  credential token is masked even under an innocuous key.
+- **Attachment bodies** (`maskText`): the scalar value of any **JSON field** whose key names a secret
+  becomes `"***"` (string, number, boolean or null values alike), and any **embedded
+  `Bearer`/`Basic` credential token** (8+ token characters including at least one non-letter) is
+  replaced with `***` anywhere in the text — prose like `Basic authentication required` is untouched.
+
+Limitations of the body mask (why producer pre-redaction stays mandatory): an object or array nested
+*under* a sensitive key is not masked wholesale (sensitive keys *inside* it still are), and non-JSON
+`key=value` property lines are not rewritten.
 
 ## Design for testability
 

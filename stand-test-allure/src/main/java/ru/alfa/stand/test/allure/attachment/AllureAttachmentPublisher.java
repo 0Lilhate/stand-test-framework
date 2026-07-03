@@ -11,10 +11,11 @@ import ru.alfa.stand.test.core.event.Attachment;
  * Publishes generic, transport-agnostic attachments to Allure through the {@link AllureLifecycleFacade}.
  *
  * <p>It handles two sources: the already-formed core {@link Attachment}s carried on a step event
- * (published verbatim, with a file extension derived from their media type — these are expected to be
- * pre-redacted by the producing adapter), and ad-hoc key/value blocks (step diagnostics) rendered as a
- * {@link AttachmentType#KEY_VALUE} text block <em>with secret values masked</em> by the
- * {@link SecretMasker}. It contains no REST/Kafka/DB/gRPC-specific logic.
+ * (published with a file extension derived from their media type), and ad-hoc key/value blocks (step
+ * diagnostics) rendered as a {@link AttachmentType#KEY_VALUE} text block. No content leaves this
+ * publisher unmasked: producers are still expected to pre-redact attachment bodies, but every body is
+ * additionally passed through {@link SecretMasker#maskText(String)} as a sink-side second echelon, and
+ * key/value blocks are masked entry-by-entry. It contains no REST/Kafka/DB/gRPC-specific logic.
  */
 public final class AllureAttachmentPublisher {
 
@@ -33,7 +34,8 @@ public final class AllureAttachmentPublisher {
     }
 
     /**
-     * Publishes a core attachment verbatim, deriving the file extension from its media type.
+     * Publishes a core attachment with its body passed through the sink-side secret masker, deriving
+     * the file extension from its media type.
      *
      * @param attachment the attachment to publish (ignored when null)
      */
@@ -42,7 +44,7 @@ public final class AllureAttachmentPublisher {
             return;
         }
         String extension = AttachmentType.extensionForMediaType(attachment.mediaType());
-        lifecycle.addAttachment(attachment.name(), attachment.mediaType(), extension, attachment.content());
+        lifecycle.addAttachment(attachment.name(), attachment.mediaType(), extension, secretMasker.maskText(attachment.content()));
     }
 
     /**
@@ -99,7 +101,7 @@ public final class AllureAttachmentPublisher {
         if (content == null) {
             return;
         }
-        lifecycle.addAttachment(name, type.mediaType(), type.fileExtension(), content);
+        lifecycle.addAttachment(name, type.mediaType(), type.fileExtension(), secretMasker.maskText(content));
     }
 
     private static String render(Map<String, String> entries) {

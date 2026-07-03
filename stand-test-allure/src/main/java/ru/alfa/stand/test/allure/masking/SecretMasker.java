@@ -4,15 +4,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * Masks secret-looking values before they are published to Allure.
  *
- * <p>The net covers the key/value surfaces this adapter renders — step parameters and KEY_VALUE
- * diagnostics. It is NOT a blanket guarantee: core {@code Attachment}s (request/response payloads) are
- * published verbatim per their pre-redaction contract, and a non-sensitive entry's value is copied into
- * the result as-is. Within its surface the masker applies two checks:
+ * <p>The net covers every surface this adapter renders: step parameters and KEY_VALUE diagnostics via
+ * the key/value methods, and free-form attachment bodies via {@link #maskText(String)} — the sink-side
+ * second echelon behind the producers' pre-redaction contract. A non-sensitive entry's value is copied
+ * into the result as-is. The key/value surface applies two checks:
  * <ul>
  *   <li><em>By key</em>: the value of any entry whose key contains a known secret marker
  *   (case-insensitive) is replaced — {@code password}, {@code secret}, {@code token},
@@ -21,8 +22,14 @@ import java.util.regex.Pattern;
  *   <li><em>By value shape</em>: a value that IS a single {@code Bearer}/{@code Basic} credential token
  *   (scheme prefix + one credential-shaped token of 8+ characters) is replaced even under an innocuous
  *   key. Prose that merely starts with those words ({@code "Basic authentication required"}) does not
- *   match. Free-form values are otherwise never rewritten (that could corrupt a JSON/XML body).</li>
+ *   match.</li>
  * </ul>
+ *
+ * <p>{@link #maskText(String)} applies the same marker list to JSON scalar fields (a sensitive key's
+ * string/number/boolean/null value becomes {@code "***"}) and masks embedded {@code Bearer}/{@code
+ * Basic} credential tokens anywhere in the text. Limitations: an object or array nested under a
+ * sensitive key is not masked wholesale (though sensitive keys inside it are), and non-JSON
+ * {@code key=value} property lines are not rewritten.
  */
 public final class SecretMasker {
 
@@ -34,6 +41,12 @@ public final class SecretMasker {
 
     private static final Pattern CREDENTIAL_SHAPED_VALUE =
             Pattern.compile("^\\s*(?i:bearer|basic)\\s+[A-Za-z0-9+/=_.\\-]{8,}\\s*$");
+
+    private static final Pattern JSON_SCALAR_FIELD = Pattern.compile(
+            "\"([^\"\\\\]*+(?:\\\\.[^\"\\\\]*+)*+)\"(\\s*+:\\s*+)(\"[^\"\\\\]*+(?:\\\\.[^\"\\\\]*+)*+\"|-?+[0-9][0-9eE+.\\-]*+|true|false|null)");
+
+    private static final Pattern EMBEDDED_CREDENTIAL = Pattern.compile(
+            "(?i)\\b(bearer|basic)([ \\t]++)([A-Za-z0-9+/=_.\\-]{8,}+)");
 
     /**
      * Returns whether the given key names a sensitive value. Matching is case-insensitive and ignores
@@ -89,5 +102,57 @@ public final class SecretMasker {
         }
         entries.forEach((key, value) -> masked.put(key, mask(key, value)));
         return masked;
+    }
+
+    /**
+     * Masks secret-looking content inside a free-form attachment body: the scalar value of any JSON
+     * field whose key is {@linkplain #isSensitive(String) sensitive} becomes {@code "***"}, and any
+     * embedded {@code Bearer}/{@code Basic} credential token (8+ token characters including at least
+     * one non-letter, so prose like {@code "Basic authentication required"} is untouched) is replaced
+     * with {@code ***} while keeping the scheme word. Non-secret content passes through unchanged.
+     *
+     * @param content the attachment body (may be null)
+     * @return the masked body, or {@code content} itself when null or empty
+     */
+    public String maskText(String content) {
+        if (content == null || content.isEmpty()) {
+            return content;
+        }
+        return maskEmbeddedCredentials(maskJsonScalarFields(content));
+    }
+
+    private String maskJsonScalarFields(String content) {
+        Matcher matcher = JSON_SCALAR_FIELD.matcher(content);
+        StringBuilder masked = new StringBuilder();
+        while (matcher.find()) {
+            String replacement = isSensitive(matcher.group(1))
+                    ? "\"" + matcher.group(1) + "\"" + matcher.group(2) + "\"" + MASK + "\""
+                    : matcher.group();
+            matcher.appendReplacement(masked, Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(masked);
+        return masked.toString();
+    }
+
+    private String maskEmbeddedCredentials(String content) {
+        Matcher matcher = EMBEDDED_CREDENTIAL.matcher(content);
+        StringBuilder masked = new StringBuilder();
+        while (matcher.find()) {
+            String replacement = looksLikeCredentialToken(matcher.group(3))
+                    ? matcher.group(1) + matcher.group(2) + MASK
+                    : matcher.group();
+            matcher.appendReplacement(masked, Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(masked);
+        return masked.toString();
+    }
+
+    private static boolean looksLikeCredentialToken(String token) {
+        for (int i = 0; i < token.length(); i++) {
+            if (!Character.isLetter(token.charAt(i))) {
+                return true;
+            }
+        }
+        return false;
     }
 }

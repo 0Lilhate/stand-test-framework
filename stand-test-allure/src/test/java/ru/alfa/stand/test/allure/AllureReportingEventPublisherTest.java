@@ -204,6 +204,19 @@ class AllureReportingEventPublisherTest {
     }
 
     @Test
+    @DisplayName("a secret-bearing core attachment body is masked before reaching the report")
+    void attachmentBody_isMaskedEndToEnd() {
+        publisher.publish(stepStarted("s1", "grpc.unary"));
+        publisher.publish(stepFinished("s1", "grpc.unary", StepStatus.SUCCESS, null, Map.of(),
+                List.of(new Attachment("grpc-response", "application/json", "{\"accessToken\":\"abc12345\"}"))));
+
+        assertThat(lifecycle.attachments()).singleElement().satisfies(attachment -> {
+            assertThat(attachment.content()).contains("\"accessToken\":\"***\"");
+            assertThat(attachment.content()).doesNotContain("abc12345");
+        });
+    }
+
+    @Test
     @DisplayName("an attachment publish failure does not hide the original failure or escape")
     void attachmentFailure_isSwallowed() {
         lifecycle.throwOnAddAttachment();

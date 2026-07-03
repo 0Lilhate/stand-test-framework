@@ -17,12 +17,32 @@ class AllureAttachmentPublisherTest {
     private final AllureAttachmentPublisher publisher = new AllureAttachmentPublisher(lifecycle, new SecretMasker());
 
     @Test
-    @DisplayName("a core attachment is published verbatim with an extension derived from its media type")
+    @DisplayName("a non-secret core attachment is published unchanged with an extension derived from its media type")
     void publish_coreAttachment_derivesExtension() {
         publisher.publish(new Attachment("request", "application/json", "{\"a\":1}"));
 
         assertThat(lifecycle.attachments()).containsExactly(
                 new RecordedAttachment("request", "application/json", "json", "{\"a\":1}"));
+    }
+
+    @Test
+    @DisplayName("a sensitive JSON field in a core attachment body is masked at the sink")
+    void publish_sensitiveJsonField_isMaskedAtSink() {
+        publisher.publish(new Attachment("grpc-response", "application/json", "{\"token\":\"t-1\",\"status\":\"OK\"}"));
+
+        assertThat(lifecycle.attachments()).containsExactly(
+                new RecordedAttachment("grpc-response", "application/json", "json", "{\"token\":\"***\",\"status\":\"OK\"}"));
+    }
+
+    @Test
+    @DisplayName("an embedded Bearer credential in a core attachment body is masked at the sink")
+    void publish_embeddedBearer_isMasked() {
+        publisher.publish(new Attachment("trace", "text/plain", "sent Bearer sk-abc123def456 upstream"));
+
+        assertThat(lifecycle.attachments()).singleElement().satisfies(attachment -> {
+            assertThat(attachment.content()).contains("Bearer ***");
+            assertThat(attachment.content()).doesNotContain("sk-abc123def456");
+        });
     }
 
     @Test
@@ -50,6 +70,17 @@ class AllureAttachmentPublisherTest {
         publisher.publishText("note", null);
 
         assertThat(lifecycle.attachments()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("text and json helpers also mask secret content at the sink")
+    void publishText_andJson_maskSecrets() {
+        publisher.publishText("note", "auth was Basic dXNlcjpwYXNzd29yZA==");
+        publisher.publishJson("body", "{\"apiKey\":\"k-123\"}");
+
+        assertThat(lifecycle.attachments()).satisfiesExactly(
+                note -> assertThat(note.content()).contains("Basic ***").doesNotContain("dXNlcjpwYXNzd29yZA=="),
+                body -> assertThat(body.content()).contains("\"apiKey\":\"***\"").doesNotContain("k-123"));
     }
 
     @Test

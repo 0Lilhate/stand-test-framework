@@ -15,7 +15,9 @@ import java.util.Objects;
  *
  * <p><strong>Security.</strong> An {@code Attachment} must already be redacted by the producing adapter:
  * resolved secrets, credentials and secret-bind values must never reach this type. The contract is
- * "carry pre-sanitised evidence"; it performs no masking itself.
+ * "carry pre-sanitised evidence"; it performs no masking itself. The Allure sink additionally applies a
+ * best-effort secret mask to attachment bodies before publishing (defence-in-depth), but that second
+ * echelon never relaxes this contract.
  *
  * @param name a short, non-blank human-readable name (for example {@code request} or {@code diagnostics})
  * @param mediaType the non-blank media type describing the content (for example {@code application/json})
