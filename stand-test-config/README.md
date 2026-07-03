@@ -20,8 +20,12 @@ to the adapter modules (rest/kafka/db/grpc), junit, allure, or the Spring starte
   - if the system property `stand.test.environments.config` is set, its value is a **filesystem path that
     must exist** (a missing explicit path is a `StandTestException`);
   - otherwise the classpath resource `stand-test-environments.yml` (or `.yaml`);
-  - if neither is present → an **empty registry** (behaviour unchanged; the strict validator still rejects
-    unknown environments — configure one to run against a stand).
+  - otherwise the familiar **`application.yml`** (or `.yaml`) — its `stand.test.environments` section
+    (nested `stand: test: environments:` or dotted keys), the exact schema the Spring Boot starter binds,
+    so one configuration style serves both worlds; an `application.yml` without that section contributes
+    nothing;
+  - if no source is present → an **empty registry** (behaviour unchanged; the strict validator still
+    rejects unknown environments — configure one to run against a stand).
 - `EnvironmentConfig` — the canonical `Map → EnvironmentRegistry` mapper (fail-closed: unknown keys,
   ill-typed values and invalid references are `StandTestException` with a dotted location).
 - `SafeYaml` — SnakeYAML `SafeConstructor` + conservative alias/nesting limits (anti-YAML-bomb).
@@ -57,12 +61,30 @@ environments:
 No code is needed: `StandTestExtension` discovers `FileEnvironmentRegistry` via `ServiceLoader`. Point the
 loader at another file with `-Dstand.test.environments.config=/path/to/envs.yml`.
 
+## Placeholders: `${ENV_VAR}` and `${ENV_VAR:default}`
+
+Every `*-ref` field accepts three spellings — a bare env-var `NAME`, `${NAME}`, and `${NAME:default}`.
+The reference is stored verbatim and resolved by the adapters at the point of use; with
+`${NAME:default}` the inline default applies only when the variable is **missing** (a variable set to an
+empty value wins, matching Spring's semantics):
+
+```yaml
+    services:
+      client-service:
+        base-url-ref: ${CLIENT_SERVICE_URL:http://localhost:8080}   # env var wins when set
+```
+
+**Trade-off, stated plainly:** an inline default IS a value in the repository. Use defaults for
+non-secret DEV endpoints; keep credentials as pure references — a default on `password-ref` puts a
+password into VCS, and nothing will stop you but this sentence.
+
 ## Security: references, never values (plan §9)
 
-Every address/secret field is a `*-ref` — the **name of an environment variable**, not the value. The
-file never contains URLs, JDBC connection strings, tokens or passwords. The adapters resolve those
-references at run time (`System.getenv`), so secrets stay out of source and out of the config file. Field
-names are kebab-case (canonical); camelCase is also accepted.
+Every address/secret field is a `*-ref` — the **name of an environment variable**, not the value (bare
+URLs, JDBC connection strings, tokens and `Bearer`/`Basic` values are rejected fail-closed). The adapters
+resolve references at run time (`System.getenv`), so secrets stay out of source and out of the config
+file — unless you opt into an inline `${NAME:default}` (see above). Field names are kebab-case
+(canonical); camelCase is also accepted.
 
 ## Relationship to the Spring Boot starter
 

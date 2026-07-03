@@ -3,10 +3,11 @@
 # src/test/resources. It shows the FULL configuration surface: services, datasources, topics,
 # grpc-targets and the kafka-cluster of one logical environment.
 #
-# Every *-ref is the NAME of an environment variable (never a URL, address or secret value) —
-# a value-shaped ref is rejected fail-closed. The example build pins those variables to the
-# in-process doubles' fixed addresses (see build.gradle.kts: CLIENT_SERVICE_URL,
-# MAIN_DB_URL/USER/PASSWORD, GRPC_TARGET, KAFKA_BOOTSTRAP_SERVERS).
+# Every *-ref names an environment variable (a bare NAME or the familiar ${NAME}/${NAME:default}
+# placeholder) — a bare URL/secret value is rejected fail-closed. An inline default is a conscious
+# trade-off: it lives in the repository, so prefer it for non-secret DEV endpoints only. The example
+# build pins the variables to the in-process doubles' fixed addresses (see build.gradle.kts:
+# CLIENT_SERVICE_URL, MAIN_DB_URL/USER/PASSWORD, GRPC_TARGET, KAFKA_BOOTSTRAP_SERVERS).
 environments:
   ift:
     services:
@@ -36,4 +37,6 @@ environments:
           source: METADATA
           name: x-correlation-id
     kafka-cluster:
-      bootstrap-servers-ref: KAFKA_BOOTSTRAP_SERVERS
+      # Placeholder spelling with an inline default: the env var wins when set (the build sets it),
+      # otherwise the local-broker default applies.
+      bootstrap-servers-ref: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}

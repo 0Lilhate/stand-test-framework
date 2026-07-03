@@ -2,11 +2,13 @@ package ru.alfa.stand.test.db;
 
 import java.util.Objects;
 import java.util.function.UnaryOperator;
+import ru.alfa.stand.test.core.environment.SecretReferences;
 import ru.alfa.stand.test.core.exception.StandTestException;
 
 /**
- * Default {@link ReferenceResolver}: treats a reference strictly as the name of an environment variable
- * and resolves it indirectly.
+ * Default {@link ReferenceResolver}: treats a reference as the name of an environment variable and
+ * resolves it indirectly; the {@code ${NAME}}/{@code ${NAME:default}} placeholder spellings are
+ * supported via {@link SecretReferences#resolve}.
  *
  * <p>This keeps JDBC URLs and credentials out of source (plan §9 / {@code DatasourceDefinition}: the
  * registry stores references, never values). An <em>unset</em> reference (the lookup returns null) is a
@@ -40,7 +42,7 @@ public final class EnvironmentReferenceResolver implements ReferenceResolver {
         if (reference == null || reference.isBlank()) {
             throw new StandTestException("Datasource reference must not be blank");
         }
-        String resolved = this.lookup.apply(reference);
+        String resolved = SecretReferences.resolve(reference, this.lookup);
         if (resolved == null) {
             throw new StandTestException("Datasource reference '" + reference + "' did not resolve (environment variable not set)");
         }

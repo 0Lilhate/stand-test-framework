@@ -60,4 +60,77 @@ class YamlEnvironmentConfigLoaderTest {
         Files.writeString(file, "   \n", StandardCharsets.UTF_8);
         assertThat(loader(key -> file.toString(), NO_RESOURCES).load().environment("ift")).isEmpty();
     }
+
+    @Test
+    @DisplayName("falls back to application.yml and reads the nested stand.test.environments section")
+    void readsApplicationYamlNestedSection(@TempDir Path dir) throws Exception {
+        Files.writeString(dir.resolve("application.yml"), """
+                spring:
+                  application:
+                    name: demo
+                stand:
+                  test:
+                    environments:
+                      dev:
+                        services:
+                          svc:
+                            base-url-ref: ${SVC_URL:http://127.0.0.1:8080}
+                """, StandardCharsets.UTF_8);
+
+        EnvironmentRegistry registry = loader(key -> null, directoryClassLoader(dir)).load();
+
+        assertThat(registry.environment("dev").orElseThrow().service("svc").orElseThrow().baseUrlRef())
+                .isEqualTo("${SVC_URL:http://127.0.0.1:8080}");
+    }
+
+    @Test
+    @DisplayName("application.yml with a dotted stand.test.environments key is read too")
+    void readsApplicationYamlDottedSection(@TempDir Path dir) throws Exception {
+        Files.writeString(dir.resolve("application.yml"), """
+                stand.test.environments:
+                  dev:
+                    services:
+                      svc: { base-url-ref: SVC_URL }
+                """, StandardCharsets.UTF_8);
+
+        EnvironmentRegistry registry = loader(key -> null, directoryClassLoader(dir)).load();
+
+        assertThat(registry.environment("dev")).isPresent();
+    }
+
+    @Test
+    @DisplayName("an application.yml without a stand.test.environments section contributes nothing (empty registry)")
+    void applicationYamlWithoutSectionEmpty(@TempDir Path dir) throws Exception {
+        Files.writeString(dir.resolve("application.yml"), "spring:\n  application:\n    name: demo\n", StandardCharsets.UTF_8);
+
+        assertThat(loader(key -> null, directoryClassLoader(dir)).load().environment("dev")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("stand-test-environments.yml wins over application.yml when both are on the classpath")
+    void dedicatedFileWinsOverApplicationYaml(@TempDir Path dir) throws Exception {
+        Files.writeString(dir.resolve("stand-test-environments.yml"), """
+                environments:
+                  from-dedicated:
+                    services:
+                      svc: { base-url-ref: SVC_URL }
+                """, StandardCharsets.UTF_8);
+        Files.writeString(dir.resolve("application.yml"), """
+                stand:
+                  test:
+                    environments:
+                      from-application:
+                        services:
+                          svc: { base-url-ref: SVC_URL }
+                """, StandardCharsets.UTF_8);
+
+        EnvironmentRegistry registry = loader(key -> null, directoryClassLoader(dir)).load();
+
+        assertThat(registry.environment("from-dedicated")).isPresent();
+        assertThat(registry.environment("from-application")).isEmpty();
+    }
+
+    private static ClassLoader directoryClassLoader(Path dir) throws Exception {
+        return new java.net.URLClassLoader(new java.net.URL[] {dir.toUri().toURL()}, null);
+    }
 }

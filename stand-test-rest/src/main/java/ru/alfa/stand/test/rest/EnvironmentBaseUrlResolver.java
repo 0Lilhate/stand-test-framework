@@ -2,11 +2,14 @@ package ru.alfa.stand.test.rest;
 
 import java.util.Objects;
 import java.util.function.UnaryOperator;
+import ru.alfa.stand.test.core.environment.SecretReferences;
 import ru.alfa.stand.test.core.exception.StandTestException;
 
 /**
- * Default {@link BaseUrlResolver}: treats {@code baseUrlRef} strictly as a reference (the name of an
- * environment variable holding the base URL) and resolves it indirectly.
+ * Default {@link BaseUrlResolver}: treats {@code baseUrlRef} as a reference (the name of an
+ * environment variable holding the base URL) and resolves it indirectly; the
+ * {@code ${NAME}}/{@code ${NAME:default}} placeholder spellings are supported via
+ * {@link SecretReferences#resolve}.
  *
  * <p>This keeps stand URLs out of source (plan §9 / {@code ServiceEndpointDefinition}: the registry
  * stores a reference, never a hardcoded URL). Tests that need a literal URL inject their own
@@ -38,7 +41,7 @@ public final class EnvironmentBaseUrlResolver implements BaseUrlResolver {
         if (baseUrlRef == null || baseUrlRef.isBlank()) {
             throw new StandTestException("baseUrlRef must not be blank");
         }
-        String resolved = this.lookup.apply(baseUrlRef);
+        String resolved = SecretReferences.resolve(baseUrlRef, this.lookup);
         if (resolved == null || resolved.isBlank()) {
             throw new StandTestException("Base URL reference '" + baseUrlRef + "' did not resolve (environment variable not set)");
         }

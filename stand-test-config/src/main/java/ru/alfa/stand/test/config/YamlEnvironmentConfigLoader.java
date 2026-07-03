@@ -15,11 +15,16 @@ import ru.alfa.stand.test.core.exception.StandTestException;
 /**
  * Loads an {@link EnvironmentRegistry} from a declarative YAML file.
  *
- * <p>Source resolution: if the system property {@value #CONFIG_PROPERTY} is set, its value is a filesystem
- * path that <strong>must</strong> exist (a missing explicit path is a {@link StandTestException}).
- * Otherwise the classpath resource {@value #DEFAULT_RESOURCE} (or {@value #DEFAULT_RESOURCE_ALT}) is used;
- * when neither is present the result is an empty registry (unchanged behaviour). Malformed YAML, unknown
- * keys and invalid references are reported as config-class {@link StandTestException}.
+ * <p>Source resolution, in order: if the system property {@value #CONFIG_PROPERTY} is set, its value is a
+ * filesystem path that <strong>must</strong> exist (a missing explicit path is a
+ * {@link StandTestException}). Otherwise the classpath resource {@value #DEFAULT_RESOURCE} (or
+ * {@value #DEFAULT_RESOURCE_ALT}) is used. Otherwise the familiar {@value #APPLICATION_RESOURCE} (or
+ * {@value #APPLICATION_RESOURCE_ALT}) is consulted: its {@code stand.test.environments} section — either
+ * nested ({@code stand: test: environments:}) or with dotted keys — is read with the exact same schema
+ * the Spring Boot starter binds, so one configuration style serves both worlds; an application.yml
+ * without that section contributes nothing. When no source is present the result is an empty registry
+ * (unchanged behaviour). Malformed YAML, unknown keys and invalid references are reported as
+ * config-class {@link StandTestException}.
  */
 public final class YamlEnvironmentConfigLoader {
 
@@ -31,6 +36,12 @@ public final class YamlEnvironmentConfigLoader {
 
     /** Alternative default classpath resource name ({@code .yaml} extension). */
     public static final String DEFAULT_RESOURCE_ALT = "stand-test-environments.yaml";
+
+    /** Familiar application-config resource whose {@code stand.test.environments} section is read. */
+    public static final String APPLICATION_RESOURCE = "application.yml";
+
+    /** Alternative application-config resource name ({@code .yaml} extension). */
+    public static final String APPLICATION_RESOURCE_ALT = "application.yaml";
 
     private final UnaryOperator<String> systemProperty;
     private final ClassLoader classLoader;
@@ -66,13 +77,54 @@ public final class YamlEnvironmentConfigLoader {
         } else {
             content = readClasspath();
             if (content == null) {
-                return new InMemoryEnvironmentRegistry(Map.of());
+                return loadFromApplicationYaml();
             }
         }
         if (content.isBlank()) {
             return new InMemoryEnvironmentRegistry(Map.of());
         }
         return EnvironmentConfig.toRegistry(SafeYaml.load(content));
+    }
+
+    private EnvironmentRegistry loadFromApplicationYaml() {
+        String content = readResource(APPLICATION_RESOURCE);
+        if (content == null) {
+            content = readResource(APPLICATION_RESOURCE_ALT);
+        }
+        if (content == null || content.isBlank()) {
+            return new InMemoryEnvironmentRegistry(Map.of());
+        }
+        Object environments = standTestEnvironments(SafeYaml.load(content));
+        if (environments == null) {
+            // The application.yml belongs to the app; without a stand.test.environments section it
+            // contributes nothing — same fail-safe outcome as having no config file at all.
+            return new InMemoryEnvironmentRegistry(Map.of());
+        }
+        return EnvironmentConfig.toRegistry(Map.of("environments", environments));
+    }
+
+    /**
+     * Extracts the {@code stand.test.environments} subtree, accepting both the nested spelling
+     * ({@code stand: test: environments:}) and dotted keys at any join point
+     * ({@code stand.test: environments:}, {@code stand.test.environments:}) — mirroring how Spring's
+     * relaxed binding treats the same document.
+     */
+    private static Object standTestEnvironments(Object root) {
+        if (!(root instanceof Map<?, ?> map)) {
+            return null;
+        }
+        Object dotted = map.get("stand.test.environments");
+        if (dotted != null) {
+            return dotted;
+        }
+        Object standTest = map.get("stand.test");
+        if (standTest == null && map.get("stand") instanceof Map<?, ?> stand) {
+            standTest = stand.get("test");
+        }
+        if (standTest instanceof Map<?, ?> standTestMap) {
+            return standTestMap.get("environments");
+        }
+        return null;
     }
 
     private static String readFile(String path) {

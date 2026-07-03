@@ -18,6 +18,42 @@ class SecretReferencesTest {
     }
 
     @Test
+    @DisplayName("placeholder spellings ${NAME} and ${NAME:default} pass the shape guard verbatim")
+    void placeholderShapesPass() {
+        assertThat(SecretReferences.requireReferenceShape("${MAIN_DB_URL}", "url-ref", "env.ift")).isEqualTo("${MAIN_DB_URL}");
+        assertThat(SecretReferences.requireReferenceShape("${MAIN_DB_URL:jdbc:h2:mem:example}", "url-ref", "env.ift")).isEqualTo("${MAIN_DB_URL:jdbc:h2:mem:example}");
+        assertThat(SecretReferences.requireReferenceShape("${CLIENT_SERVICE_URL:http://127.0.0.1:18080}", "base-url-ref", "env.ift")).isEqualTo("${CLIENT_SERVICE_URL:http://127.0.0.1:18080}");
+    }
+
+    @Test
+    @DisplayName("a malformed placeholder is rejected with a syntax hint")
+    void malformedPlaceholderRejected() {
+        assertThatThrownBy(() -> SecretReferences.requireReferenceShape("${ MAIN DB }", "url-ref", "env.ift"))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("malformed placeholder");
+        assertThatThrownBy(() -> SecretReferences.requireReferenceShape("${}", "url-ref", "env.ift"))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("malformed placeholder");
+    }
+
+    @Test
+    @DisplayName("resolve honours bare names, ${NAME} and ${NAME:default} — the default applies only when the variable is missing")
+    void resolvePlaceholders() {
+        java.util.Map<String, String> env = java.util.Map.of("SET_VAR", "from-env", "EMPTY_VAR", "");
+
+        assertThat(SecretReferences.resolve("SET_VAR", env::get)).isEqualTo("from-env");
+        assertThat(SecretReferences.resolve("${SET_VAR}", env::get)).isEqualTo("from-env");
+        assertThat(SecretReferences.resolve("${SET_VAR:fallback}", env::get)).isEqualTo("from-env");
+        assertThat(SecretReferences.resolve("${MISSING_VAR:fallback}", env::get)).isEqualTo("fallback");
+        assertThat(SecretReferences.resolve("${MISSING_VAR:jdbc:h2:mem:x}", env::get)).isEqualTo("jdbc:h2:mem:x");
+        assertThat(SecretReferences.resolve("${MISSING_VAR}", env::get)).isNull();
+        assertThat(SecretReferences.resolve("MISSING_VAR", env::get)).isNull();
+        // A variable SET to an empty value wins over the default (Spring semantics) — an intentionally
+        // empty password must not be silently replaced.
+        assertThat(SecretReferences.resolve("${EMPTY_VAR:fallback}", env::get)).isEmpty();
+    }
+
+    @Test
     @DisplayName("values that are obviously resolved endpoints or inline secrets are rejected fail-closed")
     void valueShapedInputRejected() {
         assertThatThrownBy(() -> SecretReferences.requireReferenceShape("jdbc:postgresql://db:5432/app", "url-ref", "env.ift"))

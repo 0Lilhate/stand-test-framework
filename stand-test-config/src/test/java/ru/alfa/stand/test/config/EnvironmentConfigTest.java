@@ -184,6 +184,24 @@ class EnvironmentConfigTest {
     }
 
     @Test
+    @DisplayName("${NAME} and ${NAME:default} placeholder refs are accepted and stored verbatim (resolved at the point of use)")
+    void placeholderReferencesAccepted() {
+        EnvironmentRegistry registry = parse("""
+                environments:
+                  ift:
+                    datasources:
+                      db:
+                        url-ref: ${MAIN_DB_URL:jdbc:h2:mem:example}
+                        user-ref: ${MAIN_DB_USER}
+                        password-ref: MAIN_DB_PASSWORD
+                """);
+
+        DatasourceDefinition datasource = registry.environment("ift").orElseThrow().datasource("db").orElseThrow();
+        assertThat(datasource.urlRef()).isEqualTo("${MAIN_DB_URL:jdbc:h2:mem:example}");
+        assertThat(datasource.userRef()).isEqualTo("${MAIN_DB_USER}");
+    }
+
+    @Test
     @DisplayName("correlation and topic names are NOT ref fields — header-like values stay legitimate")
     void nonRefNamesUnaffectedByReferenceGuard() {
         EnvironmentRegistry registry = parse("""

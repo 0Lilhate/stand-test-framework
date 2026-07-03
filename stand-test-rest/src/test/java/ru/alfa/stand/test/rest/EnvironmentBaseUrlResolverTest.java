@@ -20,6 +20,20 @@ class EnvironmentBaseUrlResolverTest {
     }
 
     @Test
+    @DisplayName("the ${NAME:default} placeholder spelling resolves the variable and falls back to the inline default")
+    void placeholderWithDefaultResolves() {
+        UnaryOperator<String> lookup = Map.of("CLIENT_SERVICE_URL", "http://stand.local:8080")::get;
+        BaseUrlResolver resolver = new EnvironmentBaseUrlResolver(lookup);
+
+        assertThat(resolver.resolve("${CLIENT_SERVICE_URL}")).isEqualTo("http://stand.local:8080");
+        assertThat(resolver.resolve("${CLIENT_SERVICE_URL:http://fallback:1}")).isEqualTo("http://stand.local:8080");
+        assertThat(resolver.resolve("${MISSING_URL:http://127.0.0.1:18080}")).isEqualTo("http://127.0.0.1:18080");
+        assertThatThrownBy(() -> resolver.resolve("${MISSING_URL}"))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("did not resolve");
+    }
+
+    @Test
     @DisplayName("a blank reference is rejected")
     void blankReferenceRejected() {
         assertThatThrownBy(() -> new EnvironmentBaseUrlResolver().resolve(" ")).isInstanceOf(StandTestException.class);
