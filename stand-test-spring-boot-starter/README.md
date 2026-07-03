@@ -23,6 +23,7 @@ configuration is gated by `stand.test.enabled` (default `true`).
 | `RestStepExecutor` | `stand-test-rest` on classpath | collected into the runner |
 | `KafkaStepExecutor` | `stand-test-kafka` on classpath | collected into the runner |
 | `DbStepExecutor` | `stand-test-db` on classpath | collected into the runner |
+| `GrpcStepExecutor` | `stand-test-grpc` on classpath | collected into the runner |
 | `ReportingEventPublisher` | Allure on classpath & `reporting.allure.enabled` | else the no-op publisher |
 | `ScenarioRunner` | always | `DefaultScenarioRunner` over all `StepExecutor` beans |
 | `StandClient` | always | `DefaultStandClient` facade |
@@ -56,7 +57,7 @@ testImplementation("ru.alfa.stand.test:stand-test-await:<version>")    // → Aw
 
 Each corresponding bean appears **only** when its module is on the classpath (`@ConditionalOnClass`); a
 module you don't add simply contributes nothing. With no adapters at all the `StandClient`/runner still
-wire, just with an empty executor list. gRPC is **not** wired yet (the adapter is still a skeleton).
+wire, just with an empty executor list.
 
 ## Example `application-test.yml`
 
@@ -133,7 +134,7 @@ ReportingEventPublisher reportingEventPublisher() {
 | REST steps | `stand-test-rest` |
 | Kafka steps | `stand-test-kafka` |
 | DB steps | `stand-test-db` |
-| gRPC steps | `stand-test-grpc` *(not wired yet — adapter is a skeleton)* |
+| gRPC steps | `stand-test-grpc` |
 | Allure reporting | `stand-test-allure` |
 | `Awaiter` / `AwaitPolicy` beans | `stand-test-await` |
 
@@ -159,6 +160,6 @@ module graph (docs/arch §4/§5).
 - **No beans appear at all** — check `stand.test.enabled` is not `false`, and that the auto-configuration
   is on the classpath (`META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`).
 - **A step type has "no registered executor"** — the matching adapter module is not on the classpath
-  (or was excluded). Add `stand-test-rest`/`-kafka`/`-db`.
+  (or was excluded). Add `stand-test-rest`/`-kafka`/`-db`/`-grpc`.
 - **Reporting doesn't reach Allure** — ensure `stand-test-allure` is present and
   `stand.test.reporting.allure.enabled` is not `false`; otherwise the no-op publisher is used.
