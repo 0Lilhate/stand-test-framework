@@ -41,6 +41,11 @@ subprojects {
     toolchain {
       languageVersion.set(JavaLanguageVersion.of(ver("java").toInt()))
     }
+    // The SDK is consumed by other teams: publish a -sources.jar for IDE navigation (picked up
+    // automatically by the `maven` publication via components["java"]). A -javadoc.jar is deliberately
+    // deferred — the javadoc tool run is a separate doclint risk on the JDK-24 toolchain, and sources
+    // cover the internal-consumer need.
+    withSourcesJar()
   }
 
   tasks.withType<JavaCompile>().configureEach {
@@ -131,9 +136,13 @@ subprojects {
 
   plugins.withId("maven-publish") {
     extensions.configure<PublishingExtension> {
-      publications {
-        create<MavenPublication>("maven") {
-          from(components["java"])
+      // stand-test-example is a test-only showcase and is not published — no publication is created
+      // for it at all (mirrors how stand-test-bom opts out of the whole subprojects block).
+      if (name != "stand-test-example") {
+        publications {
+          create<MavenPublication>("maven") {
+            from(components["java"])
+          }
         }
       }
       // No publishing repository is configured yet — the internal Nexus/Artifactory URL is

@@ -92,8 +92,8 @@ YAML DSL ────────────────┘                    
 ### Module graph (`A → B` = A depends on B; keep this acyclic, core is the only sink)
 
 - `await`, `junit`, `rest`, `kafka`, `db`, `grpc` → `core` (and the adapters + junit also → `await`)
-- `allure` → `core`; `scenario-yaml` → **core only** (adapters resolved via SPI at runtime, no compile edges); `ai-schema` → **core only** (no runtime/adapter deps, no `scenario-yaml`)
-- `spring-boot-starter` → the runtime modules it wires (never the reverse); `bom` is the version platform, outside the compile graph
+- `allure` → `core`; `scenario-yaml` → **core only** (adapters resolved via SPI at runtime, no compile edges); `ai-schema` → **core only** (no runtime/adapter deps, no `scenario-yaml`); `config` → **core only** (+ SnakeYAML; ships the `FileEnvironmentRegistry` SPI provider that loads `stand-test-environments.yml`)
+- `spring-boot-starter` → the runtime modules it wires as `compileOnly` optionals (never the reverse); `bom` is the `java-platform` outside the compile graph — it constrains every published module plus the curated third-party versions (only external consumers import it)
 - **Adapter modules must not depend on each other.** Each module's `build.gradle.kts` keeps its
   `Planned internal dependencies` as commented stubs that must match this target graph.
 
@@ -108,31 +108,41 @@ YAML DSL ────────────────┘                    
   must never silently substitute for a thrown failure.
 - **`correlationId` is SDK-owned** and injected outbound (REST header / Kafka key / gRPC metadata);
   capturing it from a response is a fallback only.
-- **`ForbiddenOperation` is the single source of truth** for guardrails (the validator and the future
-  AI schema both derive from it). **`EnvironmentRegistry`** resolves logical aliases (service/topic/
-  datasource/gRPC) to endpoints + **secret references** (never secret values), and is the whitelist
-  enforcement point.
+- **`ForbiddenOperation` is the single source of truth** for guardrails: the runtime
+  `DefaultScenarioValidator` and the `stand-test-ai-schema` JSON Schema both derive from it (a
+  cross-check test pins the schema's rules table to the enum), and the runtime validator re-enforces
+  the schema's value-level guardrails (secret headers, SQL sleep functions, timeout bounds) so a
+  document that skipped the schema pass meets the same net. **`EnvironmentRegistry`** resolves logical
+  aliases (service/topic/datasource/gRPC) to endpoints + **secret references** (never secret values),
+  and is the whitelist enforcement point.
 - Value types are immutable `record`s with defensive copies (`List`/`Set`/`Map.copyOf`).
 
 ## Current state & where to work
 
-**Implemented** (through Iteration 6): **`stand-test-core`** (models, value objects, contracts, SPI,
-unit tests — plus the `core.validation` SQL classifier/`SqlSpanScanner` and the `core.event` reporting
-events), **`stand-test-await`**, **`stand-test-junit`**, **`stand-test-rest`**, **`stand-test-kafka`**,
-and **`stand-test-db`** (the last shipped with `docs/arch/stand-test-db-decisions.md` and a hardening
-pass tracked in `docs/arch/stand-test-db-remediation-plan.md`). Still **skeletons** (only
-`package-info.java`, no impl): **`grpc`**, **`allure`**, **`scenario-yaml`**, **`ai-schema`**,
-**`spring-boot-starter`**; **`bom`** is the `java-platform` (no source).
+**All modules are implemented** (the plan's iterations 0–10 plus the follow-on modules):
+**`stand-test-core`** (models, value objects, contracts, SPI, the `core.validation` SQL
+classifier/`SqlSpanScanner`, the pre-flight guardrail validator and the `core.event` reporting events),
+**`stand-test-await`**, **`stand-test-junit`**, **`stand-test-rest`**, **`stand-test-kafka`**,
+**`stand-test-db`** (design record in `docs/arch/stand-test-db-decisions.md`, hardening in
+`docs/arch/stand-test-db-remediation-plan.md`), **`stand-test-grpc`** (unary via server reflection +
+`DynamicMessage`), **`stand-test-allure`**, **`stand-test-scenario-yaml`** (two surfaces: given/then
+YAML and the AI steps/type format), **`stand-test-ai-schema`** (JSON Schema + generation rules),
+**`stand-test-spring-boot-starter`** (Boot-3 auto-configuration, adapters as `compileOnly` optionals)
+and **`stand-test-config`** (file-based `EnvironmentRegistry` SPI provider). **`stand-test-example`**
+is a test-only showcase (offline doubles, not published); **`stand-test-bom`** is the `java-platform`
+carrying constraints for every published module.
 
-Next up is **`stand-test-allure`** (Iteration 7) — see `docs/arch/stand-test-allure-implementation-plan.md`,
-which starts with a core prerequisite (the §8.9 `Attachment` contract) before the module itself. Follow
-the plan's iteration order (§7: core → await → junit → rest → kafka → db → allure → examples → YAML
-design → AI guardrails); do not start a module before its dependencies are stable, and do not pull
-adapter/IO, Spring, Allure, YAML or business logic into `stand-test-core`.
+There is no remote publishing repository yet (`publishToMavenLocal` works; the internal
+Nexus/Artifactory URL is deferred). Current work is remediation from the 2026-07 full-library review
+(remaining minors: Allure value-masking scope, `ArmedConsumer` buffering, `Instant.now()` in
+`ScenarioContext.start`, `correlationId` in `ScenarioResult`) and publishing setup. The standing rules
+still apply: do not start work that destabilises a module's dependencies, and do not pull adapter/IO,
+Spring, Allure, YAML or business logic into `stand-test-core`.
 
 ## Project rules
 
 `.claude/rules/` defines standards: `common/` (language-agnostic) plus `java/` and `kotlin/`
 (language-specific override common). Highlights already encoded above: AssertJ over JUnit assertions,
-immutability/defensive copies, records for value types, 80% coverage target (JaCoCo not yet wired).
+immutability/defensive copies, records for value types, and the 80% coverage target — enforced as a
+JaCoCo INSTRUCTION gate wired into `check` by the root `subprojects` block.
 `.claude/skills/`, `.claude/commands/` and `.claude/agents/` provide deeper task-specific tooling.
