@@ -133,11 +133,11 @@ is a test-only showcase (offline doubles, not published); **`stand-test-bom`** i
 carrying constraints for every published module.
 
 There is no remote publishing repository yet (`publishToMavenLocal` works; the internal
-Nexus/Artifactory URL is deferred). Current work is remediation from the 2026-07 full-library review
-(remaining minors: Allure value-masking scope, `ArmedConsumer` buffering, `Instant.now()` in
-`ScenarioContext.start`, `correlationId` in `ScenarioResult`) and publishing setup. The standing rules
-still apply: do not start work that destabilises a module's dependencies, and do not pull adapter/IO,
-Spring, Allure, YAML or business logic into `stand-test-core`.
+Nexus/Artifactory URL is deferred). Remediation from the 2026-07 full-library review is **complete**
+(the critical, all 9 majors and all deferred minors are fixed and pinned by tests — see the memory note
+`full-library-review-2026-07` for the item-by-item record). Current work is publishing setup. The
+standing rules still apply: do not start work that destabilises a module's dependencies, and do not pull
+adapter/IO, Spring, Allure, YAML or business logic into `stand-test-core`.
 
 ## Project rules
 
