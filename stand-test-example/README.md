@@ -94,8 +94,10 @@ Two differences from the manual-runner examples above:
   classpath — a second (hand-written) provider next to `stand-test-config` fails loudly.
 - **Fixed REST port** — the double must therefore listen on a stable address. `build.gradle.kts` sets
   `CLIENT_SERVICE_URL=http://127.0.0.1:18080` (override in CI with `-PexampleRestPort=NNNN` to avoid
-  collisions), and `ExampleDoublesExtension` starts the HTTP double + H2 schema once per class, binding
-  the port parsed from that env var.
+  collisions), and `ExampleDoublesExtension` starts the HTTP double **once per run** (an engine-root
+  store `CloseableResource`, matching the engine-root scope of the cached `StandClient`) plus the
+  idempotent H2 schema bootstrap per class — so any number of `@StandTest` classes can share the cached
+  client safely.
 
 ### The Kafka example (requires a broker)
 
