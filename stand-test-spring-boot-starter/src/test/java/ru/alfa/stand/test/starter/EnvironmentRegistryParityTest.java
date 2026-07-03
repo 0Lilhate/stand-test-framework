@@ -53,6 +53,12 @@ class EnvironmentRegistryParityTest {
                         correlation:
                           source: KEY
                           name: corrId
+                      audit:
+                        name: ift.audit.v1
+                        cluster: audit
+                    kafka-clusters:
+                      audit:
+                        bootstrap-servers-ref: AUDIT_BOOTSTRAP
                     datasources:
                       main-db:
                         url-ref: MAIN_DB_URL
@@ -114,6 +120,15 @@ class EnvironmentRegistryParityTest {
         topic.setName("ift.events.v1");
         topic.setCorrelation(correlation(CorrelationSource.KEY, "corrId"));
         ift.getTopics().put("events", topic);
+
+        StandTestProperties.Topic auditTopic = new StandTestProperties.Topic();
+        auditTopic.setName("ift.audit.v1");
+        auditTopic.setCluster("audit");
+        ift.getTopics().put("audit", auditTopic);
+
+        StandTestProperties.KafkaCluster auditCluster = new StandTestProperties.KafkaCluster();
+        auditCluster.setBootstrapServersRef("AUDIT_BOOTSTRAP");
+        ift.getKafkaClusters().put("audit", auditCluster);
 
         StandTestProperties.Datasource datasource = new StandTestProperties.Datasource();
         datasource.setUrlRef("MAIN_DB_URL");

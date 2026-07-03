@@ -121,4 +121,36 @@ class EnvironmentTest {
         assertThat(registry.environment(" ")).isEmpty();
         assertThat(registry.environment(null)).isEmpty();
     }
+
+    @Test
+    @DisplayName("named Kafka clusters resolve by alias; the default cluster stays outside the named lookup")
+    void namedKafkaClusters_resolveByAlias() {
+        KafkaClusterDefinition defaultCluster = KafkaClusterDefinition.of("KAFKA_BOOTSTRAP");
+        KafkaClusterDefinition audit = KafkaClusterDefinition.of("AUDIT_BOOTSTRAP");
+        EnvironmentDefinition ift = new EnvironmentDefinition(
+                "ift", Map.of(), Map.of(), Map.of(), Map.of(), defaultCluster, Map.of("audit", audit));
+
+        assertThat(ift.kafkaCluster()).isEqualTo(defaultCluster);
+        assertThat(ift.kafkaCluster("audit")).contains(audit);
+        assertThat(ift.kafkaCluster("ghost")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a topic naming an undeclared Kafka cluster is rejected at environment construction (closed whitelist)")
+    void topicWithUnknownCluster_rejected() {
+        TopicDefinition onAudit = new TopicDefinition("events", "ift.events.v1", null, "audit");
+
+        assertThatThrownBy(() -> new EnvironmentDefinition(
+                "ift", Map.of(), Map.of("events", onAudit), Map.of(), Map.of(),
+                KafkaClusterDefinition.of("KAFKA_BOOTSTRAP"), Map.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("names Kafka cluster 'audit'")
+                .hasMessageContaining("not declared in kafka-clusters");
+
+        // Declared cluster → accepted; a blank cluster alias on the topic itself is rejected.
+        new EnvironmentDefinition("ift", Map.of(), Map.of("events", onAudit), Map.of(), Map.of(),
+                null, Map.of("audit", KafkaClusterDefinition.of("AUDIT_BOOTSTRAP")));
+        assertThatThrownBy(() -> new TopicDefinition("events", "ift.events.v1", null, " "))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

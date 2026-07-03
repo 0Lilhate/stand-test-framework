@@ -151,7 +151,7 @@ public final class KafkaStepExecutor implements StepExecutor {
         EnvironmentDefinition environment = environment(context);
         String topicAlias = KafkaStepParameters.requireString(parameters, KafkaStepParameters.TOPIC);
         TopicDefinition topic = topic(environment, topicAlias, context);
-        KafkaClusterDefinition clusterDefinition = cluster(environment, context);
+        KafkaClusterDefinition clusterDefinition = cluster(environment, topic, context);
         VariableResolver resolver = context.resolver();
         String value = resolveBody(parameters, resolver);
         if (value == null) {
@@ -207,7 +207,7 @@ public final class KafkaStepExecutor implements StepExecutor {
         }
         EnvironmentDefinition environment = environment(context);
         TopicDefinition topic = topic(environment, topicAlias, context);
-        ResolvedKafkaCluster cluster = resolveClusterReferences(cluster(environment, context));
+        ResolvedKafkaCluster cluster = resolveClusterReferences(cluster(environment, topic, context));
         String groupId = "stand-test-" + context.scenarioContext().testRunId().value() + "-" + topicAlias;
         Consumer<String, String> consumer = this.clientFactory.createConsumer(cluster, groupId);
         ArmedConsumer armed = new ArmedConsumer(consumer, topicAlias, topic.name());
@@ -241,10 +241,23 @@ public final class KafkaStepExecutor implements StepExecutor {
                 .orElseThrow(() -> new StandTestException("Topic '" + topicAlias + "' is not whitelisted in environment '" + context.scenarioContext().environment() + "'"));
     }
 
-    private static KafkaClusterDefinition cluster(EnvironmentDefinition environment, StepExecutionContext context) {
+    /**
+     * Resolves the Kafka cluster the given topic lives on: a topic naming a {@code cluster} alias uses
+     * that named cluster from the environment's whitelist; a topic without one uses the environment's
+     * default {@code kafkaCluster}. The named lookup cannot fail for a registry built through the core
+     * {@code EnvironmentDefinition} (it validates topic→cluster references at construction) — the throw
+     * is a defensive net for hand-built registries.
+     */
+    private static KafkaClusterDefinition cluster(EnvironmentDefinition environment, TopicDefinition topic, StepExecutionContext context) {
+        if (topic.cluster() != null) {
+            return environment.kafkaCluster(topic.cluster())
+                    .orElseThrow(() -> new StandTestException("Kafka cluster '" + topic.cluster() + "' (named by topic '" + topic.alias()
+                            + "') is not whitelisted in environment '" + context.scenarioContext().environment() + "'"));
+        }
         KafkaClusterDefinition cluster = environment.kafkaCluster();
         if (cluster == null) {
-            throw new StandTestException("Environment '" + context.scenarioContext().environment() + "' has no Kafka cluster configured");
+            throw new StandTestException("Environment '" + context.scenarioContext().environment() + "' has no default Kafka cluster configured"
+                    + " (topic '" + topic.alias() + "' names no cluster alias)");
         }
         return cluster;
     }

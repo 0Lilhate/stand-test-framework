@@ -56,7 +56,8 @@ public final class EnvironmentRegistryFactory {
                     topics(env),
                     datasources(env),
                     grpcTargets(env),
-                    kafkaCluster(env.getKafkaCluster()));
+                    kafkaCluster(env.getKafkaCluster()),
+                    kafkaClusters(env));
         } catch (IllegalArgumentException invalid) {
             throw new IllegalStateException(
                     "Invalid stand.test.environments." + name + " configuration: " + invalid.getMessage(), invalid);
@@ -78,7 +79,7 @@ public final class EnvironmentRegistryFactory {
         for (Map.Entry<String, StandTestProperties.Topic> entry : env.getTopics().entrySet()) {
             String alias = entry.getKey();
             StandTestProperties.Topic topic = entry.getValue();
-            result.put(alias, new TopicDefinition(alias, topic.getName(), correlation(topic.getCorrelation())));
+            result.put(alias, new TopicDefinition(alias, topic.getName(), correlation(topic.getCorrelation()), topic.getCluster()));
         }
         return result;
     }
@@ -105,6 +106,14 @@ public final class EnvironmentRegistryFactory {
             String alias = entry.getKey();
             StandTestProperties.GrpcTarget target = entry.getValue();
             result.put(alias, new GrpcTargetDefinition(alias, ref(target.getTargetRef(), "target-ref", alias), correlation(target.getCorrelation())));
+        }
+        return result;
+    }
+
+    private static Map<String, KafkaClusterDefinition> kafkaClusters(StandTestProperties.Environment env) {
+        Map<String, KafkaClusterDefinition> result = new LinkedHashMap<>();
+        for (Map.Entry<String, StandTestProperties.KafkaCluster> entry : env.getKafkaClusters().entrySet()) {
+            result.put(entry.getKey(), kafkaCluster(entry.getValue()));
         }
         return result;
     }

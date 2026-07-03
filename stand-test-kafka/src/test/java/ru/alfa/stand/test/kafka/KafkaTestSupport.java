@@ -39,6 +39,8 @@ final class KafkaTestSupport {
     static final String RESPONSE_NAME = "pakt.response.ift";
     static final String CORRELATION_HEADER = "X-Correlation-Id";
     static final String BOOTSTRAP_REF = "KAFKA_BOOTSTRAP_SERVERS";
+    static final String AUDIT_CLUSTER_ALIAS = "audit";
+    static final String AUDIT_BOOTSTRAP_REF = "AUDIT_BOOTSTRAP_SERVERS";
 
     private KafkaTestSupport() {
     }
@@ -61,6 +63,23 @@ final class KafkaTestSupport {
             byAlias.put(topic.alias(), topic);
         }
         EnvironmentDefinition environment = new EnvironmentDefinition(ENVIRONMENT, Map.of(), byAlias, Map.of(), Map.of(), cluster);
+        return new InMemoryEnvironmentRegistry(Map.of(ENVIRONMENT, environment));
+    }
+
+    /**
+     * Registry whose environment carries a DEFAULT cluster ({@code KAFKA_BOOTSTRAP_SERVERS}) plus a
+     * named {@code audit} cluster ({@code AUDIT_BOOTSTRAP_SERVERS}); the given topics may select the
+     * named cluster via {@code TopicDefinition.cluster()}.
+     */
+    static EnvironmentRegistry multiClusterRegistry(TopicDefinition... topics) {
+        Map<String, TopicDefinition> byAlias = new java.util.LinkedHashMap<>();
+        for (TopicDefinition topic : topics) {
+            byAlias.put(topic.alias(), topic);
+        }
+        EnvironmentDefinition environment = new EnvironmentDefinition(
+                ENVIRONMENT, Map.of(), byAlias, Map.of(), Map.of(),
+                KafkaClusterDefinition.of(BOOTSTRAP_REF),
+                Map.of(AUDIT_CLUSTER_ALIAS, KafkaClusterDefinition.of(AUDIT_BOOTSTRAP_REF)));
         return new InMemoryEnvironmentRegistry(Map.of(ENVIRONMENT, environment));
     }
 

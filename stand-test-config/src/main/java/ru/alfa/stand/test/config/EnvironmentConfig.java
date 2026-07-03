@@ -35,9 +35,9 @@ import ru.alfa.stand.test.core.exception.StandTestException;
 public final class EnvironmentConfig {
 
     private static final Set<String> ROOT_KEYS = Set.of("environments");
-    private static final Set<String> ENV_KEYS = Set.of("services", "topics", "datasources", "grpc-targets", "grpcTargets", "kafka-cluster", "kafkaCluster");
+    private static final Set<String> ENV_KEYS = Set.of("services", "topics", "datasources", "grpc-targets", "grpcTargets", "kafka-cluster", "kafkaCluster", "kafka-clusters", "kafkaClusters");
     private static final Set<String> SERVICE_KEYS = Set.of("base-url-ref", "baseUrlRef", "correlation");
-    private static final Set<String> TOPIC_KEYS = Set.of("name", "correlation");
+    private static final Set<String> TOPIC_KEYS = Set.of("name", "correlation", "cluster");
     private static final Set<String> DATASOURCE_KEYS = Set.of("url-ref", "urlRef", "user-ref", "userRef", "password-ref", "passwordRef", "allowed-schemas", "allowedSchemas", "write-allowed", "writeAllowed");
     private static final Set<String> GRPC_KEYS = Set.of("target-ref", "targetRef", "correlation");
     private static final Set<String> KAFKA_KEYS = Set.of("bootstrap-servers-ref", "bootstrapServersRef", "security-protocol-ref", "securityProtocolRef", "sasl-jaas-config-ref", "saslJaasConfigRef");
@@ -87,7 +87,11 @@ public final class EnvironmentConfig {
             grpcTargets.put(entry.getKey(), grpcTarget(entry.getKey(), entry.getValue(), location + ".grpc-targets." + entry.getKey()));
         }
         KafkaClusterDefinition kafkaCluster = kafkaCluster(pick(fields, "kafka-cluster", "kafkaCluster"), location + ".kafka-cluster");
-        return build(location, () -> new EnvironmentDefinition(name, services, topics, datasources, grpcTargets, kafkaCluster));
+        Map<String, KafkaClusterDefinition> kafkaClusters = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : namedMap(pick(fields, "kafka-clusters", "kafkaClusters"), location + ".kafka-clusters").entrySet()) {
+            kafkaClusters.put(entry.getKey(), kafkaCluster(entry.getValue(), location + ".kafka-clusters." + entry.getKey()));
+        }
+        return build(location, () -> new EnvironmentDefinition(name, services, topics, datasources, grpcTargets, kafkaCluster, kafkaClusters));
     }
 
     private static ServiceEndpointDefinition service(String alias, Object value, String location) {
@@ -103,7 +107,8 @@ public final class EnvironmentConfig {
         checkKnownKeys(fields, TOPIC_KEYS, location);
         String name = requireString(fields, "name", "name", location);
         CorrelationConfig correlation = correlation(fields.get("correlation"), location + ".correlation");
-        return build(location, () -> new TopicDefinition(alias, name, correlation));
+        String cluster = optionalString(fields.get("cluster"), location + ".cluster");
+        return build(location, () -> new TopicDefinition(alias, name, correlation, cluster));
     }
 
     private static DatasourceDefinition datasource(String alias, Object value, String location) {

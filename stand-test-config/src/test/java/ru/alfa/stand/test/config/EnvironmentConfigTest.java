@@ -202,6 +202,45 @@ class EnvironmentConfigTest {
     }
 
     @Test
+    @DisplayName("named kafka-clusters parse and a topic selects one via 'cluster'; the single kafka-cluster stays the default")
+    void namedKafkaClustersParse() {
+        EnvironmentRegistry registry = parse("""
+                environments:
+                  ift:
+                    topics:
+                      events: { name: ift.events.v1 }
+                      audit:  { name: ift.audit.v1, cluster: audit }
+                    kafka-cluster:
+                      bootstrap-servers-ref: KAFKA_BOOTSTRAP
+                    kafka-clusters:
+                      audit:
+                        bootstrap-servers-ref: AUDIT_BOOTSTRAP
+                """);
+
+        EnvironmentDefinition ift = registry.environment("ift").orElseThrow();
+        assertThat(ift.kafkaCluster().bootstrapServersRef()).isEqualTo("KAFKA_BOOTSTRAP");
+        assertThat(ift.kafkaCluster("audit").orElseThrow().bootstrapServersRef()).isEqualTo("AUDIT_BOOTSTRAP");
+        assertThat(ift.topic("events").orElseThrow().cluster()).isNull();
+        assertThat(ift.topic("audit").orElseThrow().cluster()).isEqualTo("audit");
+    }
+
+    @Test
+    @DisplayName("a topic naming an undeclared kafka cluster is rejected fail-closed with the environment location")
+    void topicWithUndeclaredClusterRejected() {
+        assertThatThrownBy(() -> parse("""
+                environments:
+                  ift:
+                    topics:
+                      audit: { name: ift.audit.v1, cluster: ghost }
+                    kafka-cluster:
+                      bootstrap-servers-ref: KAFKA_BOOTSTRAP
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("names Kafka cluster 'ghost'")
+                .hasMessageContaining("environments.ift");
+    }
+
+    @Test
     @DisplayName("correlation and topic names are NOT ref fields — header-like values stay legitimate")
     void nonRefNamesUnaffectedByReferenceGuard() {
         EnvironmentRegistry registry = parse("""

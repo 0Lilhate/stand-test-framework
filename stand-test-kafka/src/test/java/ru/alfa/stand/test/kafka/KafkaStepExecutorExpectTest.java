@@ -10,7 +10,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import ru.alfa.stand.test.await.Awaiter;
 import ru.alfa.stand.test.await.DefaultAwaiter;
+import ru.alfa.stand.test.core.environment.CorrelationConfig;
+import ru.alfa.stand.test.core.environment.CorrelationSource;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
+import ru.alfa.stand.test.core.environment.TopicDefinition;
 import ru.alfa.stand.test.core.exception.StandTestAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.execution.StepExecutionContext;
@@ -310,6 +313,41 @@ class KafkaStepExecutorExpectTest {
                 .isInstanceOf(StandTestException.class)
                 .hasMessageContaining("buffered more than " + ArmedConsumer.MAX_BUFFERED)
                 .hasMessageContaining(KafkaTestSupport.RESPONSE_NAME);
+    }
+
+    @Test
+    @DisplayName("a topic naming a cluster alias arms its consumer against that named cluster, not the default one")
+    void topicOnNamedClusterUsesItsBootstrap() {
+        FakeKafkaClientFactory auditFactory = new FakeKafkaClientFactory(null, KafkaTestSupport.emptyConsumer(KafkaTestSupport.RESPONSE_NAME));
+        KafkaStepExecutor executor = new KafkaStepExecutor(auditFactory, reference -> reference, Awaiter.create());
+        TopicDefinition auditTopic = new TopicDefinition(
+                KafkaTestSupport.RESPONSE_ALIAS, KafkaTestSupport.RESPONSE_NAME,
+                new CorrelationConfig(CorrelationSource.HEADER, KafkaTestSupport.CORRELATION_HEADER),
+                KafkaTestSupport.AUDIT_CLUSTER_ALIAS);
+        StepExecutionContext auditContext = KafkaTestSupport.context(KafkaTestSupport.multiClusterRegistry(auditTopic), new VariableStore());
+        ScenarioStep step = KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).correlationIdFromContext().build();
+
+        executor.prepare(step, auditContext);
+
+        // The identity reference resolver passes the ref through, so the recorded cluster shows which
+        // definition was picked: the named audit cluster, not the environment default.
+        assertThat(auditFactory.consumerCluster().bootstrapServers()).isEqualTo(KafkaTestSupport.AUDIT_BOOTSTRAP_REF);
+        auditContext.resourceScope().closeAll();
+    }
+
+    @Test
+    @DisplayName("a topic without a cluster alias keeps using the environment's default cluster")
+    void topicWithoutClusterUsesDefault() {
+        FakeKafkaClientFactory defaultFactory = new FakeKafkaClientFactory(null, KafkaTestSupport.emptyConsumer(KafkaTestSupport.RESPONSE_NAME));
+        KafkaStepExecutor executor = new KafkaStepExecutor(defaultFactory, reference -> reference, Awaiter.create());
+        TopicDefinition plainTopic = KafkaTestSupport.headerTopic(KafkaTestSupport.RESPONSE_ALIAS, KafkaTestSupport.RESPONSE_NAME);
+        StepExecutionContext defaultContext = KafkaTestSupport.context(KafkaTestSupport.multiClusterRegistry(plainTopic), new VariableStore());
+        ScenarioStep step = KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).correlationIdFromContext().build();
+
+        executor.prepare(step, defaultContext);
+
+        assertThat(defaultFactory.consumerCluster().bootstrapServers()).isEqualTo(KafkaTestSupport.BOOTSTRAP_REF);
+        defaultContext.resourceScope().closeAll();
     }
 
     @Test

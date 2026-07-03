@@ -96,7 +96,10 @@ raises a `StandTestException` rather than silently mis-injecting.
 ## Environment resolution & security
 
 Topics and the Kafka cluster are resolved through the core `EnvironmentRegistry`
-(`environment(name) → topic(alias)` / `kafkaCluster()`, a fail-closed whitelist). `bootstrapServersRef`
+(`environment(name) → topic(alias)` / `kafkaCluster()`, a fail-closed whitelist). An environment may
+declare multiple clusters: the single `kafkaCluster` is the default, and named clusters
+(`kafkaClusters` map) are selected per topic via `TopicDefinition.cluster` — a topic naming an
+undeclared cluster is rejected when the environment is built. `bootstrapServersRef`
 and the optional security references are **references** (environment-variable names) resolved at run
 time — broker addresses and secrets stay out of source (plan §9). Diagnostics attached to the
 `StepResult` (`kafka.topic` / `kafka.realTopic` / `kafka.partition` / `kafka.offset` / `kafka.key` /

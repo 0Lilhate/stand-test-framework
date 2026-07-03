@@ -84,6 +84,9 @@ class StandTestAutoConfigurationTest {
                 "stand.test.environments.ift.topics.events.name=ift.events.v1",
                 "stand.test.environments.ift.topics.events.correlation.source=KEY",
                 "stand.test.environments.ift.topics.events.correlation.name=corrId",
+                "stand.test.environments.ift.topics.audit.name=ift.audit.v1",
+                "stand.test.environments.ift.topics.audit.cluster=audit",
+                "stand.test.environments.ift.kafka-clusters.audit.bootstrap-servers-ref=AUDIT_BOOTSTRAP",
                 "stand.test.environments.ift.grpc-targets.accounts.target-ref=ACCOUNTS_GRPC",
                 "stand.test.environments.ift.kafka-cluster.bootstrap-servers-ref=KAFKA_BOOTSTRAP",
                 "stand.test.environments.ift.kafka-cluster.security-protocol-ref=KAFKA_SECURITY").run(context -> {
@@ -103,6 +106,8 @@ class StandTestAutoConfigurationTest {
             assertThat(datasource.isSchemaAllowed("test_data")).isTrue();
         });
         assertThat(ift.topic("events")).hasValueSatisfying(topic -> assertThat(topic.name()).isEqualTo("ift.events.v1"));
+        assertThat(ift.topic("audit")).hasValueSatisfying(topic -> assertThat(topic.cluster()).isEqualTo("audit"));
+        assertThat(ift.kafkaCluster("audit")).hasValueSatisfying(cluster -> assertThat(cluster.bootstrapServersRef()).isEqualTo("AUDIT_BOOTSTRAP"));
         assertThat(ift.grpcTarget("accounts")).hasValueSatisfying(target -> assertThat(target.targetRef()).isEqualTo("ACCOUNTS_GRPC"));
         assertThat(ift.kafkaCluster()).isNotNull();
         assertThat(ift.kafkaCluster().bootstrapServersRef()).isEqualTo("KAFKA_BOOTSTRAP");

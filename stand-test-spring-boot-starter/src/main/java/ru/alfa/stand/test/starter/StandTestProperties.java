@@ -132,6 +132,8 @@ public class StandTestProperties {
 
         private final Map<String, GrpcTarget> grpcTargets = new LinkedHashMap<>();
 
+        private final Map<String, KafkaCluster> kafkaClusters = new LinkedHashMap<>();
+
         private KafkaCluster kafkaCluster;
 
         public Map<String, Service> getServices() {
@@ -156,6 +158,10 @@ public class StandTestProperties {
 
         public void setKafkaCluster(KafkaCluster kafkaCluster) {
             this.kafkaCluster = kafkaCluster;
+        }
+
+        public Map<String, KafkaCluster> getKafkaClusters() {
+            return kafkaClusters;
         }
     }
 
@@ -248,6 +254,8 @@ public class StandTestProperties {
 
         private Correlation correlation;
 
+        private String cluster;
+
         public String getName() {
             return name;
         }
@@ -262,6 +270,14 @@ public class StandTestProperties {
 
         public void setCorrelation(Correlation correlation) {
             this.correlation = correlation;
+        }
+
+        public String getCluster() {
+            return cluster;
+        }
+
+        public void setCluster(String cluster) {
+            this.cluster = cluster;
         }
     }
 

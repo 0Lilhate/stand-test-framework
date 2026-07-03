@@ -53,10 +53,19 @@ environments:
         write-allowed: true
     grpc-targets:
       billing-grpc: { target-ref: BILLING_GRPC_TARGET, correlation: { source: METADATA, name: x-correlation-id } }
-    kafka-cluster:
+    kafka-cluster:                                  # the DEFAULT cluster (topics without `cluster`)
       bootstrap-servers-ref: KAFKA_BOOTSTRAP
       security-protocol-ref: KAFKA_SECURITY_PROTOCOL
+    kafka-clusters:                                 # additional NAMED clusters
+      audit:
+        bootstrap-servers-ref: AUDIT_KAFKA_BOOTSTRAP
 ```
+
+**Multiple Kafka clusters:** the single `kafka-cluster` is the environment's default; `kafka-clusters`
+whitelists named clusters, and a topic selects one via `cluster: <alias>` (e.g.
+`audit: { name: ift.audit.v1, cluster: audit }`). A topic naming an undeclared cluster is rejected at
+load time — the whitelist stays closed. Multiple services and datasources need nothing special: the
+maps take any number of aliases.
 
 No code is needed: `StandTestExtension` discovers `FileEnvironmentRegistry` via `ServiceLoader`. Point the
 loader at another file with `-Dstand.test.environments.config=/path/to/envs.yml`.

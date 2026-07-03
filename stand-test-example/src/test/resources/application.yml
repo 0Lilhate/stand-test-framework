@@ -32,6 +32,14 @@ stand:
             correlation:
               source: HEADER
               name: X-Correlation-Id
+          # A topic may live on a NAMED cluster from kafka-clusters below; topics without a
+          # `cluster` alias (like `events` above) use the default kafka-cluster.
+          audit:
+            name: stand-test-example-audit
+            cluster: audit
+            correlation:
+              source: HEADER
+              name: X-Correlation-Id
         grpc-targets:
           health-grpc:
             target-ref: GRPC_TARGET
@@ -40,3 +48,6 @@ stand:
               name: x-correlation-id
         kafka-cluster:
           bootstrap-servers-ref: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+        kafka-clusters:
+          audit:
+            bootstrap-servers-ref: ${AUDIT_KAFKA_BOOTSTRAP_SERVERS:localhost:9093}

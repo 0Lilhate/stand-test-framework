@@ -138,7 +138,7 @@ class KafkaStepExecutorSendTest {
         ScenarioStep step = KafkaStep.send(KafkaTestSupport.REQUEST_ALIAS).body("{}").build();
         assertThatThrownBy(() -> run(step, KafkaTestSupport.context(registry, new VariableStore())))
                 .isInstanceOf(StandTestException.class)
-                .hasMessageContaining("no Kafka cluster");
+                .hasMessageContaining("no default Kafka cluster");
     }
 
     @Test
