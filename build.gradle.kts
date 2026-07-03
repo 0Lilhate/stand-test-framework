@@ -41,11 +41,23 @@ subprojects {
     toolchain {
       languageVersion.set(JavaLanguageVersion.of(ver("java").toInt()))
     }
-    // The SDK is consumed by other teams: publish a -sources.jar for IDE navigation (picked up
-    // automatically by the `maven` publication via components["java"]). A -javadoc.jar is deliberately
-    // deferred — the javadoc tool run is a separate doclint risk on the JDK-24 toolchain, and sources
-    // cover the internal-consumer need.
+    // The SDK is consumed by other teams: publish -sources.jar (IDE navigation) and -javadoc.jar,
+    // both picked up automatically by the `maven` publication via components["java"]. The javadoc
+    // task runs on the JDK-24 toolchain with doclint disabled (below) — the SDK's Javadoc is written
+    // for humans, not for doclint's strict HTML/@-tag rules.
     withSourcesJar()
+    // stand-test-example is not published and its src/main holds only a package-info —
+    // `javadoc` fails there with "No public or protected classes found to document".
+    if (name != "stand-test-example") {
+      withJavadocJar()
+    }
+  }
+
+  tasks.withType<Javadoc>().configureEach {
+    options.encoding = "UTF-8"
+    // Disable doclint: strict HTML/reference checks on JDK 24 would fail the build over cosmetic
+    // Javadoc issues; the jar exists for internal consumers' IDEs, not for lint-perfect HTML.
+    (options as StandardJavadocDocletOptions).addStringOption("Xdoclint:none", "-quiet")
   }
 
   tasks.withType<JavaCompile>().configureEach {
@@ -142,11 +154,74 @@ subprojects {
         publications {
           create<MavenPublication>("maven") {
             from(components["java"])
+            pom {
+              name.set(project.name)
+              description.set(project.description ?: "stand-test SDK module '${project.name}'")
+            }
           }
         }
       }
-      // No publishing repository is configured yet — the internal Nexus/Artifactory URL is
-      // intentionally deferred. `./gradlew publishToMavenLocal` works for local validation.
+    }
+  }
+}
+
+// Publish-repository wiring for EVERY publishing module — including stand-test-bom, which the main
+// subprojects block above deliberately skips (java-platform), hence this separate block. The internal
+// Nexus/Artifactory coordinates are not hardcoded: they arrive via Gradle properties (or their
+// STAND_TEST_PUBLISH_* environment fallbacks), so the repo carries no endpoint and the ordinary build
+// never depends on them. `./gradlew publishToMavenLocal` keeps working without any of this.
+//
+//   standTestPublishReleasesUrl  / STAND_TEST_PUBLISH_RELEASES_URL   — release repository
+//   standTestPublishSnapshotsUrl / STAND_TEST_PUBLISH_SNAPSHOTS_URL  — snapshot repository
+//   standTestPublishUrl          / STAND_TEST_PUBLISH_URL            — fallback for both
+//   standTestPublishUsername/Password (+ env)                        — credentials (omit for file:// repos)
+//   standTestPublishAllowInsecure=true                               — permit plain http (in-perimeter Nexus)
+//
+// The snapshot/release choice follows the version suffix, so `version=x.y.z-SNAPSHOT` publishes to the
+// snapshot repository and a release version to the release one.
+subprojects {
+  plugins.withId("maven-publish") {
+    fun prop(gradleName: String, envName: String): String? = providers.gradleProperty(gradleName)
+      .orElse(providers.environmentVariable(envName))
+      .orNull
+
+    val isSnapshot = version.toString().endsWith("-SNAPSHOT")
+    val commonUrl = prop("standTestPublishUrl", "STAND_TEST_PUBLISH_URL")
+    val repoUrl = if (isSnapshot) {
+      prop("standTestPublishSnapshotsUrl", "STAND_TEST_PUBLISH_SNAPSHOTS_URL") ?: commonUrl
+    } else {
+      prop("standTestPublishReleasesUrl", "STAND_TEST_PUBLISH_RELEASES_URL") ?: commonUrl
+    }
+
+    if (repoUrl != null) {
+      val repoUsername = prop("standTestPublishUsername", "STAND_TEST_PUBLISH_USERNAME")
+      val repoPassword = prop("standTestPublishPassword", "STAND_TEST_PUBLISH_PASSWORD")
+      val allowInsecure = prop("standTestPublishAllowInsecure", "STAND_TEST_PUBLISH_ALLOW_INSECURE").toBoolean()
+      extensions.configure<PublishingExtension> {
+        repositories {
+          maven {
+            name = "internal"
+            url = uri(repoUrl)
+            isAllowInsecureProtocol = allowInsecure
+            if (repoUsername != null) {
+              credentials {
+                username = repoUsername
+                password = repoPassword
+              }
+            }
+          }
+        }
+      }
+    } else {
+      // Without a configured repository `publish` would silently succeed doing nothing — a CI footgun.
+      // Fail it loudly instead (publishToMavenLocal is unaffected).
+      tasks.named("publish") {
+        doFirst {
+          throw GradleException(
+            "No publish repository configured: set -PstandTestPublishUrl=<repo> (or STAND_TEST_PUBLISH_URL, "
+              + "or the releases+snapshots pair — see docs/publishing.md). `publishToMavenLocal` works without it.")
+        }
+      }
     }
   }
 }

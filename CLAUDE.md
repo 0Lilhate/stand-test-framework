@@ -31,7 +31,8 @@ scope (§6), and the strict implementation order (§7). Each module also has a `
 ./gradlew :stand-test-core:build      # build one module
 ./gradlew :stand-test-core:test       # run a module's tests
 ./gradlew :stand-test-core:checkstyleMain :stand-test-core:checkstyleTest   # lint only (main + test)
-./gradlew publishToMavenLocal         # publish modules locally (no remote repo configured yet)
+./gradlew publishToMavenLocal         # publish modules locally (never needs the remote-repo properties)
+./gradlew publish -PstandTestPublishUrl=<repo>   # remote publish; docs/publishing.md lists all properties
 
 # Run a single test class / method (JUnit 5 platform):
 ./gradlew :stand-test-core:test --tests 'ru.alfa.stand.test.core.variable.VariableResolverTest'
@@ -132,10 +133,12 @@ and **`stand-test-config`** (file-based `EnvironmentRegistry` SPI provider). **`
 is a test-only showcase (offline doubles, not published); **`stand-test-bom`** is the `java-platform`
 carrying constraints for every published module.
 
-There is no remote publishing repository yet (`publishToMavenLocal` works; the internal
-Nexus/Artifactory URL is deferred). Remediation from the 2026-07 full-library review is **complete**
-(the critical, all 9 majors and all deferred minors are fixed and pinned by tests — see the memory note
-`full-library-review-2026-07` for the item-by-item record). Current work is publishing setup. The
+Publishing is fully wired but endpoint-less: the repository URL/credentials arrive via
+`standTestPublish*` Gradle properties or `STAND_TEST_PUBLISH_*` env vars (snapshot/release repo chosen by
+the version suffix; `publish` without a URL fails loudly; see `docs/publishing.md`) — only the actual
+internal Nexus/Artifactory coordinates and a first real publish run remain. Remediation from the 2026-07
+full-library review is **complete** (the critical, all 9 majors and all deferred minors are fixed and
+pinned by tests — see the memory note `full-library-review-2026-07` for the item-by-item record). The
 standing rules still apply: do not start work that destabilises a module's dependencies, and do not pull
 adapter/IO, Spring, Allure, YAML or business logic into `stand-test-core`.
 

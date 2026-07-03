@@ -56,6 +56,10 @@ publishing {
   publications {
     create<MavenPublication>("maven") {
       from(components["javaPlatform"])
+      pom {
+        name.set(project.name)
+        description.set("Bill of materials for the stand-test SDK: aligned versions of every published module plus the curated third-party libraries the adapters are tested against")
+      }
     }
   }
 }
