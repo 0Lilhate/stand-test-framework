@@ -1,0 +1,39 @@
+# Stand environment whitelist for the @StandTest examples, loaded by stand-test-config's
+# FileEnvironmentRegistry (ServiceLoader SPI) — the exact file a real consumer puts in
+# src/test/resources. It shows the FULL configuration surface: services, datasources, topics,
+# grpc-targets and the kafka-cluster of one logical environment.
+#
+# Every *-ref is the NAME of an environment variable (never a URL, address or secret value) —
+# a value-shaped ref is rejected fail-closed. The example build pins those variables to the
+# in-process doubles' fixed addresses (see build.gradle.kts: CLIENT_SERVICE_URL,
+# MAIN_DB_URL/USER/PASSWORD, GRPC_TARGET, KAFKA_BOOTSTRAP_SERVERS).
+environments:
+  ift:
+    services:
+      client-service:
+        base-url-ref: CLIENT_SERVICE_URL
+        correlation:
+          source: HEADER
+          name: X-Correlation-Id
+    datasources:
+      mainDb:
+        url-ref: MAIN_DB_URL
+        user-ref: MAIN_DB_USER
+        password-ref: MAIN_DB_PASSWORD
+        allowed-schemas:
+          - test_data
+        write-allowed: true
+    topics:
+      events:
+        name: stand-test-example-events
+        correlation:
+          source: HEADER
+          name: X-Correlation-Id
+    grpc-targets:
+      health-grpc:
+        target-ref: GRPC_TARGET
+        correlation:
+          source: METADATA
+          name: x-correlation-id
+    kafka-cluster:
+      bootstrap-servers-ref: KAFKA_BOOTSTRAP_SERVERS

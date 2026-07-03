@@ -45,10 +45,14 @@ Endpoints are never hardcoded in the scenarios — they come from the `Environme
 hand-built runner) whose `EnvironmentRegistry` and Allure publisher are discovered via `ServiceLoader`.
 Two differences from the manual-runner examples above:
 
-- **Registry via SPI** — `ExampleEnvironmentRegistry` (registered in
-  `META-INF/services/…EnvironmentRegistry`) defines the `ift` environment. Because it is instantiated by a
-  no-arg constructor it cannot know a runtime port, so the REST alias stores an **env-ref**
-  (`baseUrlRef = "CLIENT_SERVICE_URL"`) that the default `RestStepExecutor` resolves via `System.getenv`.
+- **Registry via `stand-test-environments.yml`** — the `ift` environment is declared in
+  `src/test/resources/stand-test-environments.yml` (the full surface: services, datasources, topics,
+  grpc-targets, kafka-cluster) and loaded by `stand-test-config`'s `FileEnvironmentRegistry` SPI provider —
+  the exact wiring a real consumer uses, no Java registry code. The file stores **env-refs** only
+  (`base-url-ref: CLIENT_SERVICE_URL`), which the default `RestStepExecutor` resolves via `System.getenv`;
+  a URL or secret value in a `*-ref` field is rejected fail-closed. Note the SDK allows exactly ONE
+  `EnvironmentRegistry` provider on the classpath — a second (hand-written) provider next to
+  `stand-test-config` fails loudly.
 - **Fixed REST port** — the double must therefore listen on a stable address. `build.gradle.kts` sets
   `CLIENT_SERVICE_URL=http://127.0.0.1:18080` (override in CI with `-PexampleRestPort=NNNN` to avoid
   collisions), and `ExampleDoublesExtension` starts the HTTP double + H2 schema once per class, binding
