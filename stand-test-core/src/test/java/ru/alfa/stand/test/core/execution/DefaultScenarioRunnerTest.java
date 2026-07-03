@@ -81,6 +81,30 @@ class DefaultScenarioRunnerTest {
     }
 
     @Test
+    @DisplayName("a step that returns a BROKEN status is raised as a StandTestException (infrastructure, not assertion)")
+    void run_stepReturnsBroken_throwsInfra() {
+        DefaultScenarioRunner runner = runner(new FakeStepExecutor("fake.broken", (step, context) ->
+                StepResult.broken(step.id(), step.type(), Instant.now(), Instant.now(), "broker unreachable")));
+
+        assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.broken"))))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("s1")
+                .hasMessageContaining("broker unreachable");
+    }
+
+    @Test
+    @DisplayName("a step that returns a TIMEOUT status is raised as a StandTestAssertionError (unmet expectation)")
+    void run_stepReturnsTimeout_throwsAssertionError() {
+        DefaultScenarioRunner runner = runner(new FakeStepExecutor("fake.timeout", (step, context) ->
+                StepResult.timeout(step.id(), step.type(), Instant.now(), Instant.now(), "no matching message in 30s")));
+
+        assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.timeout"))))
+                .isInstanceOf(StandTestAssertionError.class)
+                .hasMessageContaining("s1")
+                .hasMessageContaining("no matching message in 30s");
+    }
+
+    @Test
     @DisplayName("an assertion error thrown by an executor propagates unchanged")
     void run_executorThrowsAssertionError_propagates() {
         StandTestAssertionError thrown = new StandTestAssertionError("boom");
@@ -488,6 +512,47 @@ class DefaultScenarioRunnerTest {
             assertThat(e.environment()).isEqualTo("ift");
             assertThat(e.tags()).containsExactly("smoke");
         });
+    }
+
+    @Test
+    @DisplayName("a prepare failure is classified as infrastructure, recorded as a BROKEN step with paired events, and no step executes")
+    void run_prepareFailure_isClassifiedAndRecorded() {
+        RecordingReportingEventPublisher recording = new RecordingReportingEventPublisher();
+        IllegalStateException cause = new IllegalStateException("broker down");
+        FakeStepExecutor executor = FakeStepExecutor.succeeding("fake.ok")
+                .onPrepare((step, context) -> {
+                    throw cause;
+                });
+        DefaultScenarioRunner runner = new DefaultScenarioRunner(
+                List.of(executor), new DefaultScenarioValidator(), iftRegistry(), recording);
+
+        assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.ok"))))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("failed to prepare")
+                .hasCause(cause);
+
+        assertThat(executor.invocations()).isZero();
+        List<StepEvent> stepEvents = recording.events().stream()
+                .filter(StepEvent.class::isInstance).map(StepEvent.class::cast).toList();
+        assertThat(stepEvents).hasSize(2);
+        assertThat(stepEvents.get(0).phase()).isEqualTo(StepPhase.STARTED);
+        assertThat(stepEvents.get(1).phase()).isEqualTo(StepPhase.FINISHED);
+        assertThat(stepEvents.get(1).status()).isEqualTo(StepStatus.BROKEN);
+        assertThat(stepEvents.get(1).message()).contains("broker down");
+    }
+
+    @Test
+    @DisplayName("a StandTestException thrown by prepare propagates unwrapped (already classified)")
+    void run_prepareInfraFailure_propagatesUnwrapped() {
+        StandTestException thrown = new StandTestException("Failed to arm Kafka consumer for topic 'events'");
+        FakeStepExecutor executor = FakeStepExecutor.succeeding("fake.ok")
+                .onPrepare((step, context) -> {
+                    throw thrown;
+                });
+
+        assertThatThrownBy(() -> runner(executor).run(scenario(GenericStep.of("s1", "fake.ok"))))
+                .isSameAs(thrown);
+        assertThat(executor.invocations()).isZero();
     }
 
     @Test

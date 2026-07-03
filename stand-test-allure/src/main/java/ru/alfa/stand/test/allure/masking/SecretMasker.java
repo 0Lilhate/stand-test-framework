@@ -4,21 +4,25 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Masks secret-looking values before they are published to Allure.
  *
- * <p>A defence-in-depth net at the reporting sink: even though adapters are expected to redact evidence
- * at the source (the core {@code Attachment} contract), the diagnostics and parameter maps that this
- * adapter renders as Allure parameters/attachments may still carry a sensitive entry. The masker
- * replaces the <em>value</em> of any entry whose <em>key</em> contains a known secret marker
- * (case-insensitive): {@code password}, {@code secret}, {@code token}, {@code authorization},
- * {@code apikey}, {@code cookie}. Matching ignores separators in the key, so hyphenated/underscored
- * header names ({@code X-Api-Key}, {@code Set-Cookie}, {@code Proxy-Authorization}) are caught too. The
- * real value is never read into the result and never logged.
- *
- * <p>Masking is key-based by design. It does not inspect or rewrite free-form values (which could
- * corrupt a JSON/XML body), so it is safe to apply to ordered key/value maps only.
+ * <p>The net covers the key/value surfaces this adapter renders — step parameters and KEY_VALUE
+ * diagnostics. It is NOT a blanket guarantee: core {@code Attachment}s (request/response payloads) are
+ * published verbatim per their pre-redaction contract, and a non-sensitive entry's value is copied into
+ * the result as-is. Within its surface the masker applies two checks:
+ * <ul>
+ *   <li><em>By key</em>: the value of any entry whose key contains a known secret marker
+ *   (case-insensitive) is replaced — {@code password}, {@code secret}, {@code token},
+ *   {@code authorization}, {@code apikey}, {@code cookie}. Matching ignores separators in the key, so
+ *   {@code X-Api-Key}, {@code Set-Cookie}, {@code Proxy-Authorization} are caught too.</li>
+ *   <li><em>By value shape</em>: a value that IS a single {@code Bearer}/{@code Basic} credential token
+ *   (scheme prefix + one credential-shaped token of 8+ characters) is replaced even under an innocuous
+ *   key. Prose that merely starts with those words ({@code "Basic authentication required"}) does not
+ *   match. Free-form values are otherwise never rewritten (that could corrupt a JSON/XML body).</li>
+ * </ul>
  */
 public final class SecretMasker {
 
@@ -27,6 +31,9 @@ public final class SecretMasker {
 
     private static final List<String> SENSITIVE_MARKERS =
             List.of("password", "secret", "token", "authorization", "apikey", "cookie");
+
+    private static final Pattern CREDENTIAL_SHAPED_VALUE =
+            Pattern.compile("^\\s*(?i:bearer|basic)\\s+[A-Za-z0-9+/=_.\\-]{8,}\\s*$");
 
     /**
      * Returns whether the given key names a sensitive value. Matching is case-insensitive and ignores
@@ -50,14 +57,21 @@ public final class SecretMasker {
 
     /**
      * Returns the value to publish for the given key: the {@link #MASK} placeholder when the key is
-     * sensitive, otherwise the value unchanged.
+     * sensitive or the value itself is a single {@code Bearer}/{@code Basic} credential token,
+     * otherwise the value unchanged.
      *
      * @param key the entry key
      * @param value the entry value
      * @return the masked or original value
      */
     public String mask(String key, String value) {
-        return isSensitive(key) ? MASK : value;
+        if (isSensitive(key)) {
+            return MASK;
+        }
+        if (value != null && CREDENTIAL_SHAPED_VALUE.matcher(value).matches()) {
+            return MASK;
+        }
+        return value;
     }
 
     /**

@@ -74,6 +74,9 @@ whitelist: `environment(name) → service(alias)`). A missing alias never falls 
 endpoint. `baseUrlRef` is a **reference** (an environment-variable name) resolved at run time — stand
 URLs and secrets stay out of source (plan §9). Request/response diagnostics attached to the
 `StepResult` (`http.method` / `http.path` / `http.status`) deliberately exclude header values.
+Assertion-failure messages DO echo the actual response value (`expected <...> but got <...>`) — that
+diagnostic value is the point of the assertion; against a stand returning sensitive payloads, prefer
+asserting on non-sensitive fields. A JSON parse failure never echoes the response body.
 
 ## Environment registry
 

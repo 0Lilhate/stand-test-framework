@@ -82,7 +82,7 @@ executor'ы. **Общие эргономичные преобразования:
 
 | Surface (YAML) | Internal (`GenericStep.parameters`) | Примечание |
 |---|---|---|
-| `timeout: 30s` / `20s` | `timeoutMillis: 30000` (long) | парсинг `<n>s`/`<n>ms`; дефолт `DEFAULT_TIMEOUT_MILLIS=30000` |
+| `timeout: 30s` / `20s` | `timeoutMillis: 30000` (long) | парсинг `<n>ms`/`<n>s`/`<n>m`; дефолт `DEFAULT_TIMEOUT_MILLIS=30000` |
 | `pollInterval: 200ms` / `pollTimeout: 500ms` | `pollIntervalMillis` (db) / `pollTimeoutMillis` (kafka) | дефолты `200`/`500` |
 | `assert: {"$.path": value, ...}` | `assertions: [{jsonPath, expectedValue}, ...]` | map(path→value) → list; порядок из `LinkedHashMap` |
 | `capture: {var: "$.path", ...}` | `captures: [{variableName, jsonPath}, ...]` | map(var→path) → list |
@@ -212,7 +212,7 @@ Scenario  ->  StandClient.run(scenario)   // DefaultStandClient → DefaultScena
   разделения (напр. запрет assert в `given`) не вводим — влияло бы лишь на дружелюбность ошибок, не на модель.
 - **Инлайн vs ресурс:** **явные surface-ключи** `body:`/`bodyResource:` и `sql:`/`sqlResource:` (не
   эвристика «путь-подобная строка»); указать оба → ошибка. Однозначно и AI-safe.
-- **Дюрации:** `<n>s` / `<n>ms` / bare-число (=ms) → `Long` millis; невалид/≤0 → ошибка. ISO-8601 не вводим.
+- **Дюрации:** `<n>ms` / `<n>s` / `<n>m` / bare-число (=ms) → `Long` millis; невалид/≤0 → ошибка. ISO-8601 не вводим.
 - **Wire-ключи** централизованы в `YamlStepKeys` (хардкод-литералы, mirror `*StepParameters`), т.к. модуль
   core-only. **Follow-up:** поднять константы ключей в `core`, чтобы убрать дублирование парсер↔адаптеры.
 

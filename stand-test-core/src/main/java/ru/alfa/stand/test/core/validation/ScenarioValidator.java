@@ -23,14 +23,14 @@ public interface ScenarioValidator {
 
     /**
      * Validates the given scenario against the run's environment registry, adding the pre-execution
-     * guardrail checks (environment/datasource whitelist, destructive SQL) on top of the structural rules.
-     * The default implementation ignores the registry and delegates to {@link #validate(Scenario)}.
+     * guardrail checks (environment/datasource whitelist, destructive SQL, secret headers, timeout
+     * bounds) on top of the structural rules. Deliberately abstract — an earlier default silently
+     * delegated to {@link #validate(Scenario)}, which let a custom validator drop every guardrail
+     * without any signal; an implementation must now make that choice explicitly.
      *
      * @param scenario the scenario to validate
      * @param registry the environment registry the scenario will run against
      * @return the validation result
      */
-    default ValidationResult validate(Scenario scenario, EnvironmentRegistry registry) {
-        return validate(scenario);
-    }
+    ValidationResult validate(Scenario scenario, EnvironmentRegistry registry);
 }

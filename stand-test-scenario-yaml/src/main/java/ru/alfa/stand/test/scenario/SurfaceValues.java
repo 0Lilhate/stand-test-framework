@@ -132,7 +132,7 @@ final class SurfaceValues {
         } else if (value instanceof String text) {
             millis = parseDuration(text.trim(), location);
         } else {
-            throw new StandTestException("Duration at " + location + " must be a number of ms or '<n>s'/'<n>ms'");
+            throw new StandTestException("Duration at " + location + " must be a number of ms or '<n>ms'/'<n>s'/'<n>m'");
         }
         if (millis <= 0) {
             throw new StandTestException("Duration at " + location + " must be positive, but was " + millis + "ms");
@@ -148,9 +148,12 @@ final class SurfaceValues {
             if (text.endsWith("s")) {
                 return Long.parseLong(text.substring(0, text.length() - 1).trim()) * 1000L;
             }
+            if (text.endsWith("m")) {
+                return Long.parseLong(text.substring(0, text.length() - 1).trim()) * 60_000L;
+            }
             return Long.parseLong(text);
         } catch (NumberFormatException notANumber) {
-            throw new StandTestException("Invalid duration '" + text + "' at " + location + " (use '<n>s', '<n>ms' or a number of ms)");
+            throw new StandTestException("Invalid duration '" + text + "' at " + location + " (use '<n>ms', '<n>s', '<n>m' or a number of ms)");
         }
     }
 

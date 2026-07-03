@@ -278,4 +278,52 @@ class KafkaStepExecutorExpectTest {
 
         assertThat(this.consumer.closed()).isTrue();
     }
+
+    @Test
+    @DisplayName("a selected record is compacted out of the buffer but can never be selected twice (selectedKeys guard)")
+    void selectedRecordCompactedAndNeverReSelected() {
+        KafkaStepExecutor executor = executor(new DefaultAwaiter(new FakeTimeSource()));
+        ScenarioStep step = KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).correlationIdFromContext().build();
+        executor.prepare(step, this.context);
+        addResponse(0L, null, "{\"n\":1}", correlationId());
+
+        StepResult first = executor.execute(step, this.context);
+
+        assertThat(first.diagnostics()).containsEntry("kafka.offset", 0L);
+        // The only matching record was selected (and compacted); a second expect must time out, not
+        // re-select the same offset.
+        assertThatThrownBy(() -> executor.execute(step, this.context))
+                .isInstanceOf(StandTestAssertionError.class);
+    }
+
+    @Test
+    @DisplayName("exceeding the unmatched-buffer bound is an immediate infrastructure error, not a slow timeout")
+    void bufferCapBreachFailsFast() {
+        KafkaStepExecutor executor = executor(new DefaultAwaiter(new FakeTimeSource()));
+        ScenarioStep step = KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).correlationIdFromContext().build();
+        executor.prepare(step, this.context);
+        for (long offset = 0; offset <= ArmedConsumer.MAX_BUFFERED; offset++) {
+            addResponse(offset, null, "{}", "other-correlation-" + offset);
+        }
+
+        assertThatThrownBy(() -> executor.execute(step, this.context))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("buffered more than " + ArmedConsumer.MAX_BUFFERED)
+                .hasMessageContaining(KafkaTestSupport.RESPONSE_NAME);
+    }
+
+    @Test
+    @DisplayName("prepare registers the armed consumer under the namespaced kafka.consumer: key, so it cannot collide with another adapter's alias")
+    void prepareRegistersNamespacedScopeKey() {
+        KafkaStepExecutor executor = executor(Awaiter.create());
+        // Simulates a same-named logical alias owned by another adapter in the same run.
+        this.context.resourceScope().register(KafkaTestSupport.RESPONSE_ALIAS, () -> {
+        });
+        ScenarioStep step = KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).correlationIdFromContext().build();
+
+        executor.prepare(step, this.context);
+
+        assertThat(this.context.resourceScope().contains("kafka.consumer:" + KafkaTestSupport.RESPONSE_ALIAS)).isTrue();
+        assertThat(this.factory.consumerCreations()).isEqualTo(1);
+    }
 }

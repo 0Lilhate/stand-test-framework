@@ -74,9 +74,15 @@ class GuardrailHoleTest {
     void g3_unboundedTimeout() {
         assertThat(validate(kafkaExpectTimeout("9999999m"))).isNotEmpty();
         assertThat(validate(kafkaExpectTimeout("0s"))).isNotEmpty();
+        // Per-unit caps keep every schema-valid duration within the runtime validator's 1-hour bound.
+        assertThat(validate(kafkaExpectTimeout("999m"))).isNotEmpty();
+        assertThat(validate(kafkaExpectTimeout("61m"))).isNotEmpty();
+        assertThat(validate(kafkaExpectTimeout("1200s"))).isNotEmpty();
         assertThat(validate(kafkaExpectTimeout("30s"))).isEmpty();
+        assertThat(validate(kafkaExpectTimeout("999s"))).isEmpty();
         assertThat(validate(kafkaExpectTimeout("100ms"))).isEmpty();
         assertThat(validate(kafkaExpectTimeout("2m"))).isEmpty();
+        assertThat(validate(kafkaExpectTimeout("60m"))).isEmpty();
     }
 
     @Test
@@ -84,5 +90,21 @@ class GuardrailHoleTest {
     void g5_fixtureTraversal() {
         assertThat(validate(restPostBody("../../../etc/passwd"))).isNotEmpty();
         assertThat(validate(restPostBody("fixtures/request.json"))).isEmpty();
+    }
+
+    private static String kafkaExpectAssertion(String assertionJson) {
+        return "{\"id\":\"a\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"kafka.expect\","
+                + "\"topic\":\"t\",\"timeout\":\"5s\",\"assert\":[" + assertionJson + "]}]}";
+    }
+
+    @Test
+    @DisplayName("G6: an assertion carries exactly one matcher and equals:null is rejected")
+    void g6_assertionExactlyOneMatcher() {
+        assertThat(validate(kafkaExpectAssertion("{\"path\":\"$.x\"}"))).isNotEmpty();
+        assertThat(validate(kafkaExpectAssertion("{\"path\":\"$.x\",\"equals\":1,\"exists\":true}"))).isNotEmpty();
+        assertThat(validate(kafkaExpectAssertion("{\"path\":\"$.x\",\"equals\":null}"))).isNotEmpty();
+        assertThat(validate(kafkaExpectAssertion("{\"path\":\"$.x\",\"equals\":\"OK\"}"))).isEmpty();
+        assertThat(validate(kafkaExpectAssertion("{\"path\":\"$.x\",\"exists\":true}"))).isEmpty();
+        assertThat(validate(kafkaExpectAssertion("{\"path\":\"$.x\",\"matches\":\"^A\"}"))).isEmpty();
     }
 }

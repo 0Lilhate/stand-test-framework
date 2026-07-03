@@ -55,6 +55,13 @@ import ru.alfa.stand.test.core.variable.VariableResolver;
  */
 public final class GrpcStepExecutor implements StepExecutor {
 
+    /**
+     * Namespace prefix for this adapter's {@link ResourceScope} keys, so a gRPC target alias can never
+     * collide with another adapter's resource registered under the same logical alias in one run
+     * (mirrors the DB adapter's {@code db.datasource:} convention).
+     */
+    private static final String CHANNEL_KEY_PREFIX = "grpc.channel:";
+
     private final GrpcChannelFactory channelFactory;
     private final ReferenceResolver referenceResolver;
     private final GrpcCallInvoker invoker;
@@ -152,17 +159,18 @@ public final class GrpcStepExecutor implements StepExecutor {
 
     private ManagedChannel ensureChannel(StepExecutionContext context, String targetAlias, GrpcTargetDefinition target) {
         ResourceScope scope = context.resourceScope();
-        Optional<AutoCloseable> existing = scope.get(targetAlias);
+        String key = CHANNEL_KEY_PREFIX + targetAlias;
+        Optional<AutoCloseable> existing = scope.get(key);
         if (existing.isPresent()) {
             if (existing.get() instanceof ManagedChannelResource resource) {
                 return resource.channel();
             }
-            throw new StandTestException("Run-scoped resource under key '" + targetAlias + "' is not a gRPC channel");
+            throw new StandTestException("Run-scoped resource under key '" + key + "' is not a gRPC channel");
         }
         // Resolve the target reference (an env-var lookup) only when a channel must actually be created,
         // so a cache hit does not re-read the environment on every step.
         ManagedChannel channel = this.channelFactory.create(resolve(target));
-        scope.register(targetAlias, new ManagedChannelResource(channel));
+        scope.register(key, new ManagedChannelResource(channel));
         return channel;
     }
 

@@ -17,8 +17,10 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  * resources bound to the run — for example a Kafka consumer pre-armed in
  * {@link StepExecutor#prepare(ru.alfa.stand.test.core.scenario.ScenarioStep, StepExecutionContext)
  * prepare} and reused (and advanced) across the {@code execute} of every {@code kafka.expect} step on
- * the same topic. The key is adapter-chosen (the Kafka adapter keys consumers by topic alias), so
- * {@code prepare} and all matching {@code execute} calls deterministically share one resource.
+ * the same topic. The key is adapter-chosen and, by convention, namespaced with a module prefix
+ * ({@code db.datasource:}, {@code kafka.consumer:}, {@code grpc.channel:} + the logical alias) so
+ * {@code prepare} and all matching {@code execute} calls deterministically share one resource while
+ * identically-named aliases of different adapters can never collide within one run.
  *
  * <p>One {@code ResourceScope} belongs to exactly one scenario run; the runner calls {@link #closeAll()}
  * in a {@code finally} block, so consumers and connections never leak even when a step throws. It is a

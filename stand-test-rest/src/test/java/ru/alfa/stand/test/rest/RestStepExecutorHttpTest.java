@@ -107,4 +107,15 @@ class RestStepExecutorHttpTest {
         ScenarioStep step = RestStep.get(RestTestSupport.SERVICE, "/x").build();
         assertThatThrownBy(() -> RestTestSupport.liveExecutor().execute(step, context)).isInstanceOf(StandTestException.class);
     }
+
+    @Test
+    @DisplayName("a base URL carrying userinfo credentials is redacted in the transport-failure message")
+    void userInfoIsRedactedInFailureMessage() {
+        StepExecutionContext context = RestTestSupport.context(RestTestSupport.registry("http://user:secretpass@127.0.0.1:1"), new VariableStore());
+        ScenarioStep step = RestStep.get(RestTestSupport.SERVICE, "/x").build();
+        assertThatThrownBy(() -> RestTestSupport.liveExecutor().execute(step, context))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("***@127.0.0.1:1")
+                .satisfies(thrown -> assertThat(thrown.getMessage()).doesNotContain("secretpass"));
+    }
 }

@@ -52,12 +52,12 @@ class AwaitResultTest {
     }
 
     @Test
-    @DisplayName("the no-arg orElseThrow throws a StandTestException carrying the summary")
+    @DisplayName("the no-arg orElseThrow raises a StandTestAssertionError (unmet expectation) carrying the summary")
     void timedOut_orElseThrowDefault() {
         AwaitResult<String> result = AwaitResult.timedOut("PENDING", 3, Duration.ofSeconds(1), null, diagnostics());
 
         assertThatThrownBy(result::orElseThrow)
-                .isInstanceOf(StandTestException.class)
+                .isInstanceOf(StandTestAssertionError.class)
                 .hasMessageContaining("not satisfied within");
     }
 

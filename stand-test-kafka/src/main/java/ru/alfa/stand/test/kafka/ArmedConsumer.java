@@ -3,6 +3,7 @@ package ru.alfa.stand.test.kafka;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -20,14 +21,21 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  *
  * <p>It owns the {@code start-from-now} positioning ({@code assign}/{@code seekToEnd}, done in
  * {@link #arm()} during the runner's prepare phase, before any step triggers an effect) and the
- * consume-and-advance selection: every polled record is buffered, and {@link #pollAndSelect} returns the
- * first <em>not-yet-selected</em> buffered record that passes the selection predicate, marking it
- * consumed. Because the buffer (not the raw consumer position) tracks what has been selected, a later
- * expect can still pick a lower-offset message a discriminator skipped earlier — so out-of-order,
- * same-correlationId streams disambiguate correctly. It is single-threaded: a run is driven on one
- * thread, consistent with {@code KafkaConsumer} not being thread-safe.
+ * consume-and-advance selection: polled records are buffered until selected, and {@link #pollAndSelect}
+ * returns the first buffered record that passes the selection predicate, marking it consumed and
+ * removing it from the buffer (compaction — {@code selectedKeys} still prevents a re-polled duplicate
+ * from re-entering). Because the buffer (not the raw consumer position) tracks what has been selected,
+ * a later expect can still pick a lower-offset message a discriminator skipped earlier — so
+ * out-of-order, same-correlationId streams disambiguate correctly. The unmatched buffer is bounded by
+ * {@link #MAX_BUFFERED}: on a busy shared topic a selection that matches nothing would otherwise grow
+ * memory for the whole run, so breaching the bound is an immediate infrastructure error rather than a
+ * slow timeout. It is single-threaded: a run is driven on one thread, consistent with
+ * {@code KafkaConsumer} not being thread-safe.
  */
 final class ArmedConsumer implements AutoCloseable {
+
+    /** Upper bound of buffered UNMATCHED records; breaching it fails fast instead of growing memory. */
+    static final int MAX_BUFFERED = 10_000;
 
     private final Consumer<String, String> consumer;
     private final String topicAlias;
@@ -35,6 +43,7 @@ final class ArmedConsumer implements AutoCloseable {
     private final List<ConsumerRecord<String, String>> buffer = new ArrayList<>();
     private final Set<String> selectedKeys = new HashSet<>();
     private List<TopicPartition> partitions = List.of();
+    private int seenCount;
 
     ArmedConsumer(Consumer<String, String> consumer, String topicAlias, String realTopic) {
         this.consumer = consumer;
@@ -64,23 +73,33 @@ final class ArmedConsumer implements AutoCloseable {
     Optional<ConsumerRecord<String, String>> pollAndSelect(Duration pollTimeout, Predicate<ConsumerRecord<String, String>> selection) {
         ConsumerRecords<String, String> polled = this.consumer.poll(pollTimeout);
         for (ConsumerRecord<String, String> record : polled) {
-            this.buffer.add(record);
-        }
-        for (ConsumerRecord<String, String> record : this.buffer) {
-            String key = record.partition() + ":" + record.offset();
-            if (this.selectedKeys.contains(key)) {
-                continue;
+            this.seenCount++;
+            if (!this.selectedKeys.contains(recordKey(record))) {
+                this.buffer.add(record);
             }
+        }
+        if (this.buffer.size() > MAX_BUFFERED) {
+            throw new StandTestException("Kafka expect on topic '" + this.realTopic + "' (alias '" + this.topicAlias + "') buffered more than "
+                    + MAX_BUFFERED + " unmatched messages — the selection matches nothing on a busy topic; narrow the correlation/key selection or use a more specific topic");
+        }
+        Iterator<ConsumerRecord<String, String>> records = this.buffer.iterator();
+        while (records.hasNext()) {
+            ConsumerRecord<String, String> record = records.next();
             if (selection.test(record)) {
-                this.selectedKeys.add(key);
+                this.selectedKeys.add(recordKey(record));
+                records.remove();
                 return Optional.of(record);
             }
         }
         return Optional.empty();
     }
 
+    private static String recordKey(ConsumerRecord<String, String> record) {
+        return record.partition() + ":" + record.offset();
+    }
+
     int messagesSeen() {
-        return this.buffer.size();
+        return this.seenCount;
     }
 
     /**

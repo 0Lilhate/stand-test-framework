@@ -1,5 +1,6 @@
 package ru.alfa.stand.test.core.context;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Set;
@@ -54,7 +55,7 @@ public record ScenarioContext(
 
     /**
      * Starts a new context for the given scenario, environment and tags, generating a fresh
-     * {@link TestRunId}, {@link CorrelationId} and creation instant.
+     * {@link TestRunId}, {@link CorrelationId} and creation instant from the system UTC clock.
      *
      * @param scenarioId the scenario identifier
      * @param environment the logical environment name (never blank)
@@ -62,12 +63,28 @@ public record ScenarioContext(
      * @return a new scenario context
      */
     public static ScenarioContext start(ScenarioId scenarioId, String environment, Set<String> tags) {
+        return start(scenarioId, environment, tags, Clock.systemUTC());
+    }
+
+    /**
+     * Starts a new context with an explicit clock for the creation instant, so a runner driving its
+     * timestamps from an injected {@link Clock} keeps {@code createdAt} consistent (and deterministic
+     * under a fixed clock in tests).
+     *
+     * @param scenarioId the scenario identifier
+     * @param environment the logical environment name (never blank)
+     * @param tags free-form labels for the run
+     * @param clock the clock supplying {@code createdAt}
+     * @return a new scenario context
+     */
+    public static ScenarioContext start(ScenarioId scenarioId, String environment, Set<String> tags, Clock clock) {
+        Objects.requireNonNull(clock, "clock must not be null");
         return new ScenarioContext(
                 scenarioId,
                 TestRunId.generate(),
                 CorrelationId.generate(),
                 environment,
                 tags,
-                Instant.now());
+                clock.instant());
     }
 }

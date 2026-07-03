@@ -15,8 +15,9 @@ enforced later at runtime (and therefore cannot be expressed in a static schema)
    aliases resolved by the SDK. Never emit a URL, host, port, bootstrap-servers list, JDBC URL, or
    connection string.
 3. **Every asynchronous wait has a bounded `timeout`.** `kafka.expect`, `db.expectEventually`, and
-   `grpc.unary` require a positive, bounded `timeout` (`<n>ms` / `<n>s` / `<n>m`). Never `0`, negative,
-   empty, or unbounded.
+   `grpc.unary` require a positive, bounded `timeout` (`<n>ms` / `<n>s` / `<n>m`, at most `99999ms` /
+   `999s` / `60m`). Never `0`, negative, empty, or unbounded. The runtime validator independently caps
+   every timeout/deadline at 1 hour, so a larger value is rejected even without a schema pass.
 4. **`correlationId` is SDK-owned.** Request it with `correlation.inject: true` on the producing step
    and await it with `correlation.fromContext: true` on the consuming step. Never hardcode a correlation
    value.
@@ -52,7 +53,7 @@ These are provided by the SDK and may be referenced with `${...}`:
 | `kafka.send`          | Publish a message to a topic alias                   |
 | `kafka.expect`        | Await a message on a topic alias (requires `timeout`) |
 | `db.expectEventually` | Read-only DB probe with polling (requires `timeout`) |
-| `grpc.unary`          | DRAFT — shape only; execution ships later            |
+| `grpc.unary`          | Unary gRPC call (requires `timeout`; executable subset — see below) |
 
 ## Assertions
 
@@ -78,10 +79,11 @@ structurally by the JSON Schema; **runtime** = enforced by the core `ScenarioVal
 
 | Code | Meaning | Layer |
 |------|---------|-------|
-| `THREAD_SLEEP` | No fixed sleeps/delays — the only wait is a declarative `timeout`; SQL sleep functions (`pg_sleep`, `sleep(`, `waitfor`, …) are rejected too. | schema |
+| `THREAD_SLEEP` | No fixed sleeps/delays — the only wait is a declarative `timeout`; SQL sleep functions (`pg_sleep`, `sleep(`, `waitfor`, `benchmark`, `dbms_lock`) are rejected by the schema and again by the runtime validator. | schema + runtime |
 | `FIXED_TEST_DATA_ID` | Do not hardcode test-data identifiers; generate or capture them. | prompt |
 | `HARDCODED_STAND_URL` | No stand URLs/hosts — only environment/service aliases; `path` is relative (a leading `//host` is rejected). | schema |
-| `SECRET_IN_SOURCE` | No inline secrets. The schema rejects secret-bearing header *names* (Authorization/token/password/…); secret *values* under innocuous keys are your responsibility and are re-checked at runtime. | schema (keys) + prompt |
+| `SECRET_IN_SOURCE` | No inline secrets. Secret-bearing header *names* (Authorization/token/password/secret/api-key/cookie) are rejected by the schema and again by the runtime validator; `Bearer`/`Basic`-shaped header *values* under innocuous names are rejected at runtime. Any other secret value you inline cannot be detected statically — never emit one. | schema + runtime + prompt |
+| `UNBOUNDED_TIMEOUT` | Every `timeout`/deadline is positive and bounded: schema caps per unit (`<=99999ms`/`<=999s`/`<=60m`); the runtime validator caps every declared timeout/deadline at 1 hour and rejects non-integer values. | schema + runtime |
 | `RAW_KAFKA_CLIENT` | No raw Kafka producer/consumer — only `kafka.send` / `kafka.expect`. | schema |
 | `RAW_JDBC_CLIENT` | No raw JDBC — only the declarative `db.expectEventually` probe. | schema |
 | `NON_WHITELISTED_ENVIRONMENT` | Use only whitelisted environment aliases (resolved at runtime). | runtime |
@@ -104,7 +106,11 @@ executable forms:
 - **REST query:** `query` is a `string -> string` map; the runtime passes it through as query parameters.
 - **DB expectation:** use `expect.singleValue` (equals the first column). `expect.rowExists` is not
   executable yet.
-- **gRPC:** `grpc.unary` is a draft — shape only, no execution yet.
+- **gRPC:** `grpc.unary` is executable in a subset: `target`, `method`, `timeout` (→ deadline),
+  `correlation.inject` (METADATA carrier), `request.fixture`, `expect.assert` with `equals`, and `capture`.
+  Not executable yet (fail-closed): inline `request.json`, `expect.status` (the gRPC status is surfaced as
+  an exception, not a declarative assertion), and non-`equals` matchers. The method is the fully-qualified
+  `package.Service/Method`; the target service must expose gRPC Server Reflection.
 - **Step ids** must be unique within a scenario. Uniqueness is enforced by the runtime `ScenarioValidator`,
   not by the schema, so keep them distinct.
 

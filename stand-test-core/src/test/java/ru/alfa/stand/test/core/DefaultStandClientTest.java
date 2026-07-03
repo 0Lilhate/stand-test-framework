@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import ru.alfa.stand.test.core.execution.ScenarioRunner;
+import ru.alfa.stand.test.core.identifier.CorrelationId;
 import ru.alfa.stand.test.core.identifier.ScenarioId;
 import ru.alfa.stand.test.core.identifier.TestRunId;
 import ru.alfa.stand.test.core.result.ScenarioResult;
@@ -23,7 +24,7 @@ class DefaultStandClientTest {
     void run_delegatesToRunner() {
         Scenario scenario = Scenario.builder("flow").environment("ift").step(GenericStep.of("s1", "fake.ok")).build();
         ScenarioResult canned = new ScenarioResult(
-                ScenarioId.of("flow"), TestRunId.of("run-1"), StepStatus.SUCCESS, List.of(), Instant.now(), Instant.now());
+                ScenarioId.of("flow"), TestRunId.of("run-1"), CorrelationId.generate(), StepStatus.SUCCESS, List.of(), Instant.now(), Instant.now());
         AtomicReference<Scenario> received = new AtomicReference<>();
         ScenarioRunner runner = passed -> {
             received.set(passed);

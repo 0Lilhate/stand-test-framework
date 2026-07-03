@@ -8,6 +8,7 @@ import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import ru.alfa.stand.test.core.exception.StandTestException;
+import ru.alfa.stand.test.core.validation.DefaultScenarioValidator;
 
 class GrpcStepParametersTest {
 
@@ -36,6 +37,30 @@ class GrpcStepParametersTest {
     }
 
     @Test
+    @DisplayName("requirePositiveMillis accepts only whole-number types — a Double is rejected, never truncated or saturated")
+    void requirePositiveMillisRejectsFloatingPoint() {
+        assertThatThrownBy(() -> GrpcStepParameters.requirePositiveMillis(Map.of(GrpcStepParameters.DEADLINE_MILLIS, 1e30), GrpcStepParameters.DEADLINE_MILLIS))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("whole number");
+        assertThatThrownBy(() -> GrpcStepParameters.requirePositiveMillis(Map.of(GrpcStepParameters.DEADLINE_MILLIS, 3.9d), GrpcStepParameters.DEADLINE_MILLIS))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("whole number");
+        assertThat(GrpcStepParameters.requirePositiveMillis(Map.of(GrpcStepParameters.DEADLINE_MILLIS, 250), GrpcStepParameters.DEADLINE_MILLIS)).isEqualTo(250L);
+    }
+
+    @Test
+    @DisplayName("requirePositiveMillis caps the deadline at the SDK-wide 1-hour timeout bound")
+    void requirePositiveMillisBounded() {
+        assertThatThrownBy(() -> GrpcStepParameters.requirePositiveMillis(
+                Map.of(GrpcStepParameters.DEADLINE_MILLIS, DefaultScenarioValidator.MAX_TIMEOUT_MILLIS + 1), GrpcStepParameters.DEADLINE_MILLIS))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("at most");
+        assertThat(GrpcStepParameters.requirePositiveMillis(
+                Map.of(GrpcStepParameters.DEADLINE_MILLIS, DefaultScenarioValidator.MAX_TIMEOUT_MILLIS), GrpcStepParameters.DEADLINE_MILLIS))
+                .isEqualTo(DefaultScenarioValidator.MAX_TIMEOUT_MILLIS);
+    }
+
+    @Test
     @DisplayName("flag is true only for Boolean.TRUE")
     void flagReadsBoolean() {
         assertThat(GrpcStepParameters.flag(Map.of(GrpcStepParameters.INJECT_CORRELATION_ID, true), GrpcStepParameters.INJECT_CORRELATION_ID)).isTrue();
@@ -49,6 +74,17 @@ class GrpcStepParametersTest {
         assertThatThrownBy(() -> GrpcStepParameters.stringMap(Map.of(GrpcStepParameters.METADATA, "x"), GrpcStepParameters.METADATA))
                 .isInstanceOf(StandTestException.class)
                 .hasMessageContaining("map");
+    }
+
+    @Test
+    @DisplayName("stringMap rejects a null metadata value instead of coercing it to the literal string \"null\"")
+    void stringMapRejectsNullValue() {
+        java.util.Map<String, String> metadata = new java.util.HashMap<>();
+        metadata.put("x-flow", null);
+
+        assertThatThrownBy(() -> GrpcStepParameters.stringMap(Map.of(GrpcStepParameters.METADATA, metadata), GrpcStepParameters.METADATA))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("must not contain null");
     }
 
     @Test

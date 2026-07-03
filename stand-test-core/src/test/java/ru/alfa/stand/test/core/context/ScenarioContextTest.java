@@ -3,7 +3,9 @@ package ru.alfa.stand.test.core.context;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.HashSet;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
@@ -48,6 +50,17 @@ class ScenarioContextTest {
 
         assertThat(context.tags()).containsExactly("smoke");
         assertThatThrownBy(() -> context.tags().add("x")).isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    @DisplayName("start with an explicit clock makes createdAt deterministic")
+    void start_withFixedClock_isDeterministic() {
+        Instant fixed = Instant.parse("2026-07-03T10:15:30Z");
+        Clock clock = Clock.fixed(fixed, ZoneOffset.UTC);
+
+        ScenarioContext context = ScenarioContext.start(ScenarioId.of("flow"), "ift", Set.of(), clock);
+
+        assertThat(context.createdAt()).isEqualTo(fixed);
     }
 
     @Test

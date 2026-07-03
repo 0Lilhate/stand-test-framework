@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Optional;
 import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.scenario.StepParameterKeys;
+import ru.alfa.stand.test.core.validation.DefaultScenarioValidator;
 
 /**
  * The shared parameter-map schema for a gRPC {@code ScenarioStep}.
@@ -82,12 +83,23 @@ public final class GrpcStepParameters {
         if (value == null) {
             throw new StandTestException("gRPC step parameter '" + key + "' is required (a positive number of milliseconds)");
         }
-        if (!(value instanceof Number number)) {
-            throw new StandTestException("gRPC step parameter '" + key + "' must be a number of milliseconds");
+        // Accept only whole-number types: a Double would be silently truncated (3.9 -> 3) or saturated
+        // (1e30 -> Long.MAX_VALUE, an effectively unbounded call) by longValue(). The Java DSL always
+        // supplies a Long; a YAML/AI front-end may supply an Integer. Mirrors DbStepParameters.positiveMillis.
+        long millis;
+        if (value instanceof Long longMillis) {
+            millis = longMillis;
+        } else if (value instanceof Integer intMillis) {
+            millis = intMillis;
+        } else {
+            throw new StandTestException("gRPC step parameter '" + key + "' must be a whole number of milliseconds (Integer or Long)");
         }
-        long millis = number.longValue();
         if (millis <= 0) {
             throw new StandTestException("gRPC step parameter '" + key + "' must be a positive number of milliseconds");
+        }
+        if (millis > DefaultScenarioValidator.MAX_TIMEOUT_MILLIS) {
+            throw new StandTestException("gRPC step parameter '" + key + "' must be at most " + DefaultScenarioValidator.MAX_TIMEOUT_MILLIS
+                    + " milliseconds (the SDK-wide timeout bound), but was " + millis);
         }
         return millis;
     }
@@ -102,6 +114,11 @@ public final class GrpcStepParameters {
         }
         Map<String, String> result = new LinkedHashMap<>();
         for (Map.Entry<?, ?> entry : raw.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null) {
+                // A null must never be coerced to the literal string "null" on the wire — reachable via
+                // a raw GenericStep parameter map (the typed builder already rejects nulls).
+                throw new StandTestException("gRPC step parameter '" + key + "' must not contain null keys or values");
+            }
             result.put(String.valueOf(entry.getKey()), String.valueOf(entry.getValue()));
         }
         return result;

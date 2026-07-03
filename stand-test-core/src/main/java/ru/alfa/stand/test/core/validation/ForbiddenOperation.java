@@ -36,6 +36,9 @@ public enum ForbiddenOperation {
     /** Destructive SQL without an explicit write/destructive allow flag. */
     DESTRUCTIVE_SQL_WITHOUT_ALLOW("DESTRUCTIVE_SQL_WITHOUT_ALLOW", "Destructive SQL without an explicit write or destructive allow flag"),
 
+    /** A missing, non-positive, non-integer or effectively-unbounded timeout/deadline. */
+    UNBOUNDED_TIMEOUT("UNBOUNDED_TIMEOUT", "Missing or effectively unbounded timeout or deadline instead of a bounded declarative wait"),
+
     /** Concrete-service business logic placed inside the SDK. */
     BUSINESS_LOGIC_IN_SDK("BUSINESS_LOGIC_IN_SDK", "Concrete-service business logic placed inside the SDK"),
 

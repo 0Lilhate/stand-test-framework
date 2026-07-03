@@ -205,6 +205,38 @@ class GrpcStepExecutorTest {
 
         assertThat(this.channelFactory.creations()).isEqualTo(1);
         assertThat(this.channelFactory.lastTarget().target()).isEqualTo("localhost:50051");
+        assertThat(this.context.resourceScope().contains("grpc.channel:" + GrpcTestSupport.TARGET_ALIAS)).isTrue();
+    }
+
+    @Test
+    @DisplayName("a foreign resource under the namespaced channel key is a configuration error, not silently replaced")
+    void foreignResourceUnderChannelKeyFails() {
+        FakeGrpcCallInvoker invoker = FakeGrpcCallInvoker.returning("{}");
+        GrpcStepExecutor executor = executor(invoker, GrpcTargetDefinitionFixture.withCorrelation());
+        this.context.resourceScope().register("grpc.channel:" + GrpcTestSupport.TARGET_ALIAS, () -> {
+        });
+        ScenarioStep step = GrpcStep.unary(GrpcTestSupport.TARGET_ALIAS).method("p.S/M").withinSeconds(1).build();
+
+        assertThatThrownBy(() -> executor.execute(step, this.context))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("grpc.channel:" + GrpcTestSupport.TARGET_ALIAS)
+                .hasMessageContaining("is not a gRPC channel");
+    }
+
+    @Test
+    @DisplayName("another adapter's resource under the same bare alias does not collide with the namespaced channel key")
+    void bareAliasResourceDoesNotCollideWithChannelKey() {
+        FakeGrpcCallInvoker invoker = FakeGrpcCallInvoker.returning("{}");
+        GrpcStepExecutor executor = executor(invoker, GrpcTargetDefinitionFixture.withCorrelation());
+        // Simulates a same-named logical alias owned by another adapter in the same run.
+        this.context.resourceScope().register(GrpcTestSupport.TARGET_ALIAS, () -> {
+        });
+        ScenarioStep step = GrpcStep.unary(GrpcTestSupport.TARGET_ALIAS).method("p.S/M").withinSeconds(1).build();
+
+        executor.execute(step, this.context);
+
+        assertThat(this.channelFactory.creations()).isEqualTo(1);
+        assertThat(this.context.resourceScope().contains("grpc.channel:" + GrpcTestSupport.TARGET_ALIAS)).isTrue();
     }
 
     @Test

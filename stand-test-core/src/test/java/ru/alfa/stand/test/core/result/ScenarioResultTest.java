@@ -18,6 +18,18 @@ class ScenarioResultTest {
     private final ScenarioContext context = ScenarioContext.start(ScenarioId.of("flow"), "ift");
 
     @Test
+    @DisplayName("from carries the run's SDK-owned correlationId into the result")
+    void from_carriesCorrelationId() {
+        ScenarioResult result = ScenarioResult.from(
+                context,
+                List.of(StepResult.success("s1", "rest.post", START, END)),
+                START,
+                END);
+
+        assertThat(result.correlationId()).isEqualTo(context.correlationId());
+    }
+
+    @Test
     @DisplayName("from derives SUCCESS when all steps succeed")
     void from_allSuccess_isSuccess() {
         ScenarioResult result = ScenarioResult.from(

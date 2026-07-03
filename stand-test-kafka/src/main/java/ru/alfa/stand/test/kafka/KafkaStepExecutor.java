@@ -14,6 +14,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Predicate;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -71,6 +73,20 @@ public final class KafkaStepExecutor implements StepExecutor {
     // Mode (a) of plan §4: the blocking consumer.poll(pollTimeout) carries the pause, so the await
     // poll interval is kept near-zero (AwaitPolicy forbids exactly zero) rather than adding a second,
     // independent wait between probes.
+    /**
+     * Namespace prefix for this adapter's {@link ResourceScope} keys, so a topic alias can never collide
+     * with another adapter's resource registered under the same logical alias in one run (mirrors the DB
+     * adapter's {@code db.datasource:} convention).
+     */
+    private static final String CONSUMER_KEY_PREFIX = "kafka.consumer:";
+
+    /**
+     * Backstop for the synchronous send-acknowledgement wait, above the producer's own bounds
+     * ({@code max.block.ms} + {@code delivery.timeout.ms} in {@link DefaultKafkaClientFactory}), so the
+     * wait is bounded even with a custom {@link KafkaClientFactory} that leaves the client defaults.
+     */
+    private static final long SEND_BACKSTOP_MILLIS = 60_000L;
+
     private static final Duration POLL_INTERVAL = Duration.ofMillis(1);
     private static final int TIMEOUT_SAMPLE_LIMIT = 5;
 
@@ -145,7 +161,7 @@ public final class KafkaStepExecutor implements StepExecutor {
         Map<String, String> headers = resolveValues(KafkaStepParameters.stringMap(parameters, KafkaStepParameters.HEADERS), resolver);
         injectCorrelationId(parameters, topic, topicAlias, headers, context);
         ResolvedKafkaCluster cluster = resolveClusterReferences(clusterDefinition);
-        RecordMetadata metadata = send(cluster, topic.name(), key, value, headers);
+        RecordMetadata metadata = send(cluster, topicAlias, topic.name(), key, value, headers);
         return sendSuccess(step, startedAt, topicAlias, topic.name(), key, metadata);
     }
 
@@ -186,7 +202,7 @@ public final class KafkaStepExecutor implements StepExecutor {
 
     private void armConsumer(String topicAlias, StepExecutionContext context) {
         ResourceScope scope = context.resourceScope();
-        if (scope.contains(topicAlias)) {
+        if (scope.contains(CONSUMER_KEY_PREFIX + topicAlias)) {
             return;
         }
         EnvironmentDefinition environment = environment(context);
@@ -197,7 +213,7 @@ public final class KafkaStepExecutor implements StepExecutor {
         ArmedConsumer armed = new ArmedConsumer(consumer, topicAlias, topic.name());
         // Register before arming, so a failure during positioning still hands the consumer to the
         // runner's ResourceScope.closeAll() and never leaks it.
-        scope.register(topicAlias, armed);
+        scope.register(CONSUMER_KEY_PREFIX + topicAlias, armed);
         try {
             armed.arm();
         } catch (StandTestException alreadyDescribed) {
@@ -208,7 +224,7 @@ public final class KafkaStepExecutor implements StepExecutor {
     }
 
     private ArmedConsumer armedConsumer(StepExecutionContext context, String topicAlias) {
-        return context.resourceScope().get(topicAlias)
+        return context.resourceScope().get(CONSUMER_KEY_PREFIX + topicAlias)
                 .filter(ArmedConsumer.class::isInstance)
                 .map(ArmedConsumer.class::cast)
                 .orElseThrow(() -> new StandTestException("No armed Kafka consumer for topic '" + topicAlias + "'; the runner's prepare phase did not arm it (plan §8.7)"));
@@ -274,20 +290,26 @@ public final class KafkaStepExecutor implements StepExecutor {
         return (header == null || header.value() == null) ? null : new String(header.value(), StandardCharsets.UTF_8);
     }
 
-    private RecordMetadata send(ResolvedKafkaCluster cluster, String topic, String key, String value, Map<String, String> headers) {
+    private RecordMetadata send(ResolvedKafkaCluster cluster, String topicAlias, String topic, String key, String value, Map<String, String> headers) {
         List<Header> recordHeaders = new ArrayList<>();
         headers.forEach((name, headerValue) -> recordHeaders.add(new RecordHeader(name, headerValue.getBytes(StandardCharsets.UTF_8))));
         ProducerRecord<String, String> record = new ProducerRecord<>(topic, null, key, value, recordHeaders);
         try (Producer<String, String> producer = this.clientFactory.createProducer(cluster)) {
             Future<RecordMetadata> future = producer.send(record);
             producer.flush();
-            return future.get();
+            // The producer's own bounds (max.block/delivery.timeout, DefaultKafkaClientFactory) fail a
+            // send against a down broker first, with the richer broker-side cause; this get() timeout is
+            // a backstop so a custom, unbounded KafkaClientFactory can still never hang the run.
+            return future.get(SEND_BACKSTOP_MILLIS, TimeUnit.MILLISECONDS);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
-            throw new StandTestException("Interrupted while sending to Kafka topic '" + topic + "'", interrupted);
+            throw new StandTestException("Interrupted while sending to Kafka topic '" + topic + "' (alias '" + topicAlias + "')", interrupted);
+        } catch (TimeoutException timedOut) {
+            throw new StandTestException("Sending to Kafka topic '" + topic + "' (alias '" + topicAlias + "') did not complete within "
+                    + SEND_BACKSTOP_MILLIS + " ms — the broker behind the cluster reference is unreachable or not acknowledging", timedOut);
         } catch (ExecutionException failed) {
             Throwable cause = (failed.getCause() != null) ? failed.getCause() : failed;
-            throw new StandTestException("Failed to send to Kafka topic '" + topic + "'", cause);
+            throw new StandTestException("Failed to send to Kafka topic '" + topic + "' (alias '" + topicAlias + "')", cause);
         }
     }
 

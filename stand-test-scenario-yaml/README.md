@@ -19,7 +19,7 @@ Scenario scenario = new YamlScenarioParser().parseResource("scenarios/flow.yaml"
 stand.run(scenario);   // StandClient → DefaultScenarioRunner → StepExecutor SPI (adapters on the classpath)
 ```
 
-The surface syntax (ergonomic `given`/`then`, `assert`/`capture` maps, `timeout: 30s`, whitelisted aliases,
+The surface syntax (ergonomic `given`/`then`, `assert`/`capture` maps, `timeout` durations as `<n>ms`/`<n>s`/`<n>m` or a bare number of ms (e.g. `timeout: 30s`, `timeout: 2m`), whitelisted aliases,
 `${...}` placeholders) is translated into the exact `GenericStep` parameter keys the adapters read. YAML is
 loaded with SnakeYAML's `SafeConstructor`; malformed input fails closed with a located `StandTestException`.
 Full design and the surface→internal mapping: `docs/arch/stand-test-scenario-yaml-design.md`.

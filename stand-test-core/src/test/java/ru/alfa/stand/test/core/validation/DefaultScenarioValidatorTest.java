@@ -182,6 +182,118 @@ class DefaultScenarioValidatorTest {
     }
 
     @Test
+    @DisplayName("guardrail: an SQL sleep/side-effect time function is a THREAD_SLEEP error")
+    void guardrail_sqlSleepFunction_reportsForbiddenOp() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(dbStep("s1", "mainDb", "SELECT pg_sleep(30)"))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, mainDbRegistry());
+
+        assertThat(result.errors()).extracting(ValidationIssue::code)
+                .contains(ForbiddenOperation.THREAD_SLEEP.code());
+    }
+
+    @Test
+    @DisplayName("guardrail: a secret-bearing header name is a SECRET_IN_SOURCE error")
+    void guardrail_secretHeaderName_reportsForbiddenOp() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(restStep("s1", Map.of("Authorization", "${authToken}")))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, mainDbRegistry());
+
+        assertThat(result.errors()).extracting(ValidationIssue::code)
+                .contains(ForbiddenOperation.SECRET_IN_SOURCE.code());
+    }
+
+    @Test
+    @DisplayName("guardrail: a Bearer/Basic-shaped header value under an innocuous name is a SECRET_IN_SOURCE error")
+    void guardrail_secretHeaderValue_reportsForbiddenOp() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(restStep("s1", Map.of("X-Custom", "Bearer sk-abc123")))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, mainDbRegistry());
+
+        assertThat(result.errors()).extracting(ValidationIssue::code)
+                .contains(ForbiddenOperation.SECRET_IN_SOURCE.code());
+    }
+
+    @Test
+    @DisplayName("guardrail: benign headers pass")
+    void guardrail_benignHeaders_pass() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(restStep("s1", Map.of("Accept", "application/json", "X-Request-Source", "stand-test")))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, mainDbRegistry());
+
+        assertThat(result.isValid()).isTrue();
+    }
+
+    @Test
+    @DisplayName("guardrail: a timeout above the 1-hour bound is an UNBOUNDED_TIMEOUT error")
+    void guardrail_timeoutAboveBound_reportsForbiddenOp() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(timedStep("s1", StepParameterKeys.TIMEOUT_MILLIS, DefaultScenarioValidator.MAX_TIMEOUT_MILLIS + 1))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, mainDbRegistry());
+
+        assertThat(result.errors()).extracting(ValidationIssue::code)
+                .contains(ForbiddenOperation.UNBOUNDED_TIMEOUT.code());
+    }
+
+    @Test
+    @DisplayName("guardrail: a non-integer numeric deadline (Double) is an UNBOUNDED_TIMEOUT error")
+    void guardrail_floatingPointDeadline_reportsForbiddenOp() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(timedStep("s1", StepParameterKeys.DEADLINE_MILLIS, 1e30))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, mainDbRegistry());
+
+        assertThat(result.errors()).extracting(ValidationIssue::code)
+                .contains(ForbiddenOperation.UNBOUNDED_TIMEOUT.code());
+    }
+
+    @Test
+    @DisplayName("guardrail: a bounded whole-number timeout passes")
+    void guardrail_boundedTimeout_passes() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(timedStep("s1", StepParameterKeys.TIMEOUT_MILLIS, 30_000L))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, mainDbRegistry());
+
+        assertThat(result.isValid()).isTrue();
+    }
+
+    @Test
+    @DisplayName("guardrail: value-level issues are reported even when the environment is not whitelisted")
+    void guardrail_valueChecksRun_whenEnvironmentUnknown() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("prod")
+                .step(restStep("s1", Map.of("Authorization", "x")))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, mainDbRegistry());
+
+        assertThat(result.errors()).extracting(ValidationIssue::code)
+                .contains(
+                        ForbiddenOperation.NON_WHITELISTED_ENVIRONMENT.code(),
+                        ForbiddenOperation.SECRET_IN_SOURCE.code());
+    }
+
+    @Test
     @DisplayName("the structural-only validate ignores the whitelist (no registry)")
     void structuralValidate_ignoresWhitelist() {
         Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
@@ -207,6 +319,16 @@ class DefaultScenarioValidatorTest {
     private static GenericStep dbStep(String id, String datasource, String sql) {
         return new GenericStep(id, "db.query", "",
                 Map.of(StepParameterKeys.DATASOURCE, datasource, StepParameterKeys.SQL, sql));
+    }
+
+    private static GenericStep restStep(String id, Map<String, String> headers) {
+        return new GenericStep(id, "rest.get", "",
+                Map.of(StepParameterKeys.SERVICE, "client-service", StepParameterKeys.PATH, "/api", StepParameterKeys.HEADERS, headers));
+    }
+
+    private static GenericStep timedStep(String id, String timeoutKey, Object timeoutValue) {
+        return new GenericStep(id, "kafka.expect", "",
+                Map.of(StepParameterKeys.TOPIC, "response-topic", timeoutKey, timeoutValue));
     }
 
     /** Test double that allows a blank type, which {@link GenericStep} would reject. */

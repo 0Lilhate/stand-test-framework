@@ -148,6 +148,20 @@ class DbStepExecutorSeedCleanupTest {
     }
 
     @Test
+    @DisplayName("destructive SQL loaded from a classpath resource is rejected exactly like inline SQL (static validator cannot see sqlResource content)")
+    void destructiveSqlFromResourceRejected() throws SQLException {
+        insertDirectly("survivor-res", testRunId());
+        ScenarioStep seed = DbStep.seed(DbTestSupport.DATASOURCE_ALIAS)
+                .sqlFromResource("fixtures/destructive.sql")
+                .build();
+
+        assertThatThrownBy(() -> this.executor.execute(seed, this.context))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("Destructive");
+        assertThat(testRunIdOf("survivor-res")).isEqualTo(testRunId());
+    }
+
+    @Test
     @DisplayName("a write to a non-whitelisted schema is rejected")
     void nonWhitelistedSchemaRejected() {
         ScenarioStep seed = DbStep.seed(DbTestSupport.DATASOURCE_ALIAS)

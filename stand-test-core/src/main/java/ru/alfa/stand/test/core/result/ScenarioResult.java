@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import ru.alfa.stand.test.core.context.ScenarioContext;
+import ru.alfa.stand.test.core.identifier.CorrelationId;
 import ru.alfa.stand.test.core.identifier.ScenarioId;
 import ru.alfa.stand.test.core.identifier.TestRunId;
 
@@ -13,10 +14,12 @@ import ru.alfa.stand.test.core.identifier.TestRunId;
  *
  * <p>The {@code stepResults} list is defensively copied and exposed as immutable. The overall
  * {@code status} is {@link StepStatus#FAILED} if any step failed or timed out, otherwise
- * {@link StepStatus#SUCCESS}.
+ * {@link StepStatus#SUCCESS}. The SDK-owned {@code correlationId} the run injected outbound is part
+ * of the result, so a test can correlate external systems (log search, manual checks) with the run.
  *
  * @param scenarioId the scenario id
  * @param testRunId the run id
+ * @param correlationId the SDK-owned correlation id injected outbound during the run
  * @param status the overall status
  * @param stepResults the immutable list of step results
  * @param startedAt when the run started
@@ -25,6 +28,7 @@ import ru.alfa.stand.test.core.identifier.TestRunId;
 public record ScenarioResult(
         ScenarioId scenarioId,
         TestRunId testRunId,
+        CorrelationId correlationId,
         StepStatus status,
         List<StepResult> stepResults,
         Instant startedAt,
@@ -33,6 +37,7 @@ public record ScenarioResult(
     public ScenarioResult {
         Objects.requireNonNull(scenarioId, "scenarioId must not be null");
         Objects.requireNonNull(testRunId, "testRunId must not be null");
+        Objects.requireNonNull(correlationId, "correlationId must not be null");
         Objects.requireNonNull(status, "status must not be null");
         Objects.requireNonNull(startedAt, "startedAt must not be null");
         Objects.requireNonNull(finishedAt, "finishedAt must not be null");
@@ -81,6 +86,7 @@ public record ScenarioResult(
         return new ScenarioResult(
                 context.scenarioId(),
                 context.testRunId(),
+                context.correlationId(),
                 deriveStatus(copy),
                 copy,
                 startedAt,

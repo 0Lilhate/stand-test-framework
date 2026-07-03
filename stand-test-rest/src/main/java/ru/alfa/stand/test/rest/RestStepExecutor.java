@@ -198,7 +198,10 @@ public final class RestStepExecutor implements StepExecutor {
         try {
             return JsonPath.parse(body);
         } catch (InvalidJsonException | IllegalArgumentException invalid) {
-            throw new StandTestAssertionError("Response body is not valid JSON: " + invalid.getMessage());
+            // Deliberately does NOT echo the parser's message: json-smart quotes a fragment of the
+            // offending body, which may carry sensitive response data into a report. The body length is
+            // safe context; the raw body stays out of the failure text.
+            throw new StandTestAssertionError("Response body is not valid JSON (" + body.length() + " characters, parse failed)");
         }
     }
 

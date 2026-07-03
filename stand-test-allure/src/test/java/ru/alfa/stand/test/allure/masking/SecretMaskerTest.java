@@ -33,6 +33,21 @@ class SecretMaskerTest {
     }
 
     @Test
+    @DisplayName("a Bearer/Basic credential-shaped VALUE is masked even under an innocuous key")
+    void mask_credentialShapedValue_isMasked() {
+        assertThat(masker.mask("X-Custom", "Bearer sk-abc123def456")).isEqualTo(SecretMasker.MASK);
+        assertThat(masker.mask("note", "basic dXNlcjpwYXNzd29yZA==")).isEqualTo(SecretMasker.MASK);
+    }
+
+    @Test
+    @DisplayName("prose values that merely start with bearer/basic are not over-masked")
+    void mask_proseValues_passThrough() {
+        assertThat(masker.mask("message", "Basic authentication required")).isEqualTo("Basic authentication required");
+        assertThat(masker.mask("note", "bearer of good news")).isEqualTo("bearer of good news");
+        assertThat(masker.mask("url", "https://basic-auth.example/x")).isEqualTo("https://basic-auth.example/x");
+    }
+
+    @Test
     @DisplayName("a map is masked entry-by-entry, preserving order, with nulls rendered as text")
     void mask_map_masksSensitiveAndKeepsOrder() {
         Map<String, String> input = new LinkedHashMap<>();

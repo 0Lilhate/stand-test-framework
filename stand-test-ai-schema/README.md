@@ -71,10 +71,13 @@ declarative document that an AI produces can be validated *before* execution and
 imperative eager-IO or raw clients, so the guardrails always apply. That is the whole point of the
 schema.
 
-## Note on document shape (follow-up)
+## Note on document shape (resolved)
 
-This MVP schema uses a top-level `steps: [...]` array with a `type:` discriminator per step, which is the
-most JSON-Schema-friendly shape for AI generation. The current `stand-test-scenario-yaml` parser uses a
-different surface (`given`/`then` with single-key step maps). Reconciling the two surfaces (or adding a
-translation/parity layer) is a tracked follow-up; until then this schema is the contract for
-AI-generated documents, not a 1:1 mirror of the YAML parser input.
+This schema uses a top-level `steps: [...]` array with a `type:` discriminator per step — the most
+JSON-Schema-friendly shape for AI generation. The `stand-test-scenario-yaml` module parses this exact
+format via `AiScenarioParser` (alongside its human-oriented `given`/`then` surface handled by
+`YamlScenarioParser`), so a schema-valid document is directly executable; the parity is pinned by
+`AiScenarioParserTest` and the example module's `AiSchemaParityTest`. The parser additionally fails
+closed on schema-valid constructs the runtime cannot execute yet (see the generation rules' "Schema vs
+runtime" section), and the core `DefaultScenarioValidator` re-enforces the schema's value-level
+guardrails at run time.

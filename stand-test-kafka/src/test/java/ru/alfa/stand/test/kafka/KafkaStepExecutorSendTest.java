@@ -171,6 +171,29 @@ class KafkaStepExecutorSendTest {
                 .hasMessageContaining("requires");
     }
 
+    @Test
+    @DisplayName("a broker-side send failure maps to a StandTestException naming topic and alias, and the producer is still closed")
+    void sendFailureMapsToInfraAndClosesProducer() {
+        MockProducer<String, String> failing = new MockProducer<>(false, new StringSerializer(), new StringSerializer()) {
+
+            @Override
+            public void flush() {
+                errorNext(new org.apache.kafka.common.errors.TimeoutException("Topic not present in metadata after 10000 ms"));
+            }
+        };
+        FakeKafkaClientFactory factory = new FakeKafkaClientFactory(failing, null);
+        KafkaStepExecutor executor = new KafkaStepExecutor(factory, reference -> reference, Awaiter.create());
+        ScenarioStep step = KafkaStep.send(KafkaTestSupport.REQUEST_ALIAS).body("{}").build();
+
+        assertThatThrownBy(() -> executor.execute(step, context(new VariableStore())))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("Failed to send")
+                .hasMessageContaining(KafkaTestSupport.REQUEST_NAME)
+                .hasMessageContaining(KafkaTestSupport.REQUEST_ALIAS)
+                .hasCauseInstanceOf(org.apache.kafka.common.errors.TimeoutException.class);
+        assertThat(failing.closed()).isTrue();
+    }
+
     private record StubStep(String id, String type, String description) implements ScenarioStep {
     }
 }

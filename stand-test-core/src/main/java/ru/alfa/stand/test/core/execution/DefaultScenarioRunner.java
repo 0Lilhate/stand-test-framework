@@ -39,7 +39,10 @@ import ru.alfa.stand.test.core.variable.VariableStore;
  * first failing step stops the run and a failure is thrown rather than hidden in the returned result.
  * An executor may signal a failure either by returning a {@link StepStatus#isFailure() failing}
  * {@link StepResult} or by throwing. A returned failing status is never silently kept — it is
- * converted into a thrown {@link StandTestAssertionError}. A thrown {@link AssertionError} propagates
+ * converted into a thrown failure with the same classification as the thrown path:
+ * {@link StepStatus#FAILED}/{@link StepStatus#TIMEOUT} (an unmet expectation) become a
+ * {@link StandTestAssertionError} and {@link StepStatus#BROKEN} (an infrastructure/configuration
+ * problem) becomes a {@link StandTestException}. A thrown {@link AssertionError} propagates
  * as a test failure (recorded {@link StepStatus#FAILED}); a {@link StandTestException} propagates as an
  * infrastructure error and any other runtime exception is wrapped as a {@link StandTestException} (both
  * recorded {@link StepStatus#BROKEN}, so a reporting consumer can tell an unmet assertion from an
@@ -119,7 +122,7 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
         Objects.requireNonNull(scenario, "scenario must not be null");
         validator.validate(scenario, environmentRegistry).throwIfInvalid();
 
-        ScenarioContext context = ScenarioContext.start(scenario.id(), scenario.environment(), scenario.tags());
+        ScenarioContext context = ScenarioContext.start(scenario.id(), scenario.environment(), scenario.tags(), clock);
         ResourceScope resourceScope = new ResourceScope();
         StepExecutionContext executionContext = new StepExecutionContext(
                 context, new VariableStore(), environmentRegistry, reportingEventPublisher, resourceScope);
@@ -128,9 +131,12 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
         publishScenario(context, ScenarioPhase.STARTED);
         List<StepResult> stepResults = new ArrayList<>();
         try {
-            prepareSteps(scenario, executionContext);
+            prepareSteps(scenario, executionContext, context, stepResults);
             for (ScenarioStep step : scenario.steps()) {
                 StepResult result = executeStep(step, executionContext, context, stepResults);
+                if (result.status() == StepStatus.BROKEN) {
+                    throw new StandTestException(failureMessage(step, result));
+                }
                 if (result.status().isFailure()) {
                     throw new StandTestAssertionError(failureMessage(step, result));
                 }
@@ -148,14 +154,45 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
      * (a {@code kafka.expect} consumer) are positioned before any step runs. A step whose type has no
      * registered executor is skipped here — the main loop reports it through {@link #resolveExecutor}
      * with full step events, preserving the existing failure path.
+     *
+     * <p>A prepare failure is an infrastructure/configuration problem (nothing has been asserted yet):
+     * it is recorded as a {@link StepStatus#BROKEN} step result with a paired STARTED/FINISHED event
+     * (events are emitted only on the failure path, so a successful prepare leaves the reporting
+     * stream untouched and the eventual execute-phase STARTED/FINISHED pairing stays balanced) and
+     * re-thrown as a {@link StandTestException} — an already-classified {@link StandTestException}
+     * (an adapter's own arming failure) propagates unwrapped.
      */
-    private void prepareSteps(Scenario scenario, StepExecutionContext executionContext) {
+    private void prepareSteps(
+            Scenario scenario,
+            StepExecutionContext executionContext,
+            ScenarioContext context,
+            List<StepResult> stepResults) {
         for (ScenarioStep step : scenario.steps()) {
             StepExecutor executor = findExecutor(step.type());
-            if (executor != null) {
+            if (executor == null) {
+                continue;
+            }
+            Instant start = clock.instant();
+            try {
                 executor.prepare(step, executionContext);
+            } catch (StandTestException alreadyClassified) {
+                recordPrepareFailure(step, start, context, stepResults, alreadyClassified);
+                throw alreadyClassified;
+            } catch (RuntimeException unexpected) {
+                recordPrepareFailure(step, start, context, stepResults, unexpected);
+                throw new StandTestException("Step '" + step.id() + "' (" + step.type() + ") failed to prepare", unexpected);
             }
         }
+    }
+
+    private void recordPrepareFailure(
+            ScenarioStep step,
+            Instant start,
+            ScenarioContext context,
+            List<StepResult> stepResults,
+            Throwable cause) {
+        publishStep(context, step, StepPhase.STARTED, null, null, Map.of(), List.of());
+        recordFailure(step, start, context, stepResults, StepStatus.BROKEN, cause);
     }
 
     private void closeQuietly(ResourceScope resourceScope) {

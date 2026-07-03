@@ -3,6 +3,7 @@ package ru.alfa.stand.test.await;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.function.Function;
+import ru.alfa.stand.test.core.exception.StandTestAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestException;
 
 /**
@@ -103,16 +104,18 @@ public record AwaitResult<T>(
     }
 
     /**
-     * Returns the satisfying value, or throws a {@link StandTestException} carrying the timeout
+     * Returns the satisfying value, or throws a {@link StandTestAssertionError} carrying the timeout
      * {@link TimeoutDiagnostics#summary() summary} if the await timed out.
      *
-     * <p>Adapters expecting a business effect should prefer
-     * {@link #orElseThrow(Function)} with a {@code StandTestAssertionError}, so that JUnit reports the
-     * timeout as a failed assertion rather than an infrastructure error.
+     * <p>An expired await means the expected effect did not arrive in time — an unmet expectation, so
+     * the default raises an {@link AssertionError} (JUnit/Allure report a failed test, consistent with
+     * the runner's TIMEOUT→failed mapping). A caller waiting on pure infrastructure readiness (not a
+     * business expectation) should use {@link #orElseThrow(Function)} with a
+     * {@link StandTestException} instead.
      *
      * @return the satisfying value
      */
     public T orElseThrow() {
-        return orElseThrow(diagnostics -> new StandTestException(diagnostics.summary()));
+        return orElseThrow(diagnostics -> new StandTestAssertionError(diagnostics.summary()));
     }
 }

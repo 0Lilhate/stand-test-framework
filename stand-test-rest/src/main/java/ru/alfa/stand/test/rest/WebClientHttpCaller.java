@@ -75,8 +75,29 @@ public final class WebClientHttpCaller implements HttpCaller {
         } catch (StandTestException standTestFailure) {
             throw standTestFailure;
         } catch (RuntimeException transportFailure) {
-            throw new StandTestException("HTTP " + request.method() + " " + request.baseUrl() + request.path() + " failed: " + transportFailure.getMessage(), transportFailure);
+            throw new StandTestException("HTTP " + request.method() + " " + redactUserInfo(request.baseUrl()) + request.path() + " failed: " + transportFailure.getMessage(), transportFailure);
         }
+    }
+
+    /**
+     * Redacts the userinfo of a base URL before it is echoed into a failure message: an ops-provided
+     * base URL may carry {@code user:password@host} credentials that must never reach a report. The
+     * wire URI built by {@link #buildUri} keeps the credentials — only the diagnostic text is redacted.
+     */
+    private static String redactUserInfo(String baseUrl) {
+        int schemeEnd = baseUrl.indexOf("://");
+        if (schemeEnd < 0) {
+            return baseUrl;
+        }
+        int authorityEnd = baseUrl.indexOf('/', schemeEnd + 3);
+        String authority = (authorityEnd < 0) ? baseUrl.substring(schemeEnd + 3) : baseUrl.substring(schemeEnd + 3, authorityEnd);
+        int at = authority.lastIndexOf('@');
+        if (at < 0) {
+            return baseUrl;
+        }
+        String redactedAuthority = "***@" + authority.substring(at + 1);
+        String tail = (authorityEnd < 0) ? "" : baseUrl.substring(authorityEnd);
+        return baseUrl.substring(0, schemeEnd + 3) + redactedAuthority + tail;
     }
 
     private static URI buildUri(RestRequest request) {

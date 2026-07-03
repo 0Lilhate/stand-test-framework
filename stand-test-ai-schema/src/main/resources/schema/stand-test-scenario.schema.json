@@ -52,12 +52,12 @@
       "pattern": "^[A-Za-z][A-Za-z0-9._-]*$"
     },
     "duration": {
-      "description": "Bounded, positive timeout: <n>ms | <n>s | <n>m. No zero, no negatives, no empty values, and coarse upper bounds per unit (<=99999ms, <=9999s, <=999m) to reject effectively-unbounded values.",
+      "description": "Bounded, positive timeout: <n>ms | <n>s | <n>m. No zero, no negatives, no empty values, and per-unit upper bounds (<=99999ms, <=999s, <=60m) so every schema-valid value stays within the runtime validator's 1-hour bound (UNBOUNDED_TIMEOUT).",
       "type": "string",
       "oneOf": [
         { "pattern": "^[1-9][0-9]{0,4}ms$" },
-        { "pattern": "^[1-9][0-9]{0,3}s$" },
-        { "pattern": "^[1-9][0-9]{0,2}m$" }
+        { "pattern": "^[1-9][0-9]{0,2}s$" },
+        { "pattern": "^([1-9]|[1-5][0-9]|60)m$" }
       ]
     },
     "correlationInject": {
@@ -107,19 +107,25 @@
       "additionalProperties": { "type": "string", "minLength": 1, "pattern": "^\\$" }
     },
     "assertion": {
-      "description": "A single declarative assertion over a JSONPath. Exactly one matcher besides `path`. No expression/script matchers.",
+      "description": "A single declarative assertion over a JSONPath. Exactly one matcher besides `path` (enforced by oneOf: zero matchers match no branch, two matchers match two branches). `equals: null` is forbidden — a null check is what `exists`/`notNull` express. No expression/script matchers.",
       "type": "object",
       "additionalProperties": false,
       "required": ["path"],
-      "minProperties": 2,
       "properties": {
         "path": { "type": "string", "minLength": 1 },
-        "equals": { "type": ["string", "number", "boolean", "null"] },
+        "equals": { "type": ["string", "number", "boolean"] },
         "exists": { "type": "boolean" },
         "notNull": { "type": "boolean" },
         "contains": { "type": ["string", "number", "boolean"] },
         "matches": { "type": "string", "minLength": 1 }
-      }
+      },
+      "oneOf": [
+        { "required": ["equals"] },
+        { "required": ["exists"] },
+        { "required": ["notNull"] },
+        { "required": ["contains"] },
+        { "required": ["matches"] }
+      ]
     },
     "assertionList": {
       "type": "array",

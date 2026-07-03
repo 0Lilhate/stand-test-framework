@@ -14,6 +14,11 @@ import java.util.function.Supplier;
  * (a JDBC connection, a Kafka consumer) stays confined. Implementations must never use a fixed
  * {@code Thread.sleep} as the wait strategy (plan §2.5); they poll on the configured interval and
  * return an {@link AwaitResult} the caller inspects (they do not throw on timeout).
+ *
+ * <p><strong>The timeout bounds the polling loop, not an individual probe.</strong> A probe that
+ * blocks indefinitely blocks the await with it — the probe must be non-blocking or carry its own
+ * bounded timeout (a bounded Kafka poll, a JDBC query with a statement timeout), so the policy's
+ * timeout stays the effective upper bound of the whole wait.
  */
 public interface Awaiter {
 
