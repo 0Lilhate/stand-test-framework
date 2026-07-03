@@ -9,7 +9,7 @@ import ru.alfa.stand.test.core.StandClient;
 import ru.alfa.stand.test.core.result.ScenarioResult;
 import ru.alfa.stand.test.core.scenario.Scenario;
 import ru.alfa.stand.test.db.DbStep;
-import ru.alfa.stand.test.junit.ScenarioId;
+import ru.alfa.stand.test.junit.StandScenarioId;
 import ru.alfa.stand.test.junit.StandEnv;
 import ru.alfa.stand.test.junit.StandTest;
 import ru.alfa.stand.test.rest.RestStep;
@@ -22,13 +22,13 @@ import ru.alfa.stand.test.rest.RestStep;
  * rather than a passthrough literal, and {@link ExampleDoublesExtension} pins the doubles to that address.
  */
 @StandTest(env = ExampleStand.ENVIRONMENT)
-@ScenarioId("standtest-rest-to-db")
+@StandScenarioId("standtest-rest-to-db")
 @ExtendWith(ExampleDoublesExtension.class)
 class StandTestExampleTest {
 
     @Test
     @DisplayName("@StandTest injects a StandClient that runs a REST→DB scenario against the discovered registry")
-    void restToDb_viaStandTestInjection(StandClient stand, @ScenarioId String id, @StandEnv String env) {
+    void restToDb_viaStandTestInjection(StandClient stand, @StandScenarioId String id, @StandEnv String env) {
         Scenario scenario = Scenario.builder(id)
                 .environment(env)
                 .step(RestStep.post(ExampleStand.SERVICE, "/api/requests")

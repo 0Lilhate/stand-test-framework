@@ -10,7 +10,7 @@ The JUnit 5 integration layer — the bridge between the JUnit lifecycle and the
 
 - **`@StandTest`** — a meta-annotation that wires `StandTestExtension` (`@ExtendWith`). Place it on a
   test class or method. Optional `env()` is the lowest-precedence environment source.
-- **`@ScenarioId` / `@StandEnv`** — declare the scenario id / logical environment on a class, method
+- **`@StandScenarioId` / `@StandEnv`** — declare the scenario id / logical environment on a class, method
   or `String` parameter. The extension injects the declared value into the annotated `String`
   parameter, resolved most-specific-first: parameter → method → class (→ `@StandTest(env)` for the
   environment). They inject a `String` (feeding `Scenario.builder(id)` / `.environment(env)`) so they
@@ -20,7 +20,7 @@ The JUnit 5 integration layer — the bridge between the JUnit lifecycle and the
     `ServiceLoader` (the SPI wiring point — each adapter registers its executor in
     `META-INF/services`), behind a `DefaultScenarioRunner`. Built once and cached for the engine run.
   - **`Awaiter`** — a system-backed awaiter for ad-hoc waits.
-  - **`@ScenarioId String` / `@StandEnv String`** — the declared scenario id / environment.
+  - **`@StandScenarioId String` / `@StandEnv String`** — the declared scenario id / environment.
 - **Failure mapping is automatic.** `StandTestAssertionError extends AssertionError` and
   `StandTestException extends RuntimeException`, so a failure thrown by the runner inside
   `stand.run(...)` surfaces as a native JUnit test failure/error — the extension translates nothing.
@@ -30,11 +30,11 @@ The JUnit 5 integration layer — the bridge between the JUnit lifecycle and the
 ```java
 @StandTest
 @StandEnv("ift")
-@ScenarioId("example-flow")
+@StandScenarioId("example-flow")
 class ExampleFlowTest {
 
     @Test
-    void shouldProcessFlow(StandClient stand, @ScenarioId String id, @StandEnv String env) {
+    void shouldProcessFlow(StandClient stand, @StandScenarioId String id, @StandEnv String env) {
         var scenario = Scenario.builder(id)                // "example-flow" (declared once above)
                 .environment(env)                          // "ift"
                 .step(/* RestStep / KafkaStep / DbStep — from the adapter modules */)
@@ -57,7 +57,7 @@ No transport, no business assertions, no reporting — only the JUnit ↔ SDK br
 The extension is driven in-process with JUnit's `EngineTestKit`: fixture classes (tagged
 `standtest-fixture` and excluded from the normal run) exercise passing, assertion-failing and
 infrastructure-failing scenarios, the `StandClient`/`Awaiter` injection and caching, and the
-`@ScenarioId`/`@StandEnv` resolution — precedence (parameter → method → class → `@StandTest(env)`),
+`@StandScenarioId`/`@StandEnv` resolution — precedence (parameter → method → class → `@StandTest(env)`),
 `@Nested` inheritance from the enclosing class, and the misuse errors (missing declaration, both
 annotations on one parameter, non-`String` parameter) — asserting the exact JUnit outcome and thrown
 type.

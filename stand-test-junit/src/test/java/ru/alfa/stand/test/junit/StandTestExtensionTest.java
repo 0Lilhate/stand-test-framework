@@ -91,30 +91,30 @@ class StandTestExtensionTest {
     }
 
     @Test
-    @DisplayName("a @ScenarioId String parameter is injected from the class declaration")
+    @DisplayName("a @StandScenarioId String parameter is injected from the class declaration")
     void scenarioId_injectedFromClass() {
         EngineTestKit.engine("junit-jupiter")
-                .selectors(selectClass(ScenarioIdFixture.class))
+                .selectors(selectClass(StandScenarioIdFixture.class))
                 .execute()
                 .testEvents()
                 .assertStatistics(stats -> stats.started(1).succeeded(1));
     }
 
     @Test
-    @DisplayName("a method-level @ScenarioId overrides the class-level one")
+    @DisplayName("a method-level @StandScenarioId overrides the class-level one")
     void scenarioId_methodOverridesClass() {
         EngineTestKit.engine("junit-jupiter")
-                .selectors(selectClass(ScenarioIdOverrideFixture.class))
+                .selectors(selectClass(StandScenarioIdOverrideFixture.class))
                 .execute()
                 .testEvents()
                 .assertStatistics(stats -> stats.started(1).succeeded(1));
     }
 
     @Test
-    @DisplayName("a missing @ScenarioId fails resolution with a ParameterResolutionException")
+    @DisplayName("a missing @StandScenarioId fails resolution with a ParameterResolutionException")
     void scenarioId_missing_failsResolution() {
         EngineTestKit.engine("junit-jupiter")
-                .selectors(selectClass(MissingScenarioIdFixture.class))
+                .selectors(selectClass(MissingStandScenarioIdFixture.class))
                 .execute()
                 .testEvents()
                 .assertThatEvents()
@@ -153,7 +153,7 @@ class StandTestExtensionTest {
     }
 
     @Test
-    @DisplayName("a scenario is built and run from the injected @ScenarioId and @StandEnv")
+    @DisplayName("a scenario is built and run from the injected @StandScenarioId and @StandEnv")
     void fullFlow_runsFromInjectedMetadata() {
         EngineTestKit.engine("junit-jupiter")
                 .selectors(selectClass(FullFlowFixture.class))
@@ -183,7 +183,7 @@ class StandTestExtensionTest {
     }
 
     @Test
-    @DisplayName("a parameter carrying both @ScenarioId and @StandEnv fails resolution")
+    @DisplayName("a parameter carrying both @StandScenarioId and @StandEnv fails resolution")
     void bothAnnotations_failResolution() {
         EngineTestKit.engine("junit-jupiter")
                 .selectors(selectClass(BothAnnotationsFixture.class))
@@ -194,7 +194,7 @@ class StandTestExtensionTest {
     }
 
     @Test
-    @DisplayName("@ScenarioId/@StandEnv on a non-String parameter fails resolution")
+    @DisplayName("@StandScenarioId/@StandEnv on a non-String parameter fails resolution")
     void nonStringAnnotatedParameter_failsResolution() {
         EngineTestKit.engine("junit-jupiter")
                 .selectors(selectClass(NonStringParamFixture.class))
@@ -205,10 +205,10 @@ class StandTestExtensionTest {
     }
 
     @Test
-    @DisplayName("@StandTest(env) does not leak into @ScenarioId resolution")
-    void standTestEnv_doesNotLeakIntoScenarioId() {
+    @DisplayName("@StandTest(env) does not leak into @StandScenarioId resolution")
+    void standTestEnv_doesNotLeakIntoStandScenarioId() {
         EngineTestKit.engine("junit-jupiter")
-                .selectors(selectClass(ScenarioIdNoFallbackFixture.class))
+                .selectors(selectClass(StandScenarioIdNoFallbackFixture.class))
                 .execute()
                 .testEvents()
                 .assertThatEvents()
@@ -216,7 +216,7 @@ class StandTestExtensionTest {
     }
 
     @Test
-    @DisplayName("a @Nested test inherits class-level @ScenarioId/@StandEnv from the enclosing class")
+    @DisplayName("a @Nested test inherits class-level @StandScenarioId/@StandEnv from the enclosing class")
     void nestedTest_inheritsEnclosingClassDeclarations() {
         EngineTestKit.engine("junit-jupiter")
                 .selectors(selectClass(NestedEnclosingFixture.class))
@@ -315,34 +315,34 @@ class StandTestExtensionTest {
     }
 
     @StandTest
-    @ScenarioId("example-flow")
+    @StandScenarioId("example-flow")
     @Tag("standtest-fixture")
-    static class ScenarioIdFixture {
+    static class StandScenarioIdFixture {
 
         @Test
-        void hasId(@ScenarioId String id) {
+        void hasId(@StandScenarioId String id) {
             assertThat(id).isEqualTo("example-flow");
         }
     }
 
     @StandTest
-    @ScenarioId("class-level")
+    @StandScenarioId("class-level")
     @Tag("standtest-fixture")
-    static class ScenarioIdOverrideFixture {
+    static class StandScenarioIdOverrideFixture {
 
         @Test
-        @ScenarioId("method-level")
-        void hasId(@ScenarioId String id) {
+        @StandScenarioId("method-level")
+        void hasId(@StandScenarioId String id) {
             assertThat(id).isEqualTo("method-level");
         }
     }
 
     @StandTest
     @Tag("standtest-fixture")
-    static class MissingScenarioIdFixture {
+    static class MissingStandScenarioIdFixture {
 
         @Test
-        void hasId(@ScenarioId String id) {
+        void hasId(@StandScenarioId String id) {
             assertThat(id).isNull();
         }
     }
@@ -380,12 +380,12 @@ class StandTestExtensionTest {
 
     @StandTest
     @StandEnv("ift")
-    @ScenarioId("example-flow")
+    @StandScenarioId("example-flow")
     @Tag("standtest-fixture")
     static class FullFlowFixture {
 
         @Test
-        void flow(StandClient stand, @ScenarioId String id, @StandEnv String env) {
+        void flow(StandClient stand, @StandScenarioId String id, @StandEnv String env) {
             stand.run(Scenario.builder(id).environment(env).step(GenericStep.of("s1", "fake.ok")).build());
         }
     }
@@ -402,25 +402,25 @@ class StandTestExtensionTest {
     }
 
     @StandTest
-    @ScenarioId("class-id")
+    @StandScenarioId("class-id")
     @StandEnv("class-env")
     @Tag("standtest-fixture")
     static class ParameterValueOverrideFixture {
 
         @Test
-        void parameterValuesWin(@ScenarioId("param-id") String id, @StandEnv("param-env") String env) {
+        void parameterValuesWin(@StandScenarioId("param-id") String id, @StandEnv("param-env") String env) {
             assertThat(id).isEqualTo("param-id");
             assertThat(env).isEqualTo("param-env");
         }
     }
 
     @StandTest
-    @ScenarioId("example-flow")
+    @StandScenarioId("example-flow")
     @Tag("standtest-fixture")
     static class BothAnnotationsFixture {
 
         @Test
-        void rejectsBoth(@ScenarioId @StandEnv String x) {
+        void rejectsBoth(@StandScenarioId @StandEnv String x) {
             assertThat(x).isNull();
         }
     }
@@ -438,10 +438,10 @@ class StandTestExtensionTest {
 
     @StandTest(env = "stage")
     @Tag("standtest-fixture")
-    static class ScenarioIdNoFallbackFixture {
+    static class StandScenarioIdNoFallbackFixture {
 
         @Test
-        void envDoesNotLeakToId(@ScenarioId String id) {
+        void envDoesNotLeakToId(@StandScenarioId String id) {
             assertThat(id).isNull();
         }
     }
@@ -457,7 +457,7 @@ class StandTestExtensionTest {
     }
 
     @StandTest
-    @ScenarioId("outer-id")
+    @StandScenarioId("outer-id")
     @StandEnv("outer-env")
     @Tag("standtest-fixture")
     static class NestedEnclosingFixture {
@@ -466,7 +466,7 @@ class StandTestExtensionTest {
         class Inner {
 
             @Test
-            void inheritsFromEnclosingClass(@ScenarioId String id, @StandEnv String env) {
+            void inheritsFromEnclosingClass(@StandScenarioId String id, @StandEnv String env) {
                 assertThat(id).isEqualTo("outer-id");
                 assertThat(env).isEqualTo("outer-env");
             }

@@ -3,9 +3,10 @@ package ru.alfa.stand.test.junit;
 import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 import java.util.ServiceLoader;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.ExtensionContext.Namespace;
 import org.junit.jupiter.api.extension.ParameterContext;
@@ -17,11 +18,11 @@ import ru.alfa.stand.test.await.Awaiter;
 import ru.alfa.stand.test.core.DefaultStandClient;
 import ru.alfa.stand.test.core.StandClient;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
-import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
 import ru.alfa.stand.test.core.event.NoOpReportingEventPublisher;
 import ru.alfa.stand.test.core.event.ReportingEventPublisher;
 import ru.alfa.stand.test.core.execution.DefaultScenarioRunner;
 import ru.alfa.stand.test.core.execution.ScenarioRunner;
+import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.execution.StepExecutor;
 import ru.alfa.stand.test.core.validation.DefaultScenarioValidator;
 
@@ -33,11 +34,12 @@ import ru.alfa.stand.test.core.validation.DefaultScenarioValidator;
  *   <li>{@link StandClient} — assembled from the {@link StepExecutor}s discovered on the test classpath
  *   via {@link ServiceLoader} (the SPI wiring point: each adapter registers its executor), plus a
  *   {@link ReportingEventPublisher} and an {@link EnvironmentRegistry} discovered the same way (first
- *   provider wins; a {@link NoOpReportingEventPublisher} and an empty {@link InMemoryEnvironmentRegistry}
- *   when none is present), behind a {@link DefaultScenarioRunner}. The client is built once and cached
+ *   provider wins; with no provider, reporting falls back to the {@link NoOpReportingEventPublisher} and
+ *   environment lookups fail with a distinct "no EnvironmentRegistry provider on the test classpath"
+ *   diagnostic), behind a {@link DefaultScenarioRunner}. The client is built once and cached
  *   for the engine run.</li>
  *   <li>{@link Awaiter} — a fresh system-backed awaiter for ad-hoc waits in a test.</li>
- *   <li>{@code String} annotated with {@link ScenarioId @ScenarioId} — the declared scenario id.</li>
+ *   <li>{@code String} annotated with {@link StandScenarioId @StandScenarioId} — the declared scenario id.</li>
  *   <li>{@code String} annotated with {@link StandEnv @StandEnv} — the declared logical environment.</li>
  * </ul>
  *
@@ -45,7 +47,7 @@ import ru.alfa.stand.test.core.validation.DefaultScenarioValidator;
  * non-blank value, then a method-level declaration, then a class-level declaration — also found on the
  * enclosing class of a {@code @Nested} test — and, for the environment only, {@link StandTest#env()}
  * as a final fallback. A missing declaration, a non-{@code String} annotated parameter, or a parameter
- * carrying both {@code @ScenarioId} and {@code @StandEnv} fails with a
+ * carrying both {@code @StandScenarioId} and {@code @StandEnv} fails with a
  * {@link ParameterResolutionException}.
  *
  * <p>SDK failures need no translation here: {@code StandTestAssertionError} extends
@@ -62,10 +64,10 @@ public final class StandTestExtension implements ParameterResolver {
         if (type == StandClient.class || type == Awaiter.class) {
             return true;
         }
-        // A @ScenarioId/@StandEnv parameter is claimed regardless of its type, so that a misuse (a
+        // A @StandScenarioId/@StandEnv parameter is claimed regardless of its type, so that a misuse (a
         // non-String parameter, or both annotations at once) fails with a clear message from
         // resolveParameter rather than JUnit's generic "no resolver registered" error.
-        return parameterContext.isAnnotated(ScenarioId.class) || parameterContext.isAnnotated(StandEnv.class);
+        return parameterContext.isAnnotated(StandScenarioId.class) || parameterContext.isAnnotated(StandEnv.class);
     }
 
     @Override
@@ -77,28 +79,28 @@ public final class StandTestExtension implements ParameterResolver {
         if (type == StandClient.class) {
             return standClient(extensionContext);
         }
-        boolean asScenarioId = parameterContext.isAnnotated(ScenarioId.class);
+        boolean asStandScenarioId = parameterContext.isAnnotated(StandScenarioId.class);
         boolean asEnvironment = parameterContext.isAnnotated(StandEnv.class);
-        if (asScenarioId && asEnvironment) {
-            throw new ParameterResolutionException("A parameter must not carry both @ScenarioId and @StandEnv");
+        if (asStandScenarioId && asEnvironment) {
+            throw new ParameterResolutionException("A parameter must not carry both @StandScenarioId and @StandEnv");
         }
         if (type != String.class) {
             throw new ParameterResolutionException(
-                    "@ScenarioId and @StandEnv may only annotate a String parameter, but found " + type.getTypeName());
+                    "@StandScenarioId and @StandEnv may only annotate a String parameter, but found " + type.getTypeName());
         }
-        return asScenarioId
-                ? resolveScenarioId(parameterContext, extensionContext)
+        return asStandScenarioId
+                ? resolveStandScenarioId(parameterContext, extensionContext)
                 : resolveEnvironment(parameterContext, extensionContext);
     }
 
-    private static String resolveScenarioId(ParameterContext parameterContext, ExtensionContext extensionContext) {
-        String value = parameterValue(parameterContext, ScenarioId.class, ScenarioId::value);
+    private static String resolveStandScenarioId(ParameterContext parameterContext, ExtensionContext extensionContext) {
+        String value = parameterValue(parameterContext, StandScenarioId.class, StandScenarioId::value);
         if (value == null) {
-            value = declaredValue(extensionContext, ScenarioId.class, ScenarioId::value);
+            value = declaredValue(extensionContext, StandScenarioId.class, StandScenarioId::value);
         }
         if (value == null) {
             throw new ParameterResolutionException(
-                    "No @ScenarioId declared on the parameter, test method or test class");
+                    "No @StandScenarioId declared on the parameter, test method or test class");
         }
         return value;
     }
@@ -153,13 +155,36 @@ public final class StandTestExtension implements ParameterResolver {
         List<StepExecutor> executors = new ArrayList<>();
         ServiceLoader.load(StepExecutor.class).forEach(executors::add);
         // Reporting and environment wiring are discovered through the same SPI as the executors, so junit
-        // gains no compile-time edge to any adapter (plan §8.5/§17). First provider wins (single-provider
-        // assumption — the iteration order is classpath-dependent, not prioritised; a composite/priority
-        // policy is a later concern), and the defaults (NoOp publisher, empty registry) keep behaviour
-        // unchanged when no provider is on the classpath.
-        ReportingEventPublisher publisher = ServiceLoader.load(ReportingEventPublisher.class).findFirst().orElse(NoOpReportingEventPublisher.INSTANCE);
-        EnvironmentRegistry registry = ServiceLoader.load(EnvironmentRegistry.class).findFirst().orElseGet(() -> new InMemoryEnvironmentRegistry(Map.of()));
+        // gains no compile-time edge to any adapter (plan §8.5/§17). Exactly ONE provider is allowed per
+        // SPI: with more than one the pick would be silently classpath-order-dependent, so the build of
+        // the client fails loudly instead. With no reporting provider the NoOp publisher keeps behaviour
+        // unchanged; with no registry provider the fallback raises a distinct "no provider on the test
+        // classpath" diagnostic at first lookup instead of a misleading "not whitelisted" failure.
+        ReportingEventPublisher publisher = uniqueProvider(providers(ReportingEventPublisher.class), ReportingEventPublisher.class)
+                .orElse(NoOpReportingEventPublisher.INSTANCE);
+        EnvironmentRegistry registry = uniqueProvider(providers(EnvironmentRegistry.class), EnvironmentRegistry.class)
+                .orElseGet(NoProviderEnvironmentRegistry::new);
         ScenarioRunner runner = new DefaultScenarioRunner(executors, new DefaultScenarioValidator(), registry, publisher);
         return new DefaultStandClient(runner);
+    }
+
+    private static <T> List<T> providers(Class<T> spi) {
+        List<T> found = new ArrayList<>();
+        ServiceLoader.load(spi).forEach(found::add);
+        return found;
+    }
+
+    /**
+     * Returns the single discovered provider, empty when none is present, and fails loudly when more
+     * than one is on the classpath — a silent classpath-order-dependent pick would make runs
+     * environment-dependent in a way that is invisible until it misbehaves.
+     */
+    static <T> Optional<T> uniqueProvider(List<T> providers, Class<T> spi) {
+        if (providers.size() > 1) {
+            String names = providers.stream().map(provider -> provider.getClass().getName()).collect(Collectors.joining(", "));
+            throw new StandTestException("Multiple " + spi.getSimpleName() + " providers on the test classpath: [" + names
+                    + "] — the selection would be classpath-order-dependent; keep exactly one provider");
+        }
+        return providers.isEmpty() ? Optional.empty() : Optional.of(providers.get(0));
     }
 }

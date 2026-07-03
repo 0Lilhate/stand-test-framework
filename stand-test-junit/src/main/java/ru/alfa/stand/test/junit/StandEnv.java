@@ -18,7 +18,7 @@ import java.lang.annotation.Target;
  * clear error. The injected {@code String} feeds {@code Scenario.builder(...).environment(env)}.
  *
  * <p>On a parameter it may annotate only a {@code String}, and must not be combined with
- * {@link ScenarioId @ScenarioId} on the same parameter; either misuse fails with a clear error.
+ * {@link StandScenarioId @StandScenarioId} on the same parameter; either misuse fails with a clear error.
  */
 @Target({ElementType.TYPE, ElementType.METHOD, ElementType.PARAMETER})
 @Retention(RetentionPolicy.RUNTIME)

@@ -108,7 +108,7 @@ known-gap из junit-итерации). Алиасы должны резолви
 `close`), порядок относительно `StandTestExtension` детерминирован (registry читает env, а не сам сервер).
 
 **Альтернатива (если не вводить registry-SPI):** оставить исполняемые примеры на ручном раннере (Phase 1),
-а `@StandTest` показать только для инъекции `@ScenarioId`/`@StandEnv`/`Awaiter` (без REST/DB-шага). Менее
+а `@StandTest` показать только для инъекции `@StandScenarioId`/`@StandEnv`/`Awaiter` (без REST/DB-шага). Менее
 показательно, но нулевые изменения junit/core. Выбрать на старте шага.
 
 **Зависимости.** `@StandTest` требует `testImplementation(project(":stand-test-junit"))` — **сейчас junit
