@@ -16,6 +16,7 @@ import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.GrpcTargetDefinition;
 import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.KafkaClusterDefinition;
+import ru.alfa.stand.test.core.environment.SecretReferences;
 import ru.alfa.stand.test.core.environment.ServiceEndpointDefinition;
 import ru.alfa.stand.test.core.environment.TopicDefinition;
 import ru.alfa.stand.test.core.exception.StandTestException;
@@ -92,7 +93,7 @@ public final class EnvironmentConfig {
     private static ServiceEndpointDefinition service(String alias, Object value, String location) {
         Map<String, Object> fields = asMap(value, location);
         checkKnownKeys(fields, SERVICE_KEYS, location);
-        String baseUrlRef = requireString(fields, "base-url-ref", "baseUrlRef", location);
+        String baseUrlRef = requireReference(fields, "base-url-ref", "baseUrlRef", location);
         CorrelationConfig correlation = correlation(fields.get("correlation"), location + ".correlation");
         return build(location, () -> new ServiceEndpointDefinition(alias, baseUrlRef, correlation));
     }
@@ -108,9 +109,9 @@ public final class EnvironmentConfig {
     private static DatasourceDefinition datasource(String alias, Object value, String location) {
         Map<String, Object> fields = asMap(value, location);
         checkKnownKeys(fields, DATASOURCE_KEYS, location);
-        String urlRef = requireString(fields, "url-ref", "urlRef", location);
-        String userRef = requireString(fields, "user-ref", "userRef", location);
-        String passwordRef = requireString(fields, "password-ref", "passwordRef", location);
+        String urlRef = requireReference(fields, "url-ref", "urlRef", location);
+        String userRef = requireReference(fields, "user-ref", "userRef", location);
+        String passwordRef = requireReference(fields, "password-ref", "passwordRef", location);
         Set<String> allowedSchemas = stringSet(pick(fields, "allowed-schemas", "allowedSchemas"), location + ".allowed-schemas");
         boolean writeAllowed = boolFlag(pick(fields, "write-allowed", "writeAllowed"), location + ".write-allowed");
         return build(location, () -> new DatasourceDefinition(alias, urlRef, userRef, passwordRef, allowedSchemas, writeAllowed));
@@ -119,7 +120,7 @@ public final class EnvironmentConfig {
     private static GrpcTargetDefinition grpcTarget(String alias, Object value, String location) {
         Map<String, Object> fields = asMap(value, location);
         checkKnownKeys(fields, GRPC_KEYS, location);
-        String targetRef = requireString(fields, "target-ref", "targetRef", location);
+        String targetRef = requireReference(fields, "target-ref", "targetRef", location);
         CorrelationConfig correlation = correlation(fields.get("correlation"), location + ".correlation");
         return build(location, () -> new GrpcTargetDefinition(alias, targetRef, correlation));
     }
@@ -130,9 +131,9 @@ public final class EnvironmentConfig {
         }
         Map<String, Object> fields = asMap(value, location);
         checkKnownKeys(fields, KAFKA_KEYS, location);
-        String bootstrapServersRef = requireString(fields, "bootstrap-servers-ref", "bootstrapServersRef", location);
-        String securityProtocolRef = optionalString(pick(fields, "security-protocol-ref", "securityProtocolRef"), location);
-        String saslJaasConfigRef = optionalString(pick(fields, "sasl-jaas-config-ref", "saslJaasConfigRef"), location);
+        String bootstrapServersRef = requireReference(fields, "bootstrap-servers-ref", "bootstrapServersRef", location);
+        String securityProtocolRef = optionalReference(fields, "security-protocol-ref", "securityProtocolRef", location);
+        String saslJaasConfigRef = optionalReference(fields, "sasl-jaas-config-ref", "saslJaasConfigRef", location);
         return build(location, () -> new KafkaClusterDefinition(bootstrapServersRef, securityProtocolRef, saslJaasConfigRef));
     }
 
@@ -200,6 +201,21 @@ public final class EnvironmentConfig {
             throw new StandTestException("Field '" + kebab + "' at " + location + " must be a non-blank string");
         }
         return text;
+    }
+
+    /**
+     * Reads a required {@code *-ref} field and applies the shared reference-shape guard: a reference is
+     * the NAME of an env-var/secret entry, so a value carrying whitespace, a {@code ://} scheme or a
+     * {@code Bearer}/{@code Basic} prefix is rejected fail-closed. NOT applied to non-ref strings
+     * (correlation/topic {@code name}), where values like {@code X-Correlation-Id} are legitimate.
+     */
+    private static String requireReference(Map<String, Object> fields, String kebab, String camel, String location) {
+        return SecretReferences.requireReferenceShape(requireString(fields, kebab, camel, location), kebab, location);
+    }
+
+    private static String optionalReference(Map<String, Object> fields, String kebab, String camel, String location) {
+        String value = optionalString(pick(fields, kebab, camel), location);
+        return (value == null) ? null : SecretReferences.requireReferenceShape(value, kebab, location);
     }
 
     private static String optionalString(Object value, String location) {

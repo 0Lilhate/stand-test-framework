@@ -10,6 +10,7 @@ import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.GrpcTargetDefinition;
 import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.KafkaClusterDefinition;
+import ru.alfa.stand.test.core.environment.SecretReferences;
 import ru.alfa.stand.test.core.environment.ServiceEndpointDefinition;
 import ru.alfa.stand.test.core.environment.TopicDefinition;
 
@@ -67,7 +68,7 @@ public final class EnvironmentRegistryFactory {
         for (Map.Entry<String, StandTestProperties.Service> entry : env.getServices().entrySet()) {
             String alias = entry.getKey();
             StandTestProperties.Service service = entry.getValue();
-            result.put(alias, new ServiceEndpointDefinition(alias, service.getBaseUrlRef(), correlation(service.getCorrelation())));
+            result.put(alias, new ServiceEndpointDefinition(alias, ref(service.getBaseUrlRef(), "base-url-ref", alias), correlation(service.getCorrelation())));
         }
         return result;
     }
@@ -89,9 +90,9 @@ public final class EnvironmentRegistryFactory {
             StandTestProperties.Datasource ds = entry.getValue();
             result.put(alias, new DatasourceDefinition(
                     alias,
-                    ds.getUrlRef(),
-                    ds.getUserRef(),
-                    ds.getPasswordRef(),
+                    ref(ds.getUrlRef(), "url-ref", alias),
+                    ref(ds.getUserRef(), "user-ref", alias),
+                    ref(ds.getPasswordRef(), "password-ref", alias),
                     Set.copyOf(ds.getAllowedSchemas()),
                     ds.isWriteAllowed()));
         }
@@ -103,7 +104,7 @@ public final class EnvironmentRegistryFactory {
         for (Map.Entry<String, StandTestProperties.GrpcTarget> entry : env.getGrpcTargets().entrySet()) {
             String alias = entry.getKey();
             StandTestProperties.GrpcTarget target = entry.getValue();
-            result.put(alias, new GrpcTargetDefinition(alias, target.getTargetRef(), correlation(target.getCorrelation())));
+            result.put(alias, new GrpcTargetDefinition(alias, ref(target.getTargetRef(), "target-ref", alias), correlation(target.getCorrelation())));
         }
         return result;
     }
@@ -113,9 +114,22 @@ public final class EnvironmentRegistryFactory {
             return null;
         }
         return new KafkaClusterDefinition(
-                cluster.getBootstrapServersRef(),
-                cluster.getSecurityProtocolRef(),
-                cluster.getSaslJaasConfigRef());
+                ref(cluster.getBootstrapServersRef(), "bootstrap-servers-ref", "kafka-cluster"),
+                ref(cluster.getSecurityProtocolRef(), "security-protocol-ref", "kafka-cluster"),
+                ref(cluster.getSaslJaasConfigRef(), "sasl-jaas-config-ref", "kafka-cluster"));
+    }
+
+    /**
+     * Applies the shared {@code *-ref} shape guard to a configured reference. Null/blank values are
+     * passed through untouched — the core {@code *Definition} constructors own the required/blank rule
+     * (and its established error message); this guard only rejects present values that are obviously a
+     * resolved endpoint or an inline secret rather than a reference name.
+     */
+    private static String ref(String value, String field, String alias) {
+        if (value == null || value.isBlank()) {
+            return value;
+        }
+        return SecretReferences.requireReferenceShape(value, field, "stand.test.environments alias '" + alias + "'");
     }
 
     private static CorrelationConfig correlation(StandTestProperties.Correlation correlation) {

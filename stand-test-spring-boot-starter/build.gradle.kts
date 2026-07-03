@@ -16,10 +16,9 @@
 // types (referenced by `@ConditionalOnClass`-guarded `@Bean` methods), but they are NOT re-exported
 // transitively. A consumer adds just the modules they actually use, and each executor/publisher bean
 // appears only when its module is on the classpath (`@ConditionalOnClass`). This keeps heavy transitive
-// deps (spring-webflux, kafka-clients, allure-java-commons) off a consumer's classpath unless requested.
+// deps (spring-webflux, kafka-clients, grpc, allure-java-commons) off a consumer's classpath unless requested.
 // (This supersedes the plan's original all-`api` aggregator choice — see the plan's key-decisions note.)
 //
-//   - `stand-test-grpc` is intentionally OMITTED entirely: it is still a skeleton (no `GrpcStepExecutor`).
 //   - The same modules are on `testImplementation` so this module's own context tests exercise the
 //     full-classpath wiring; the `@ConditionalOnClass` "absent" paths are covered via FilteredClassLoader.
 
@@ -31,7 +30,7 @@ dependencies {
     compileOnly(project(":stand-test-rest"))
     compileOnly(project(":stand-test-kafka"))
     compileOnly(project(":stand-test-db"))
-    // compileOnly(project(":stand-test-grpc")) — deferred: grpc adapter is a skeleton (no GrpcStepExecutor).
+    compileOnly(project(":stand-test-grpc"))
 
     api(libs.spring.boot.autoconfigure)
     api(libs.spring.boot)
@@ -46,5 +45,9 @@ dependencies {
     testImplementation(project(":stand-test-rest"))
     testImplementation(project(":stand-test-kafka"))
     testImplementation(project(":stand-test-db"))
+    testImplementation(project(":stand-test-grpc"))
+    // Parity guard only: the starter's properties->registry mapper and stand-test-config's YAML mapper
+    // describe the same logical schema; EnvironmentRegistryParityTest pins them to identical core records.
+    testImplementation(project(":stand-test-config"))
     testRuntimeOnly(libs.junit.platform.launcher)
 }

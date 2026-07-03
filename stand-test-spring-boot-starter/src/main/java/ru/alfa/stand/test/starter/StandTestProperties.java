@@ -18,7 +18,7 @@ import ru.alfa.stand.test.core.environment.CorrelationSource;
  * are assembled from them by {@link EnvironmentRegistryFactory}. No endpoint, secret or credential
  * <em>value</em> is ever bound here — only {@code *Ref} names that the adapters resolve at run time.
  */
-@ConfigurationProperties("stand.test")
+@ConfigurationProperties(value = "stand.test", ignoreUnknownFields = false)
 public class StandTestProperties {
 
     /**
@@ -80,8 +80,8 @@ public class StandTestProperties {
     }
 
     /**
-     * Reporting toggles. Reporting itself is a best-effort side-channel; disabling Allure falls back to
-     * the no-op publisher.
+     * Reporting toggles. Reporting itself is a best-effort side-channel; disabling the global switch (or
+     * just Allure) contributes no reporting publisher and falls back to the no-op publisher.
      */
     public static class Reporting {
 

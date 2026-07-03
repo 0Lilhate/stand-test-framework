@@ -21,6 +21,7 @@ import ru.alfa.stand.test.core.execution.StepExecutor;
 import ru.alfa.stand.test.core.validation.DefaultScenarioValidator;
 import ru.alfa.stand.test.core.validation.ScenarioValidator;
 import ru.alfa.stand.test.db.DbStepExecutor;
+import ru.alfa.stand.test.grpc.GrpcStepExecutor;
 import ru.alfa.stand.test.kafka.KafkaStepExecutor;
 import ru.alfa.stand.test.rest.RestStepExecutor;
 
@@ -40,7 +41,7 @@ import ru.alfa.stand.test.rest.RestStepExecutor;
  * {@code stand.test.enabled} (default {@code true}); setting it to {@code false} contributes no beans.
  *
  * <p>This class contains no transport/business logic: it only collects and wires the SDK's existing
- * contracts. gRPC is not wired yet — the adapter is a skeleton with no executor.
+ * contracts.
  */
 @AutoConfiguration
 @EnableConfigurationProperties(StandTestProperties.class)
@@ -107,15 +108,28 @@ public class StandTestAutoConfiguration {
     }
 
     /**
+     * gRPC step executor, contributed when {@code stand-test-grpc} is on the classpath.
+     *
+     * @return the gRPC step executor
+     */
+    @Bean
+    @ConditionalOnClass(GrpcStepExecutor.class)
+    @ConditionalOnMissingBean(GrpcStepExecutor.class)
+    public GrpcStepExecutor standTestGrpcStepExecutor() {
+        return new GrpcStepExecutor();
+    }
+
+    /**
      * Allure reporting publisher, preferred when {@code stand-test-allure} is on the classpath and
-     * {@code stand.test.reporting.allure.enabled} is not {@code false}. Declared before the no-op
+     * neither the global {@code stand.test.reporting.enabled} nor the specific
+     * {@code stand.test.reporting.allure.enabled} toggle is {@code false}. Declared before the no-op
      * fallback so its {@code @ConditionalOnMissingBean} yields to it.
      *
      * @return the Allure reporting event publisher
      */
     @Bean
     @ConditionalOnClass(AllureReportingEventPublisher.class)
-    @ConditionalOnProperty(prefix = "stand.test.reporting.allure", name = "enabled", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "stand.test.reporting", name = {"enabled", "allure.enabled"}, havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean(ReportingEventPublisher.class)
     public ReportingEventPublisher standTestAllureReportingEventPublisher() {
         return new AllureReportingEventPublisher();

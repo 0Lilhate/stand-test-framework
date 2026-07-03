@@ -26,6 +26,7 @@ import ru.alfa.stand.test.core.result.ScenarioResult;
 import ru.alfa.stand.test.core.scenario.Scenario;
 import ru.alfa.stand.test.core.validation.ScenarioValidator;
 import ru.alfa.stand.test.db.DbStepExecutor;
+import ru.alfa.stand.test.grpc.GrpcStepExecutor;
 import ru.alfa.stand.test.kafka.KafkaStepExecutor;
 import ru.alfa.stand.test.rest.RestStepExecutor;
 
@@ -50,7 +51,8 @@ class StandTestAutoConfigurationTest {
             assertThat(context).hasSingleBean(RestStepExecutor.class);
             assertThat(context).hasSingleBean(KafkaStepExecutor.class);
             assertThat(context).hasSingleBean(DbStepExecutor.class);
-            assertThat(context).getBeans(StepExecutor.class).hasSize(3);
+            assertThat(context).hasSingleBean(GrpcStepExecutor.class);
+            assertThat(context).getBeans(StepExecutor.class).hasSize(4);
             assertThat(context).hasSingleBean(Awaiter.class);
             assertThat(context).hasSingleBean(AwaitPolicy.class);
         });
@@ -105,6 +107,24 @@ class StandTestAutoConfigurationTest {
         assertThat(ift.kafkaCluster()).isNotNull();
         assertThat(ift.kafkaCluster().bootstrapServersRef()).isEqualTo("KAFKA_BOOTSTRAP");
         assertThat(ift.kafkaCluster().securityProtocolReference()).contains("KAFKA_SECURITY");
+    }
+
+    @Test
+    @DisplayName("an unknown property key under stand.test fails the context (fail-closed binding)")
+    void unknownPropertyKey_failsContext() {
+        runner.withPropertyValues("stand.test.awiat.timeout=10s").run(context -> assertThat(context).hasFailed());
+    }
+
+    @Test
+    @DisplayName("a *-ref value that is obviously a resolved endpoint fails the context")
+    void valueShapedReference_failsContext() {
+        runner.withPropertyValues(
+                "stand.test.environments.ift.services.client-service.base-url-ref=https://real-stand.example").run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("reference NAME");
+                });
     }
 
     @Test
@@ -182,6 +202,15 @@ class StandTestAutoConfigurationTest {
     }
 
     @Test
+    @DisplayName("the global stand.test.reporting.enabled=false falls back to the no-op publisher even with Allure present and enabled")
+    void reportingDisabledGlobally_fallsBackToNoOp() {
+        runner.withPropertyValues("stand.test.reporting.enabled=false").run(context -> {
+            assertThat(context).hasSingleBean(ReportingEventPublisher.class);
+            assertThat(context.getBean(ReportingEventPublisher.class)).isInstanceOf(NoOpReportingEventPublisher.class);
+        });
+    }
+
+    @Test
     @DisplayName("removing Allure from the classpath falls back to the no-op publisher")
     void allureAbsent_fallsBackToNoOp() {
         runner.withClassLoader(new FilteredClassLoader(AllureReportingEventPublisher.class)).run(context -> {
@@ -204,7 +233,17 @@ class StandTestAutoConfigurationTest {
     void restAdapterAbsent_executorNotRegistered() {
         runner.withClassLoader(new FilteredClassLoader(RestStepExecutor.class)).run(context -> {
             assertThat(context).doesNotHaveBean("standTestRestStepExecutor");
-            assertThat(context).getBeans(StepExecutor.class).hasSize(2);
+            assertThat(context).getBeans(StepExecutor.class).hasSize(3);
+            assertThat(context).hasSingleBean(StandClient.class);
+        });
+    }
+
+    @Test
+    @DisplayName("removing the gRPC adapter drops only its executor; the client still wires")
+    void grpcAdapterAbsent_executorNotRegistered() {
+        runner.withClassLoader(new FilteredClassLoader(GrpcStepExecutor.class)).run(context -> {
+            assertThat(context).doesNotHaveBean("standTestGrpcStepExecutor");
+            assertThat(context).getBeans(StepExecutor.class).hasSize(3);
             assertThat(context).hasSingleBean(StandClient.class);
         });
     }
@@ -213,7 +252,7 @@ class StandTestAutoConfigurationTest {
     @DisplayName("with no adapters on the classpath the client still wires with zero executors")
     void allAdaptersAbsent_clientWiresWithNoExecutors() {
         runner.withClassLoader(new FilteredClassLoader(
-                RestStepExecutor.class, KafkaStepExecutor.class, DbStepExecutor.class)).run(context -> {
+                RestStepExecutor.class, KafkaStepExecutor.class, DbStepExecutor.class, GrpcStepExecutor.class)).run(context -> {
                     assertThat(context).getBeans(StepExecutor.class).isEmpty();
                     assertThat(context).hasSingleBean(StandClient.class);
                     assertThat(context).hasSingleBean(ScenarioRunner.class);

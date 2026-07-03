@@ -146,4 +146,55 @@ class EnvironmentConfigTest {
                 .isInstanceOf(StandTestException.class)
                 .hasMessageContaining("allowed-schemas");
     }
+
+    @Test
+    @DisplayName("a *-ref value that is obviously a resolved endpoint or an inline secret is rejected fail-closed")
+    void valueShapedReferenceRejected() {
+        assertThatThrownBy(() -> parse("""
+                environments:
+                  ift:
+                    services:
+                      svc: { base-url-ref: "https://real-stand.example" }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("reference NAME");
+        assertThatThrownBy(() -> parse("""
+                environments:
+                  ift:
+                    datasources:
+                      db: { url-ref: "jdbc:postgresql://db:5432/app", user-ref: US, password-ref: P }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("reference NAME");
+        assertThatThrownBy(() -> parse("""
+                environments:
+                  ift:
+                    datasources:
+                      db: { url-ref: U, user-ref: US, password-ref: "Bearer sk-abc123def" }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("reference NAME");
+        assertThatThrownBy(() -> parse("""
+                environments:
+                  ift:
+                    kafka-cluster: { bootstrap-servers-ref: "broker1:9092, broker2:9092" }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("reference NAME");
+    }
+
+    @Test
+    @DisplayName("correlation and topic names are NOT ref fields — header-like values stay legitimate")
+    void nonRefNamesUnaffectedByReferenceGuard() {
+        EnvironmentRegistry registry = parse("""
+                environments:
+                  ift:
+                    topics:
+                      events:
+                        name: ift.events.v1
+                        correlation: { source: HEADER, name: X-Correlation-Id }
+                """);
+
+        assertThat(registry.environment("ift")).isPresent();
+    }
 }

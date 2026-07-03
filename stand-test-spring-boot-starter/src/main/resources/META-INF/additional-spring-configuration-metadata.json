@@ -21,7 +21,7 @@
     {
       "name": "stand.test.reporting.enabled",
       "type": "java.lang.Boolean",
-      "description": "Whether SDK reporting is enabled (best-effort side-channel).",
+      "description": "Global reporting switch. When false, no reporting publisher is contributed (the no-op fallback is used), regardless of stand.test.reporting.allure.enabled.",
       "defaultValue": true
     },
     {
