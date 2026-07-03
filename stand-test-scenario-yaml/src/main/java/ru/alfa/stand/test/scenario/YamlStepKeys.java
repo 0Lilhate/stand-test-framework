@@ -41,6 +41,12 @@ final class YamlStepKeys {
     static final String WHERE_TEST_RUN_ID_COLUMN = StepParameterKeys.WHERE_TEST_RUN_ID_COLUMN;
     static final String POLL_INTERVAL_MILLIS = StepParameterKeys.POLL_INTERVAL_MILLIS;
 
+    static final String TARGET = StepParameterKeys.TARGET;
+    static final String METHOD_FULL_NAME = StepParameterKeys.METHOD_FULL_NAME;
+    static final String DEADLINE_MILLIS = StepParameterKeys.DEADLINE_MILLIS;
+    static final String REQUEST = StepParameterKeys.REQUEST;
+    static final String REQUEST_RESOURCE = StepParameterKeys.REQUEST_RESOURCE;
+
     private YamlStepKeys() {
     }
 }

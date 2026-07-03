@@ -126,7 +126,7 @@ try {
 } catch (SQLException failure) {
     throw new StandTestException("Failed to configure the JDBC connection for datasource '" + alias + "': " + failure.getMessage(), failure);
 }
-return connection;
+    return connection;
 ```
 
 **Тесты (DoD).** Фейковый `ConnectionFactory`, чей `Connection.setAutoCommit` бросает → `StandTestException`

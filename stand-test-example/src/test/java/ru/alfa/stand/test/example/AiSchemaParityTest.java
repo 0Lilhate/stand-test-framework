@@ -31,32 +31,40 @@ import ru.alfa.stand.test.scenario.AiScenarioParser;
 class AiSchemaParityTest {
 
     private static final String DOCUMENT = "/ai/canonical-flow.json";
+    private static final String GRPC_DOCUMENT = "/ai/grpc-flow.json";
 
-    private static String readDocument() {
-        try (InputStream in = AiSchemaParityTest.class.getResourceAsStream(DOCUMENT)) {
+    private static String readDocument(String path) {
+        try (InputStream in = AiSchemaParityTest.class.getResourceAsStream(path)) {
             if (in == null) {
-                throw new IllegalStateException("Missing parity document: " + DOCUMENT);
+                throw new IllegalStateException("Missing parity document: " + path);
             }
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (Exception e) {
-            throw new IllegalStateException("Failed to read " + DOCUMENT, e);
+            throw new IllegalStateException("Failed to read " + path, e);
+        }
+    }
+
+    private static Set<ValidationMessage> validateAgainstSchema(String path) {
+        try {
+            JsonSchema schema = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012)
+                    .getSchema(AiSchemaResources.scenarioSchemaJson());
+            JsonNode node = new ObjectMapper().readTree(readDocument(path));
+            return schema.validate(node);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to validate " + path, e);
         }
     }
 
     @Test
     @DisplayName("the canonical document passes the ai-schema JSON Schema")
-    void document_passesSchema() throws Exception {
-        JsonSchema schema = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012)
-                .getSchema(AiSchemaResources.scenarioSchemaJson());
-        JsonNode node = new ObjectMapper().readTree(readDocument());
-        Set<ValidationMessage> messages = schema.validate(node);
-        assertThat(messages).as("schema validation messages").isEmpty();
+    void document_passesSchema() {
+        assertThat(validateAgainstSchema(DOCUMENT)).as("schema validation messages").isEmpty();
     }
 
     @Test
     @DisplayName("the same document parses into a validator-clean Scenario with the expected wire keys")
     void document_parsesToRunnableScenario() {
-        Scenario scenario = new AiScenarioParser().parse(readDocument());
+        Scenario scenario = new AiScenarioParser().parse(readDocument(DOCUMENT));
 
         assertThatCode(() -> new DefaultScenarioValidator().validate(scenario).throwIfInvalid())
                 .doesNotThrowAnyException();
@@ -73,5 +81,31 @@ class AiSchemaParityTest {
         Map<String, Object> db = ((GenericStep) scenario.steps().get(2)).parameters();
         assertThat(db).containsEntry("expectedValue", "DONE").containsEntry("timeoutMillis", 10000L);
         assertThat((String) db.get("sql")).startsWith("SELECT");
+    }
+
+    @Test
+    @DisplayName("the grpc.unary document passes the ai-schema JSON Schema")
+    void grpcDocument_passesSchema() {
+        assertThat(validateAgainstSchema(GRPC_DOCUMENT)).as("schema validation messages").isEmpty();
+    }
+
+    @Test
+    @DisplayName("the grpc.unary document parses into a validator-clean Scenario with the expected wire keys")
+    void grpcDocument_parsesToRunnableScenario() {
+        Scenario scenario = new AiScenarioParser().parse(readDocument(GRPC_DOCUMENT));
+
+        assertThatCode(() -> new DefaultScenarioValidator().validate(scenario).throwIfInvalid())
+                .doesNotThrowAnyException();
+        assertThat(scenario.steps()).hasSize(1);
+
+        Map<String, Object> grpc = ((GenericStep) scenario.steps().get(0)).parameters();
+        assertThat(grpc)
+                .containsEntry("target", "billing-grpc")
+                .containsEntry("methodFullName", "billing.BillingService/Charge")
+                .containsEntry("deadlineMillis", 5000L)
+                .containsEntry("injectCorrelationId", true)
+                .containsEntry("requestResource", "fixtures/charge-request.json");
+        assertThat(grpc.get("assertions")).isEqualTo(java.util.List.of(Map.of("jsonPath", "$.status", "expectedValue", "OK")));
+        assertThat(grpc.get("captures")).isEqualTo(java.util.List.of(Map.of("variableName", "chargeId", "jsonPath", "$.chargeId")));
     }
 }

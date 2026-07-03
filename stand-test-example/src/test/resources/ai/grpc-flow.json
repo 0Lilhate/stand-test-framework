@@ -1,0 +1,19 @@
+{
+  "id": "grpc-flow",
+  "environment": "ift",
+  "title": "gRPC unary flow",
+  "tags": ["integration"],
+  "steps": [
+    {
+      "id": "charge",
+      "type": "grpc.unary",
+      "target": "billing-grpc",
+      "method": "billing.BillingService/Charge",
+      "correlation": { "inject": true },
+      "request": { "fixture": "fixtures/charge-request.json" },
+      "timeout": "5s",
+      "expect": { "assert": [ { "path": "$.status", "equals": "OK" } ] },
+      "capture": { "chargeId": "$.chargeId" }
+    }
+  ]
+}

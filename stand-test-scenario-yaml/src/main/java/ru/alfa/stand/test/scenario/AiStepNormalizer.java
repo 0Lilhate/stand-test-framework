@@ -11,10 +11,12 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  * (as described by the JSON Schema in {@code stand-test-ai-schema}) — into the yaml-surface field map the
  * existing {@code RestStepTranslator}/{@code KafkaStepTranslator}/{@code DbStepTranslator} already consume.
  *
- * <p>Fail-closed: unknown AI fields (defence in depth even if the schema was not run first) and constructs
- * that no adapter can execute yet are rejected here with a clear {@link StandTestException} naming the
- * supported alternative. The returned map is intermediate — the per-family translator validates it and
- * emits the final wire keys.
+ * <p>Fail-closed: unknown AI fields and constructs that no adapter can execute yet are rejected here with
+ * a clear {@link StandTestException} naming the supported alternative. The returned map is intermediate —
+ * the per-family translator validates it and emits the final wire keys. This normalizer checks structure
+ * only; the value-level guardrails the JSON Schema expresses statically (secret headers, SQL sleep
+ * functions, timeout bounds) are re-enforced at run time by the core {@code DefaultScenarioValidator}
+ * inside the runner, so a document that skips the schema pass still meets the same net.
  */
 final class AiStepNormalizer {
 
@@ -26,6 +28,8 @@ final class AiStepNormalizer {
             Set.of("id", "type", "description", "topic", "correlation", "timeout", "assert", "capture");
     private static final Set<String> DB_EXPECT_KNOWN =
             Set.of("id", "type", "description", "datasource", "timeout", "query", "params", "expect");
+    private static final Set<String> GRPC_UNARY_KNOWN =
+            Set.of("id", "type", "description", "target", "method", "correlation", "request", "timeout", "expect", "capture");
     private static final Set<String> ASSERT_KNOWN = Set.of("path", "equals", "exists", "notNull", "contains", "matches");
 
     private AiStepNormalizer() {
@@ -45,9 +49,9 @@ final class AiStepNormalizer {
             return dbExpectEventually(fields, location);
         }
         if ("grpc.unary".equals(type)) {
-            throw new StandTestException("Step type 'grpc.unary' at " + location + " is not executable yet: the stand-test-grpc adapter is not implemented");
+            return grpcUnary(fields, location);
         }
-        throw new StandTestException("Unsupported AI step type '" + type + "' at " + location + " (supported: rest.get/post, kafka.send, kafka.expect, db.expectEventually)");
+        throw new StandTestException("Unsupported AI step type '" + type + "' at " + location + " (supported: rest.get/post, kafka.send, kafka.expect, db.expectEventually, grpc.unary)");
     }
 
     private static Map<String, Object> rest(Map<String, Object> fields, String location) {
@@ -59,7 +63,7 @@ final class AiStepNormalizer {
         copyIfPresent(fields, out, "headers");
         copyIfPresent(fields, out, "capture");
         applyCorrelation(fields, out, "inject", YamlStepKeys.INJECT_CORRELATION_ID, location);
-        applyPayload(fields, out, "body", location);
+        applyPayload(fields, out, "body", YamlStepKeys.BODY_RESOURCE, location);
         applyExpectStatus(fields, out, location);
         return out;
     }
@@ -70,7 +74,7 @@ final class AiStepNormalizer {
         copyIfPresent(fields, out, "topic");
         copyIfPresent(fields, out, "key");
         applyCorrelation(fields, out, "inject", YamlStepKeys.INJECT_CORRELATION_ID, location);
-        applyPayload(fields, out, "payload", location);
+        applyPayload(fields, out, "payload", YamlStepKeys.BODY_RESOURCE, location);
         return out;
     }
 
@@ -82,6 +86,19 @@ final class AiStepNormalizer {
         copyIfPresent(fields, out, "capture");
         applyCorrelation(fields, out, "fromContext", YamlStepKeys.CORRELATION_FROM_CONTEXT, location);
         applyAssert(fields, out, location);
+        return out;
+    }
+
+    private static Map<String, Object> grpcUnary(Map<String, Object> fields, String location) {
+        SurfaceValues.checkKnownKeys(fields, GRPC_UNARY_KNOWN, location);
+        Map<String, Object> out = new LinkedHashMap<>();
+        copyIfPresent(fields, out, "target");
+        copyIfPresent(fields, out, "method");
+        copyIfPresent(fields, out, "timeout");
+        copyIfPresent(fields, out, "capture");
+        applyCorrelation(fields, out, "inject", YamlStepKeys.INJECT_CORRELATION_ID, location);
+        applyPayload(fields, out, "request", YamlStepKeys.REQUEST_RESOURCE, location);
+        applyGrpcExpect(fields, out, location);
         return out;
     }
 
@@ -109,7 +126,7 @@ final class AiStepNormalizer {
         out.put(surfaceKey, SurfaceValues.boolFlag(correlation, innerKey, correlationLoc));
     }
 
-    private static void applyPayload(Map<String, Object> fields, Map<String, Object> out, String aiField, String location) {
+    private static void applyPayload(Map<String, Object> fields, Map<String, Object> out, String aiField, String resourceKey, String location) {
         if (!fields.containsKey(aiField)) {
             return;
         }
@@ -120,7 +137,7 @@ final class AiStepNormalizer {
             throw new StandTestException("Inline '" + aiField + ".json' at " + payloadLoc
                     + " is not executable yet: use '" + aiField + ".fixture' (a classpath resource)");
         }
-        out.put(YamlStepKeys.BODY_RESOURCE, SurfaceValues.requireString(payload, "fixture", payloadLoc));
+        out.put(resourceKey, SurfaceValues.requireString(payload, "fixture", payloadLoc));
     }
 
     private static void applyExpectStatus(Map<String, Object> fields, Map<String, Object> out, String location) {
@@ -137,8 +154,26 @@ final class AiStepNormalizer {
         if (!fields.containsKey("assert")) {
             return;
         }
-        String assertLoc = location + ".assert";
-        List<Object> items = SurfaceValues.asList(fields.get("assert"), assertLoc);
+        out.put("assert", equalsAssertions(fields.get("assert"), location + ".assert"));
+    }
+
+    private static void applyGrpcExpect(Map<String, Object> fields, Map<String, Object> out, String location) {
+        if (!fields.containsKey("expect")) {
+            return;
+        }
+        String expectLoc = location + ".expect";
+        Map<String, Object> expect = SurfaceValues.asMap(fields.get("expect"), expectLoc);
+        SurfaceValues.checkKnownKeys(expect, Set.of("status", "assert"), expectLoc);
+        if (expect.containsKey("status")) {
+            throw new StandTestException("'expect.status' at " + expectLoc + " is not executable yet: the gRPC status is surfaced as an exception, not a declarative assertion");
+        }
+        if (expect.containsKey("assert")) {
+            out.put("assert", equalsAssertions(expect.get("assert"), expectLoc + ".assert"));
+        }
+    }
+
+    private static Map<String, Object> equalsAssertions(Object value, String assertLoc) {
+        List<Object> items = SurfaceValues.asList(value, assertLoc);
         Map<String, Object> equalsMap = new LinkedHashMap<>();
         for (int i = 0; i < items.size(); i++) {
             String itemLoc = assertLoc + "[" + i + "]";
@@ -155,7 +190,7 @@ final class AiStepNormalizer {
             }
             equalsMap.put(path, expected);
         }
-        out.put("assert", equalsMap);
+        return equalsMap;
     }
 
     private static void applyDbExpect(Map<String, Object> fields, Map<String, Object> out, String location) {

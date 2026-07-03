@@ -18,8 +18,10 @@ import ru.alfa.stand.test.core.event.NoOpReportingEventPublisher;
 import ru.alfa.stand.test.core.event.ReportingEventPublisher;
 import ru.alfa.stand.test.core.execution.DefaultScenarioRunner;
 import ru.alfa.stand.test.core.execution.StepExecutor;
+import ru.alfa.stand.test.core.environment.GrpcTargetDefinition;
 import ru.alfa.stand.test.core.validation.DefaultScenarioValidator;
 import ru.alfa.stand.test.db.DbStepExecutor;
+import ru.alfa.stand.test.grpc.GrpcStepExecutor;
 import ru.alfa.stand.test.kafka.KafkaStepExecutor;
 import ru.alfa.stand.test.rest.RestStepExecutor;
 import ru.alfa.stand.test.rest.WebClientHttpCaller;
@@ -40,6 +42,7 @@ final class ExampleStand {
     static final String CORRELATION_HEADER = "X-Correlation-Id";
     static final String TOPIC = "events";
     static final String TOPIC_NAME = "stand-test-example-events";
+    static final String GRPC_TARGET = "health-grpc";
 
     private ExampleStand() {
     }
@@ -82,6 +85,21 @@ final class ExampleStand {
 
     static StandClient kafkaStand(EnvironmentRegistry registry) {
         List<StepExecutor> executors = List.of(new KafkaStepExecutor());
+        DefaultScenarioRunner runner = new DefaultScenarioRunner(
+                executors, new DefaultScenarioValidator(), registry, NoOpReportingEventPublisher.INSTANCE);
+        return new DefaultStandClient(runner);
+    }
+
+    static EnvironmentRegistry grpcRegistry() {
+        GrpcTargetDefinition grpc = new GrpcTargetDefinition(
+                GRPC_TARGET, "GRPC_TARGET", new CorrelationConfig(CorrelationSource.METADATA, "x-correlation-id"));
+        EnvironmentDefinition environment = new EnvironmentDefinition(
+                ENVIRONMENT, Map.of(), Map.of(), Map.of(), Map.of(GRPC_TARGET, grpc));
+        return new InMemoryEnvironmentRegistry(Map.of(ENVIRONMENT, environment));
+    }
+
+    static StandClient grpcStand(EnvironmentRegistry registry) {
+        List<StepExecutor> executors = List.of(new GrpcStepExecutor());
         DefaultScenarioRunner runner = new DefaultScenarioRunner(
                 executors, new DefaultScenarioValidator(), registry, NoOpReportingEventPublisher.INSTANCE);
         return new DefaultStandClient(runner);

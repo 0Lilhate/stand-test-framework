@@ -115,6 +115,9 @@ public final class AiScenarioParser {
         if ("kafka.send".equals(type) || "kafka.expect".equals(type)) {
             return KafkaStepTranslator.params(type, surface, location);
         }
+        if ("grpc.unary".equals(type)) {
+            return GrpcStepTranslator.params(type, surface, location);
+        }
         return DbStepTranslator.params(type, surface, location);
     }
 

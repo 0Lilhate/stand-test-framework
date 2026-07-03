@@ -1,5 +1,3 @@
-import org.gradle.api.publish.maven.tasks.AbstractPublishToMaven
-
 // stand-test-example — technical usage examples (Iteration 8, docs/arch/stand-test-example-implementation-plan.md).
 // TEST-ONLY: the scenarios live in src/test and run through the public SDK API as a black box against
 // in-process doubles (JDK HttpServer for REST, H2 for DB), so `./gradlew build` is green offline without
@@ -15,7 +13,15 @@ dependencies {
     testImplementation(project(":stand-test-rest"))
     testImplementation(project(":stand-test-db"))
     testImplementation(project(":stand-test-kafka"))
+    testImplementation(project(":stand-test-grpc"))
     testImplementation(project(":stand-test-allure"))
+    // gRPC example: the grpc adapter keeps grpc-api/services/transport as implementation/runtimeOnly, so
+    // the example declares what it needs at compile time to stand up a local gRPC double — grpc-api
+    // (ServerBuilder) + grpc-services (HealthStatusManager, ProtoReflectionServiceV1) — plus the shaded
+    // Netty transport at runtime so the SDK's default channel factory can dial a real loopback port.
+    testImplementation(libs.grpc.api)
+    testImplementation(libs.grpc.services)
+    testRuntimeOnly(libs.grpc.netty.shaded)
     // AI-format parity: the scenario-yaml engine (AiScenarioParser) parses the AI document, and the
     // ai-schema module ships the JSON Schema it must first validate against. Both are core-only and
     // test-only here. The JSON Schema validator (networknt) + Jackson are declared directly: ai-schema
@@ -39,7 +45,11 @@ dependencies {
 // port — pinned here and overridable in CI with -PexampleRestPort=NNNN (avoids port-collision). The
 // manual-runner examples ignore CLIENT_SERVICE_URL (they use the passthrough seam on an ephemeral port).
 // H2 stays in-memory for the JVM via DB_CLOSE_DELAY=-1.
+// The gRPC example stands up a real (Netty) gRPC double on a fixed loopback port pinned by GRPC_TARGET,
+// which the default no-arg GrpcStepExecutor resolves via System.getenv (like CLIENT_SERVICE_URL for REST).
+// Override the port in CI with -PexampleGrpcPort=NNNN to avoid collisions.
 val exampleRestPort = (findProperty("exampleRestPort") as String?)?.toInt() ?: 18080
+val exampleGrpcPort = (findProperty("exampleGrpcPort") as String?)?.toInt() ?: 18090
 tasks.withType<Test>().configureEach {
     // The Kafka example needs a live broker (kafka.expect arms a real KafkaConsumer), so it is tagged
     // `requires-broker` and excluded from the default offline run. Opt in with -PincludeRequiresBroker
@@ -53,10 +63,11 @@ tasks.withType<Test>().configureEach {
     environment("MAIN_DB_USER", "sa")
     environment("MAIN_DB_PASSWORD", "sa")
     environment("CLIENT_SERVICE_URL", "http://127.0.0.1:$exampleRestPort")
+    environment("GRPC_TARGET", "127.0.0.1:$exampleGrpcPort")
     environment("KAFKA_BOOTSTRAP_SERVERS", (findProperty("kafkaBootstrapServers") as String?) ?: "localhost:9092")
 }
 
 // Examples are demonstrations, not production code: src/main is empty, so the 80% coverage gate is not
-// applicable, and the module is not a consumable artifact.
+// applicable. The module is not a consumable artifact either — the root subprojects block creates no
+// maven publication for it at all.
 tasks.withType<JacocoCoverageVerification>().configureEach { enabled = false }
-tasks.withType<AbstractPublishToMaven>().configureEach { enabled = false }

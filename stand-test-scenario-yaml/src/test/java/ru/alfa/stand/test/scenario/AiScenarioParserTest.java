@@ -69,6 +69,25 @@ class AiScenarioParserTest {
     }
 
     @Test
+    @DisplayName("minute-suffixed timeouts ('<n>m', schema-valid) parse to milliseconds — parity with the schema duration contract")
+    void minuteTimeout_parses() {
+        Scenario scenario = parser.parse("""
+                id: flow
+                environment: ift
+                steps:
+                  - id: await
+                    type: kafka.expect
+                    topic: response-topic
+                    timeout: 2m
+                    assert:
+                      - path: $.status
+                        equals: SUCCESS
+                """);
+
+        assertThat(params(scenario.steps().get(0))).containsEntry("timeoutMillis", 120_000L);
+    }
+
+    @Test
     @DisplayName("a minimal rest.get and kafka.send parse and default their optional wire keys")
     void minimalSteps_parse() {
         Scenario scenario = parser.parse("""
@@ -181,14 +200,54 @@ class AiScenarioParserTest {
     }
 
     @Test
-    @DisplayName("grpc.unary, unknown types and db.query are rejected as unsupported")
+    @DisplayName("unknown types and db.query are rejected as unsupported")
     void unsupportedTypes_rejected() {
-        assertThatThrownBy(() -> parser.parse("id: f\nenvironment: ift\nsteps:\n  - type: grpc.unary\n    target: t\n    method: m\n    timeout: 5s\n"))
-                .isInstanceOf(StandTestException.class).hasMessageContaining("grpc.unary");
         assertThatThrownBy(() -> parser.parse("id: f\nenvironment: ift\nsteps:\n  - type: http.call\n    service: s\n"))
                 .isInstanceOf(StandTestException.class).hasMessageContaining("Unsupported");
         assertThatThrownBy(() -> parser.parse("id: f\nenvironment: ift\nsteps:\n  - type: db.query\n    datasource: d\n    sql: SELECT 1\n"))
                 .isInstanceOf(StandTestException.class).hasMessageContaining("Unsupported");
+    }
+
+    @Test
+    @DisplayName("a grpc.unary step maps AI fields onto the exact wire keys")
+    void grpcUnary_mapsToWireKeys() {
+        Scenario scenario = parser.parse("""
+                {
+                  "id": "grpc-flow", "environment": "ift",
+                  "steps": [
+                    {"id":"charge","type":"grpc.unary","target":"billing-grpc",
+                     "method":"billing.BillingService/Charge","correlation":{"inject":true},
+                     "request":{"fixture":"fixtures/charge.json"},"timeout":"5s",
+                     "expect":{"assert":[{"path":"$.status","equals":"OK"}]},
+                     "capture":{"chargeId":"$.chargeId"}}
+                  ]
+                }
+                """);
+
+        Map<String, Object> params = params(scenario.steps().get(0));
+        assertThat(params)
+                .containsEntry("target", "billing-grpc")
+                .containsEntry("methodFullName", "billing.BillingService/Charge")
+                .containsEntry("deadlineMillis", 5000L)
+                .containsEntry("injectCorrelationId", true)
+                .containsEntry("requestResource", "fixtures/charge.json");
+        assertThat(params.get("assertions")).isEqualTo(List.of(Map.of("jsonPath", "$.status", "expectedValue", "OK")));
+        assertThat(params.get("captures")).isEqualTo(List.of(Map.of("variableName", "chargeId", "jsonPath", "$.chargeId")));
+    }
+
+    @Test
+    @DisplayName("grpc.unary fails closed on inline request.json, expect.status and non-equals matchers")
+    void grpcUnary_failsClosedOnNonExecutable() {
+        String base = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"c\",\"type\":\"grpc.unary\","
+                + "\"target\":\"t\",\"method\":\"p.S/M\",\"timeout\":\"5s\",";
+        assertThatThrownBy(() -> parser.parse(base + "\"request\":{\"json\":{}}}]}"))
+                .isInstanceOf(StandTestException.class).hasMessageContaining("request.json");
+        assertThatThrownBy(() -> parser.parse(base + "\"expect\":{\"status\":\"OK\"}}]}"))
+                .isInstanceOf(StandTestException.class).hasMessageContaining("expect.status");
+        assertThatThrownBy(() -> parser.parse(base + "\"expect\":{\"assert\":[{\"path\":\"$.x\",\"exists\":true}]}}]}"))
+                .isInstanceOf(StandTestException.class).hasMessageContaining("not executable");
+        assertThatThrownBy(() -> parser.parse(base + "\"bogus\":1}]}"))
+                .isInstanceOf(StandTestException.class).hasMessageContaining("bogus");
     }
 
     @Test

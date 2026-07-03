@@ -175,7 +175,7 @@ flowchart TD
 ### stand-test-junit
 
 - **Назначение.** Интеграция с JUnit 5 (bridge JUnit ↔ контекст/раннер SDK).
-- **Входит (будущие сущности).** Аннотации `@StandTest`, `@StandEnv`, `@ScenarioId`; extension
+- **Входит (будущие сущности).** Аннотации `@StandTest`, `@StandEnv`, `@StandScenarioId`; extension
   `StandTestExtension` (инициализация контекста, lifecycle, проброс `testRunId`/`correlationId`,
   предоставление `StandClient` как параметра теста); запуск сценария через `ScenarioRunner`;
   преобразование SDK-падений (`StandTestAssertionError`/`StandTestException`) в JUnit-failures.
@@ -389,13 +389,20 @@ flowchart TD
   **генерируя** ограничения из единого источника истины в core (`ForbiddenOperation`,
   `EnvironmentRegistry`), а не ведя отдельный список (см.
   [§8.6](#86-forbidden-operations--единый-источник-истины)).
-- **Входит (будущее).** JSON Schema модели сценария; правила/guardrails генерации; список forbidden
-  operations, **производный** от core-контракта.
+- **Входит (будущее).** JSON Schema **surface-YAML** (зеркало surface-схемы Итерации 9); rule-catalog,
+  **ключуемый по `ForbiddenOperation`**; правила генерации/guardrails. Дизайн: `docs/arch/stand-test-ai-schema-design.md`.
+  **Уточнение «производный».** `ForbiddenOperation` — inert enum `(code, description)`, авто-генерации из
+  него **нет**: правила **hand-authored**, но связаны с источником **cross-check-тестом** (каждому
+  `ForbiddenOperation` — ровно одна запись каталога) — так «не отдельный список» соблюдается честно (§8.6).
+  Static-слой (JSON Schema) vs runtime-слой (`ScenarioValidator`, §8.8) — см. дизайн-док, §Решение 2.
 - **Не должно входить.** **Зависимости от runtime-модулей** (адаптеров) и от `scenario-yaml`;
-  исполнение сценариев.
+  исполнение сценариев. (JSON Schema зеркалит surface-схему `scenario-yaml` как **спецификацию**, не
+  compile-ребро; parity — тестом в `stand-test-example`.)
 - **Внутренние зависимости.** Только модель `stand-test-core`, **без** runtime/адаптеров и **без**
   `scenario-yaml`.
-- **Внешние зависимости.** Инструмент работы с JSON Schema (например, `networknt/json-schema-validator`).
+- **Внешние зависимости.** Инструмент работы с JSON Schema. **NB:** `networknt/json-schema-validator` тянет
+  Jackson, а репозиторий Jackson избегает (json-path на json-smart) — предпочесть non-Jackson-валидатор
+  (напр. `everit-org/json-schema`), либо изолировать Jackson в этом dev/AI-tooling-модуле (дизайн-док §Решение 4).
 - **MVP.** Не входит в MVP.
 - **Отложено.** Весь модуль до стабилизации YAML DSL.
 

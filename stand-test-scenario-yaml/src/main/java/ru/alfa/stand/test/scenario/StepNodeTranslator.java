@@ -55,6 +55,9 @@ final class StepNodeTranslator {
         if (type.startsWith("kafka.")) {
             return type + " " + params.get(YamlStepKeys.TOPIC);
         }
+        if (type.startsWith("grpc.")) {
+            return type + " " + params.get(YamlStepKeys.TARGET) + " " + params.get(YamlStepKeys.METHOD_FULL_NAME);
+        }
         return type + " " + params.get(YamlStepKeys.DATASOURCE);
     }
 }
