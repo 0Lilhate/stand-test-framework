@@ -104,7 +104,9 @@ A service whose `ServiceEndpointDefinition` carries an `AuthConfig` gets the `Au
 injected by the executor at execution time — `Basic base64(username:password)` (UTF-8, RFC 7617) or
 `Bearer token`. Every auth field is a secret **reference** (an env-var name) resolved by
 `EnvironmentAuthHeaderResolver` at the point of use; an unresolved reference fails as
-`StandTestException` naming the reference, never a value. This is the sanctioned auth path: an inline
+`StandTestException` naming the reference, never a value. Leading/trailing CR/LF of resolved basic
+credentials are stripped (CRLF-file and `echo` delivery artifacts) — spaces are preserved and
+embedded control characters are still rejected. This is the sanctioned auth path: an inline
 `Authorization` header in a scenario is still rejected by the validator (`SECRET_IN_SOURCE`), and the
 registry-driven value always wins. Configure it per service via `stand-test-config`
 (`auth: { scheme: BASIC, username-ref: ..., password-ref: ... }`) or the starter

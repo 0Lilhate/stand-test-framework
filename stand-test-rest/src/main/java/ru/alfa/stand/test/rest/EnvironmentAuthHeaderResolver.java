@@ -16,10 +16,14 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  * {@link SecretReferences#resolve}.
  *
  * <p>BASIC builds {@code Basic base64(username:password)} with UTF-8 bytes (RFC 7617); a username
- * containing {@code ':'} is rejected. BEARER builds {@code Bearer token} from the trimmed resolved
- * value; embedded whitespace or control characters are rejected because the token travels into the
- * header verbatim (header-injection guard). Failure messages carry the reference NAME only — a
- * resolved credential value never appears in any exception message.
+ * containing {@code ':'} is rejected. Leading/trailing CR and LF of the resolved username/password
+ * are stripped — they are file/echo delivery artifacts (a CRLF-terminated secrets file, an
+ * {@code echo}-written env var), never part of a credential — while spaces are preserved (a password
+ * may legitimately end with one) and EMBEDDED control characters are still rejected. BEARER builds
+ * {@code Bearer token} from the trimmed resolved value; embedded whitespace or control characters
+ * are rejected because the token travels into the header verbatim (header-injection guard). Failure
+ * messages carry the reference NAME only — a resolved credential value never appears in any
+ * exception message.
  */
 public final class EnvironmentAuthHeaderResolver implements AuthHeaderResolver {
 
@@ -51,8 +55,8 @@ public final class EnvironmentAuthHeaderResolver implements AuthHeaderResolver {
     }
 
     private String basicValue(AuthConfig auth) {
-        String username = resolveReference(auth.usernameRef(), auth.scheme());
-        String password = resolveReference(auth.passwordRef(), auth.scheme());
+        String username = stripCrLf(resolveReference(auth.usernameRef(), auth.scheme()));
+        String password = stripCrLf(resolveReference(auth.passwordRef(), auth.scheme()));
         if (username.indexOf(':') >= 0) {
             throw new StandTestException("Basic auth username resolved from '" + auth.usernameRef() + "' must not contain ':' (RFC 7617)");
         }
@@ -79,6 +83,18 @@ public final class EnvironmentAuthHeaderResolver implements AuthHeaderResolver {
             throw new StandTestException("Auth reference '" + reference + "' for service auth (scheme " + scheme + ") did not resolve (environment variable not set)");
         }
         return resolved;
+    }
+
+    private static String stripCrLf(String value) {
+        int start = 0;
+        int end = value.length();
+        while (start < end && (value.charAt(start) == '\r' || value.charAt(start) == '\n')) {
+            start++;
+        }
+        while (end > start && (value.charAt(end - 1) == '\r' || value.charAt(end - 1) == '\n')) {
+            end--;
+        }
+        return value.substring(start, end);
     }
 
     private static void requireNoControlCharacters(String value, String reference) {

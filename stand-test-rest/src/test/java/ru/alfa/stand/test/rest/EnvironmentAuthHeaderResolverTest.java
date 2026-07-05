@@ -83,6 +83,22 @@ class EnvironmentAuthHeaderResolverTest {
     }
 
     @Test
+    @DisplayName("trailing/leading CR and LF on basic credentials are stripped — file and echo artifacts")
+    void basic_trailingCrLf_isStripped() {
+        EnvironmentAuthHeaderResolver resolver = resolver(Map.of("U_REF", "Aladdin\r\n", "P_REF", "open sesame\n"));
+
+        assertThat(resolver.resolve(AuthConfig.basic("U_REF", "P_REF"))).isEqualTo("Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
+    }
+
+    @Test
+    @DisplayName("a trailing space in a basic password is preserved — only CR/LF are stripped, never spaces")
+    void basic_trailingSpace_isPreserved() {
+        EnvironmentAuthHeaderResolver resolver = resolver(Map.of("U_REF", "u", "P_REF", "p "));
+
+        assertThat(resolver.resolve(AuthConfig.basic("U_REF", "P_REF"))).isEqualTo("Basic dTpwIA==");
+    }
+
+    @Test
     @DisplayName("basic credentials containing control characters are rejected")
     void basic_controlCharacters_areRejected() {
         EnvironmentAuthHeaderResolver resolver = resolver(Map.of("U_REF", "user", "P_REF", "pa\nss"));
