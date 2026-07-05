@@ -52,6 +52,27 @@ class RestStepExecutorHttpTest {
     }
 
     @Test
+    @DisplayName("rest.expectEventually polls over real HTTP until the stand converges")
+    void realExpectEventuallyPollsToDone() {
+        try (RecordingHttpServer server = new RecordingHttpServer()
+                .respondSequence(200, "{\"status\":\"PENDING\"}")
+                .respondSequence(200, "{\"status\":\"PENDING\"}")
+                .respondSequence(200, "{\"status\":\"DONE\"}")) {
+            StepExecutionContext context = RestTestSupport.context(RestTestSupport.registry(server.baseUrl()), new VariableStore());
+            ScenarioStep step = RestStep.expectEventually(RestTestSupport.SERVICE, "/api/status")
+                    .expectStatus(200)
+                    .assertPath("$.status", "DONE")
+                    .withinSeconds(5)
+                    .pollInterval(java.time.Duration.ofMillis(10))
+                    .build();
+
+            StepResult result = RestTestSupport.liveExecutor().execute(step, context);
+
+            assertThat(result.status()).isEqualTo(StepStatus.SUCCESS);
+        }
+    }
+
+    @Test
     @DisplayName("registry-driven basic auth reaches the wire as a correctly encoded Authorization header")
     void realBasicAuthReachesTheWire() {
         try (RecordingHttpServer server = new RecordingHttpServer().respond(200, "{}")) {

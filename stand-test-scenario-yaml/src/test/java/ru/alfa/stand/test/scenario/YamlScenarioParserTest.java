@@ -118,6 +118,99 @@ class YamlScenarioParserTest {
     }
 
     @Test
+    @DisplayName("the list-form assert carries matchers for rest steps; the map form stays matcher-less")
+    void restAssert_listFormCarriesMatchers() {
+        Scenario scenario = parser.parse("""
+                id: flow
+                env: ift
+                then:
+                  - rest.get:
+                      service: s
+                      path: /a
+                      assert:
+                        - path: "$.list"
+                          contains: P_AS
+                        - path: "$.id"
+                          matches: "r-[0-9]+"
+                        - path: "$.status"
+                          equals: DONE
+                """);
+
+        assertThat(params(scenario, 0).get("assertions")).isEqualTo(List.of(
+                Map.of("jsonPath", "$.list", "expectedValue", "P_AS", "matcher", "CONTAINS"),
+                Map.of("jsonPath", "$.id", "expectedValue", "r-[0-9]+", "matcher", "MATCHES"),
+                Map.of("jsonPath", "$.status", "expectedValue", "DONE")));
+    }
+
+    @Test
+    @DisplayName("rest.expectEventually maps to the polling wire keys and requires an expectation")
+    void restExpectEventually_mapsToWireKeys() {
+        Scenario scenario = parser.parse("""
+                id: flow
+                env: ift
+                then:
+                  - rest.expectEventually:
+                      service: s
+                      path: /status
+                      expectStatus: 200
+                      assert:
+                        "$.status": DONE
+                      timeout: 20s
+                      pollInterval: 250ms
+                """);
+
+        assertThat(scenario.steps().get(0).type()).isEqualTo("rest.expectEventually");
+        Map<String, Object> params = params(scenario, 0);
+        assertThat(params)
+                .containsEntry("method", "GET")
+                .containsEntry("timeoutMillis", 20_000L)
+                .containsEntry("pollIntervalMillis", 250L);
+        assertThat(params.get("assertions")).isEqualTo(List.of(Map.of("jsonPath", "$.status", "expectedValue", "DONE")));
+
+        assertThatThrownBy(() -> parser.parse("""
+                id: flow
+                env: ift
+                then:
+                  - rest.expectEventually:
+                      service: s
+                      path: /status
+                      timeout: 5s
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("requires at least one expectation");
+        assertThatThrownBy(() -> parser.parse("""
+                id: flow
+                env: ift
+                then:
+                  - rest.expectEventually:
+                      service: s
+                      path: /status
+                      expectStatus: 200
+                      body: '{}'
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("body");
+    }
+
+    @Test
+    @DisplayName("the list-form assert on kafka.expect is rejected — matchers are REST-only")
+    void kafkaAssert_listFormRejected() {
+        assertThatThrownBy(() -> parser.parse("""
+                id: flow
+                env: ift
+                then:
+                  - kafka.expect:
+                      topic: t
+                      timeout: 5s
+                      assert:
+                        - path: "$.x"
+                          contains: v
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("mapping");
+    }
+
+    @Test
     @DisplayName("bodyResource maps to the resource key; body and bodyResource together are rejected")
     void restBody_inlineVersusResource() {
         Scenario scenario = parser.parse("""

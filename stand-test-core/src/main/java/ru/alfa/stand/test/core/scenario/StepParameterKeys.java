@@ -47,6 +47,8 @@ public final class StepParameterKeys {
     public static final String JSON_PATH = "jsonPath";
     /** Nested key (assertion / expectEventually): expected value. */
     public static final String EXPECTED_VALUE = "expectedValue";
+    /** Nested key (assertion): matcher name ({@code ru.alfa.stand.test.core.assertion.AssertionMatcher}); absent means EQUALS. */
+    public static final String MATCHER = "matcher";
     /** Nested key (capture): target variable name. */
     public static final String VARIABLE_NAME = "variableName";
     /** Nested key (DB capture): result-set column label. */

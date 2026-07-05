@@ -78,6 +78,25 @@ class RestStepExecutorTest {
     }
 
     @Test
+    @DisplayName("matchers execute on a single-shot step: contains/exists/matches pass and fail precisely")
+    void matchersExecuteOnSingleShot() {
+        String body = "{\"list\":[\"PU_LST\",\"P_AS\"],\"id\":\"r-42\",\"nullField\":null}";
+        assertThat(assertionStatus(RestStep.get(RestTestSupport.SERVICE, "/x")
+                .assertPathContains("$.list", "P_AS")
+                .assertPathMatches("$.id", "r-[0-9]+")
+                .assertPathExists("$.nullField")
+                .assertPathIsNull("$.nullField")
+                .assertPathAbsent("$.missing")
+                .assertPathNotNull("$.id"), body)).isEqualTo(StepStatus.SUCCESS);
+
+        ScenarioStep failing = RestStep.get(RestTestSupport.SERVICE, "/x").assertPathContains("$.list", "STS").build();
+        assertThatThrownBy(() -> run(failing, responding(200, body), context(RestTestSupport.registry(BASE_URL), new VariableStore())))
+                .isInstanceOf(StandTestAssertionError.class)
+                .hasMessageContaining("matcher CONTAINS")
+                .hasMessageContaining("expected <STS>");
+    }
+
+    @Test
     @DisplayName("a service with an auth config gets the resolved Authorization header injected")
     void authHeaderInjected() {
         FakeHttpCaller caller = responding(200, "{}");

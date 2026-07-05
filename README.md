@@ -137,8 +137,9 @@ properties / `STAND_TEST_PUBLISH_*` env vars — see [docs/publishing.md](docs/p
 ## Known limitations
 
 - gRPC supports **unary** calls only (server reflection + `DynamicMessage`).
-- The runtime value matcher is `equals`-based; richer matchers accepted by the AI schema are validated
-  but not yet executed.
+- REST assertions execute all five matchers (`equals`/`contains`/`exists`/`notNull`/`matches`) and
+  `rest.expectEventually` GET-polls until expectations hold; Kafka/gRPC assertions are still
+  `equals`-only.
 - The Kafka example in `stand-test-example` needs a real broker and is tagged
   `requires-broker` (excluded from the default run); all module unit tests run offline.
 - A first publish to the internal Nexus/Artifactory has not happened yet (repository URL pending).

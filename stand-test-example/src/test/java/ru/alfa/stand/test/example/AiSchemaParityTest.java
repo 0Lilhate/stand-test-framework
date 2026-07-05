@@ -70,16 +70,25 @@ class AiSchemaParityTest {
         assertThatCode(() -> new DefaultScenarioValidator().validate(scenario).throwIfInvalid())
                 .doesNotThrowAnyException();
         assertThat(scenario.environment()).isEqualTo("ift");
-        assertThat(scenario.steps()).hasSize(3);
+        assertThat(scenario.steps()).hasSize(4);
 
         Map<String, Object> rest = ((GenericStep) scenario.steps().get(0)).parameters();
         assertThat(rest).containsEntry("method", "POST").containsEntry("expectedStatus", 200)
                 .containsEntry("injectCorrelationId", true).containsEntry("bodyResource", "fixtures/create-request.json");
+        assertThat(rest.get("assertions")).isEqualTo(java.util.List.of(
+                Map.of("jsonPath", "$.status", "expectedValue", "ACCEPTED"),
+                Map.of("jsonPath", "$.requestId", "expectedValue", "r-[0-9]+", "matcher", "MATCHES"),
+                Map.of("jsonPath", "$.error", "expectedValue", false, "matcher", "EXISTS")));
 
-        Map<String, Object> kafka = ((GenericStep) scenario.steps().get(1)).parameters();
+        Map<String, Object> poll = ((GenericStep) scenario.steps().get(1)).parameters();
+        assertThat(scenario.steps().get(1).type()).isEqualTo("rest.expectEventually");
+        assertThat(poll).containsEntry("method", "GET").containsEntry("timeoutMillis", 20000L).containsEntry("expectedStatus", 200);
+        assertThat(poll.get("assertions")).isEqualTo(java.util.List.of(Map.of("jsonPath", "$.status", "expectedValue", "DONE")));
+
+        Map<String, Object> kafka = ((GenericStep) scenario.steps().get(2)).parameters();
         assertThat(kafka).containsEntry("correlationIdFromContext", true).containsEntry("timeoutMillis", 30000L);
 
-        Map<String, Object> db = ((GenericStep) scenario.steps().get(2)).parameters();
+        Map<String, Object> db = ((GenericStep) scenario.steps().get(3)).parameters();
         assertThat(db).containsEntry("expectedValue", "DONE").containsEntry("timeoutMillis", 10000L);
         assertThat((String) db.get("sql")).startsWith("SELECT");
     }

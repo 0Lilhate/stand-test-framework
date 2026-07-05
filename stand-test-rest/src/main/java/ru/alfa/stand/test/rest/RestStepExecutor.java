@@ -6,8 +6,8 @@ import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.PathNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -15,6 +15,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import ru.alfa.stand.test.await.AwaitPolicy;
+import ru.alfa.stand.test.await.AwaitResult;
+import ru.alfa.stand.test.await.Awaiter;
+import ru.alfa.stand.test.core.assertion.AssertionMatcher;
+import ru.alfa.stand.test.core.assertion.AssertionMatchers;
 import ru.alfa.stand.test.core.environment.CorrelationConfig;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
@@ -52,11 +57,13 @@ public final class RestStepExecutor implements StepExecutor {
 
     private final AuthHeaderResolver authHeaderResolver;
 
+    private final Awaiter awaiter;
+
     /**
      * Creates an executor with the default WebClient-based caller and environment-backed resolvers.
      */
     public RestStepExecutor() {
-        this(new WebClientHttpCaller(), new EnvironmentBaseUrlResolver(), new EnvironmentAuthHeaderResolver());
+        this(new WebClientHttpCaller(), new EnvironmentBaseUrlResolver(), new EnvironmentAuthHeaderResolver(), Awaiter.create());
     }
 
     /**
@@ -67,7 +74,7 @@ public final class RestStepExecutor implements StepExecutor {
      * @param baseUrlResolver the base-URL reference resolver
      */
     public RestStepExecutor(HttpCaller httpCaller, BaseUrlResolver baseUrlResolver) {
-        this(httpCaller, baseUrlResolver, new EnvironmentAuthHeaderResolver());
+        this(httpCaller, baseUrlResolver, new EnvironmentAuthHeaderResolver(), Awaiter.create());
     }
 
     /**
@@ -78,9 +85,14 @@ public final class RestStepExecutor implements StepExecutor {
      * @param authHeaderResolver the service-auth reference resolver
      */
     public RestStepExecutor(HttpCaller httpCaller, BaseUrlResolver baseUrlResolver, AuthHeaderResolver authHeaderResolver) {
+        this(httpCaller, baseUrlResolver, authHeaderResolver, Awaiter.create());
+    }
+
+    RestStepExecutor(HttpCaller httpCaller, BaseUrlResolver baseUrlResolver, AuthHeaderResolver authHeaderResolver, Awaiter awaiter) {
         this.httpCaller = Objects.requireNonNull(httpCaller, "httpCaller must not be null");
         this.baseUrlResolver = Objects.requireNonNull(baseUrlResolver, "baseUrlResolver must not be null");
         this.authHeaderResolver = Objects.requireNonNull(authHeaderResolver, "authHeaderResolver must not be null");
+        this.awaiter = Objects.requireNonNull(awaiter, "awaiter must not be null");
     }
 
     @Override
@@ -101,14 +113,49 @@ public final class RestStepExecutor implements StepExecutor {
         OptionalInt expectedStatus = RestStepParameters.expectedStatus(parameters);
         List<RestAssertion> assertions = RestStepParameters.assertions(parameters);
         List<RestCapture> captures = RestStepParameters.captures(parameters);
+        if (RestStepParameters.EXPECT_EVENTUALLY_TYPE.equals(step.type())) {
+            return executeExpectEventually(step, startedAt, parameters, request, expectedStatus, assertions, captures, context);
+        }
         RestResponse response = this.httpCaller.execute(request);
-        assertStatus(expectedStatus, response, request);
-        if (!assertions.isEmpty() || !captures.isEmpty()) {
-            DocumentContext document = parse(response.body());
-            verifyAssertions(assertions, document);
-            applyCaptures(captures, document, context.variableStore());
+        String mismatch = firstMismatch(expectedStatus, assertions, response, request);
+        if (mismatch != null) {
+            throw new StandTestAssertionError(mismatch);
+        }
+        if (!captures.isEmpty()) {
+            applyCaptures(captures, parse(response.body()), context.variableStore());
         }
         return success(step, startedAt, request, response);
+    }
+
+    private StepResult executeExpectEventually(ScenarioStep step, Instant startedAt, Map<String, Object> parameters, RestRequest request, OptionalInt expectedStatus, List<RestAssertion> assertions, List<RestCapture> captures, StepExecutionContext context) {
+        String service = RestStepParameters.requireString(parameters, RestStepParameters.SERVICE);
+        Duration timeout = Duration.ofMillis(RestStepParameters.positiveMillis(parameters, RestStepParameters.TIMEOUT_MILLIS, RestStepParameters.DEFAULT_TIMEOUT_MILLIS));
+        Duration pollInterval = Duration.ofMillis(RestStepParameters.positiveMillis(parameters, RestStepParameters.POLL_INTERVAL_MILLIS, RestStepParameters.DEFAULT_POLL_INTERVAL_MILLIS));
+        AwaitPolicy policy = AwaitPolicy.builder("rest.expectEventually " + service + " " + request.path())
+                .timeout(timeout)
+                .pollInterval(pollInterval)
+                .ignoreExceptions(false)
+                .build();
+        // A transport failure (the caller throws StandTestException) aborts the await immediately —
+        // an unreachable service is an infrastructure problem, not an unmet expectation. An HTTP 5xx
+        // is NOT an exception (the caller returns the response), so transient error statuses are
+        // polled through until the expectations hold or the timeout expires.
+        AwaitResult<PollProbe> result = this.awaiter.await(
+                policy,
+                () -> probe(request, expectedStatus, assertions),
+                observed -> observed.mismatch() == null);
+        PollProbe last = result.orElseThrow(diagnostics -> new StandTestAssertionError(
+                "rest.expectEventually '" + service + " " + request.path() + "' did not observe the expected response: " + diagnostics.summary()
+                        + " (service=" + service + ", path=" + request.path() + ")"));
+        if (!captures.isEmpty()) {
+            applyCaptures(captures, parse(last.response().body()), context.variableStore());
+        }
+        return success(step, startedAt, request, last.response());
+    }
+
+    private PollProbe probe(RestRequest request, OptionalInt expectedStatus, List<RestAssertion> assertions) {
+        RestResponse response = this.httpCaller.execute(request);
+        return new PollProbe(response, firstMismatch(expectedStatus, assertions, response, request));
     }
 
     private static Map<String, Object> parameters(ScenarioStep step) {
@@ -195,19 +242,55 @@ public final class RestStepExecutor implements StepExecutor {
         }
     }
 
-    private static void assertStatus(OptionalInt expected, RestResponse response, RestRequest request) {
-        if (expected.isPresent() && expected.getAsInt() != response.statusCode()) {
-            throw new StandTestAssertionError("Expected HTTP status " + expected.getAsInt() + " but got " + response.statusCode() + " for " + request.method() + " " + request.path());
+    /**
+     * Evaluates the step's expectations against a response without throwing: null when everything
+     * holds, otherwise the first mismatch rendered exactly as the single-shot failure message. This is
+     * both the poll condition of {@code rest.expectEventually} and the source of the thrown
+     * {@link StandTestAssertionError} of a regular step — one implementation, no drift. Leaf values at
+     * asserted paths are echoed (that diagnostic is the point of the assertion); the response body
+     * never is.
+     */
+    private static String firstMismatch(OptionalInt expectedStatus, List<RestAssertion> assertions, RestResponse response, RestRequest request) {
+        if (expectedStatus.isPresent() && expectedStatus.getAsInt() != response.statusCode()) {
+            return "Expected HTTP status " + expectedStatus.getAsInt() + " but got " + response.statusCode() + " for " + request.method() + " " + request.path();
         }
-    }
-
-    private static void verifyAssertions(List<RestAssertion> assertions, DocumentContext document) {
+        if (assertions.isEmpty()) {
+            return null;
+        }
+        DocumentContext document;
+        try {
+            document = parse(response.body());
+        } catch (StandTestAssertionError unparseable) {
+            return unparseable.getMessage();
+        }
         for (RestAssertion assertion : assertions) {
-            Object actual = read(document, assertion.jsonPath());
-            if (!valuesMatch(assertion.expectedValue(), actual)) {
-                throw new StandTestAssertionError("JSONPath assertion failed at '" + assertion.jsonPath() + "': expected <" + assertion.expectedValue() + "> but got <" + actual + ">");
+            String mismatch = assertionMismatch(assertion, document);
+            if (mismatch != null) {
+                return mismatch;
             }
         }
+        return null;
+    }
+
+    private static String assertionMismatch(RestAssertion assertion, DocumentContext document) {
+        boolean pathPresent = true;
+        Object actual = null;
+        try {
+            actual = document.read(assertion.jsonPath());
+        } catch (PathNotFoundException notFound) {
+            pathPresent = false;
+        }
+        if (AssertionMatchers.matches(assertion.matcher(), assertion.expectedValue(), pathPresent, actual)) {
+            return null;
+        }
+        if (assertion.matcher() == AssertionMatcher.EQUALS) {
+            if (!pathPresent) {
+                return "JSONPath '" + assertion.jsonPath() + "' not found in response body";
+            }
+            return "JSONPath assertion failed at '" + assertion.jsonPath() + "': expected <" + assertion.expectedValue() + "> but got <" + actual + ">";
+        }
+        String observed = pathPresent ? "<" + actual + ">" : "no value (path not found)";
+        return "JSONPath assertion failed at '" + assertion.jsonPath() + "': matcher " + assertion.matcher() + " expected <" + assertion.expectedValue() + "> but got " + observed;
     }
 
     private static void applyCaptures(List<RestCapture> captures, DocumentContext document, VariableStore store) {
@@ -240,25 +323,6 @@ public final class RestStepExecutor implements StepExecutor {
         } catch (PathNotFoundException notFound) {
             throw new StandTestAssertionError("JSONPath '" + jsonPath + "' not found in response body");
         }
-    }
-
-    private static boolean valuesMatch(Object expected, Object actual) {
-        if (Objects.equals(expected, actual)) {
-            return true;
-        }
-        // Numbers are compared by numeric value so e.g. an expected int 100 matches a JSON 100.0; all
-        // other type mismatches (boolean vs string, string vs number, ...) are a genuine mismatch and
-        // must fail rather than be string-coerced, so a field changing type is caught.
-        if (expected instanceof Number expectedNumber && actual instanceof Number actualNumber) {
-            try {
-                return new BigDecimal(expectedNumber.toString()).compareTo(new BigDecimal(actualNumber.toString())) == 0;
-            } catch (NumberFormatException notComparable) {
-                // A non-finite expected value (NaN / Infinity) is not numerically comparable: treat it
-                // as a mismatch rather than letting a raw NumberFormatException escape (plan §8.3).
-                return false;
-            }
-        }
-        return false;
     }
 
     private static StepResult success(ScenarioStep step, Instant startedAt, RestRequest request, RestResponse response) {

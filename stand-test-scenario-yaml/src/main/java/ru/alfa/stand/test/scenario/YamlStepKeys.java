@@ -25,6 +25,7 @@ final class YamlStepKeys {
     static final String CAPTURES = StepParameterKeys.CAPTURES;
     static final String JSON_PATH = StepParameterKeys.JSON_PATH;
     static final String EXPECTED_VALUE = StepParameterKeys.EXPECTED_VALUE;
+    static final String MATCHER = StepParameterKeys.MATCHER;
     static final String VARIABLE_NAME = StepParameterKeys.VARIABLE_NAME;
     static final String COLUMN = StepParameterKeys.COLUMN;
 

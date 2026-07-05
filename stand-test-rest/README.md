@@ -19,10 +19,21 @@ the **JDK HttpClient connector** (`JdkClientHttpConnector`), so reactor-netty is
 - **Outbound `correlationId` injection** — the SDK-owned id is injected into the header configured for
   the target service (`ServiceEndpointDefinition.correlation().name()`), *before* the call. The header
   name comes from the environment config, never hardcoded.
-- **JSONPath assertions** (`assertPath`) and **response capture** into the run's `VariableStore`
-  (`capture`), so later steps can read `${requestId}` etc. Assertion comparison is type-aware: numbers
-  match by value (`100` ≡ `100.0`) but other type changes (boolean→string, string vs number) fail
-  rather than being string-coerced — a field changing type is a real contract regression.
+- **JSONPath assertions** (`assertPath` + matcher variants) and **response capture** into the run's
+  `VariableStore` (`capture`), so later steps can read `${requestId}` etc. Matchers: `assertPath`
+  (type-aware equality: numbers match by value, `100` ≡ `100.0`, but other type changes fail rather
+  than being string-coerced), `assertPathContains` (substring of a String value / element of a List
+  value), `assertPathMatches` (full regex over a String value; the regex is validated before any IO),
+  `assertPathExists`/`assertPathAbsent` (path presence — JSON null counts as present) and
+  `assertPathNotNull`/`assertPathIsNull` (nullness of a present value). Use definite JSONPaths with the
+  presence matchers (`$..x`/`[*]` return a possibly-empty list, which reads as "present").
+- **`rest.expectEventually`** (`RestStep.expectEventually(service, path)`) — GET-polls the path until
+  the declared expectations (status and/or assertions) hold, bounded by `within(...)` (default 30s,
+  poll interval 200ms; both validator-bounded at 1 hour). Captures apply to the final, satisfied
+  response only. A transport failure (connection refused) aborts immediately as an infrastructure
+  error, while an HTTP 5xx is just a not-yet observation — transient error statuses are polled
+  through. The timeout raises a `StandTestAssertionError` carrying the await diagnostics and the last
+  mismatch (leaf values at asserted paths are echoed; the response body never is).
 - **`${...}` variable substitution** in path, query, headers and body (built-ins `scenarioId` /
   `testRunId` / `correlationId` / `environment` plus captured variables).
 
@@ -101,10 +112,8 @@ registry-driven value always wins. Configure it per service via `stand-test-conf
 
 ## Not here
 
-No await/`expectEventually` polling for REST (the `rest → await` edge exists but is unused in the MVP —
-plan defines `expectEventually` for DB only); no auth schemes beyond BASIC/BEARER, no multipart,
-retry/redirect policies; no Allure attachments (those belong to the reporting adapter, fed by the
-`StepResult` diagnostics).
+No auth schemes beyond BASIC/BEARER, no multipart, retry/redirect policies; no Allure attachments
+(those belong to the reporting adapter, fed by the `StepResult` diagnostics).
 
 ## Testing
 

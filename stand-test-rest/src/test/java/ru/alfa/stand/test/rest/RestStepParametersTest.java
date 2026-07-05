@@ -67,4 +67,45 @@ class RestStepParametersTest {
     void capturesValidation() {
         assertThatThrownBy(() -> RestStepParameters.captures(Map.of(RestStepParameters.CAPTURES, List.of(Map.of(RestStepParameters.VARIABLE_NAME, 1, RestStepParameters.JSON_PATH, "$.x"))))).isInstanceOf(StandTestException.class);
     }
+
+    @Test
+    @DisplayName("an absent matcher key means EQUALS; a known matcher parses case-insensitively")
+    void matcherParsing() {
+        Map<String, Object> plain = Map.of(RestStepParameters.JSON_PATH, "$.x", RestStepParameters.EXPECTED_VALUE, "v");
+        Map<String, Object> contains = Map.of(RestStepParameters.JSON_PATH, "$.x", RestStepParameters.EXPECTED_VALUE, "v", RestStepParameters.MATCHER, "contains");
+
+        List<RestAssertion> assertions = RestStepParameters.assertions(Map.of(RestStepParameters.ASSERTIONS, List.of(plain, contains)));
+
+        assertThat(assertions.get(0).matcher()).isEqualTo(ru.alfa.stand.test.core.assertion.AssertionMatcher.EQUALS);
+        assertThat(assertions.get(1).matcher()).isEqualTo(ru.alfa.stand.test.core.assertion.AssertionMatcher.CONTAINS);
+    }
+
+    @Test
+    @DisplayName("matcher operand validation is fail-fast: unknown matcher, non-boolean exists, invalid regex")
+    void matcherOperandValidation() {
+        Map<String, Object> unknown = Map.of(RestStepParameters.JSON_PATH, "$.x", RestStepParameters.EXPECTED_VALUE, "v", RestStepParameters.MATCHER, "SCRIPT");
+        assertThatThrownBy(() -> RestStepParameters.assertions(Map.of(RestStepParameters.ASSERTIONS, List.of(unknown))))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("Unknown REST assertion matcher");
+
+        Map<String, Object> existsWithString = Map.of(RestStepParameters.JSON_PATH, "$.x", RestStepParameters.EXPECTED_VALUE, "yes", RestStepParameters.MATCHER, "EXISTS");
+        assertThatThrownBy(() -> RestStepParameters.assertions(Map.of(RestStepParameters.ASSERTIONS, List.of(existsWithString))))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("requires a boolean");
+
+        Map<String, Object> badRegex = Map.of(RestStepParameters.JSON_PATH, "$.x", RestStepParameters.EXPECTED_VALUE, "[unclosed", RestStepParameters.MATCHER, "MATCHES");
+        assertThatThrownBy(() -> RestStepParameters.assertions(Map.of(RestStepParameters.ASSERTIONS, List.of(badRegex))))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("invalid regular expression");
+    }
+
+    @Test
+    @DisplayName("positiveMillis applies the default, accepts Integer/Long and rejects other shapes")
+    void positiveMillisValidation() {
+        assertThat(RestStepParameters.positiveMillis(Map.of(), RestStepParameters.TIMEOUT_MILLIS, 30_000L)).isEqualTo(30_000L);
+        assertThat(RestStepParameters.positiveMillis(Map.of(RestStepParameters.TIMEOUT_MILLIS, 5_000L), RestStepParameters.TIMEOUT_MILLIS, 30_000L)).isEqualTo(5_000L);
+        assertThat(RestStepParameters.positiveMillis(Map.of(RestStepParameters.TIMEOUT_MILLIS, 250), RestStepParameters.TIMEOUT_MILLIS, 30_000L)).isEqualTo(250L);
+        assertThatThrownBy(() -> RestStepParameters.positiveMillis(Map.of(RestStepParameters.TIMEOUT_MILLIS, "5s"), RestStepParameters.TIMEOUT_MILLIS, 30_000L)).isInstanceOf(StandTestException.class);
+        assertThatThrownBy(() -> RestStepParameters.positiveMillis(Map.of(RestStepParameters.TIMEOUT_MILLIS, 0L), RestStepParameters.TIMEOUT_MILLIS, 30_000L)).isInstanceOf(StandTestException.class);
+    }
 }

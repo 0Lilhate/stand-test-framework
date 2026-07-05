@@ -61,7 +61,7 @@ class ScenarioSchemaValidationTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"rest-kafka-db-flow.json", "kafka-response-flow.json", "rest-get-flow.json", "grpc-unary-draft.json", "rest-query-and-assert-flow.json"})
+    @ValueSource(strings = {"rest-kafka-db-flow.json", "kafka-response-flow.json", "rest-get-flow.json", "grpc-unary-draft.json", "rest-query-and-assert-flow.json", "rest-matchers-flow.json", "rest-expect-eventually-flow.json"})
     @DisplayName("valid examples pass schema validation with no messages")
     void validExamples_pass(String file) {
         Set<ValidationMessage> messages = validateExample("/examples/valid/" + file);
@@ -80,7 +80,9 @@ class ScenarioSchemaValidationTest {
         "jdbc-url.json, datasource",
         "script-assertion.json, script",
         "unbounded-timeout.json, timeout",
-        "invalid-variable-capture.json, capture"
+        "invalid-variable-capture.json, capture",
+        "rest-expect-eventually-missing-timeout.json, timeout",
+        "rest-expect-eventually-no-expectation.json, expect"
     })
     @DisplayName("invalid examples are rejected for the intended reason, not just any reason")
     void invalidExamples_failForReason(String file, String expectedToken) {

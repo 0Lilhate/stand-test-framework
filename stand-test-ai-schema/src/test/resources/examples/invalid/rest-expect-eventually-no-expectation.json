@@ -1,0 +1,13 @@
+{
+  "id": "rest-expect-eventually-no-expectation",
+  "environment": "ift",
+  "steps": [
+    {
+      "id": "await-processing",
+      "type": "rest.expectEventually",
+      "service": "client-service",
+      "path": "/api/requests/1",
+      "timeout": "30s"
+    }
+  ]
+}

@@ -12,7 +12,23 @@
       "correlation": { "inject": true },
       "body": { "fixture": "fixtures/create-request.json" },
       "expect": { "status": 200 },
+      "assert": [
+        { "path": "$.status", "equals": "ACCEPTED" },
+        { "path": "$.requestId", "matches": "r-[0-9]+" },
+        { "path": "$.error", "exists": false }
+      ],
       "capture": { "requestId": "$.requestId" }
+    },
+    {
+      "id": "await-processing",
+      "type": "rest.expectEventually",
+      "service": "client-service",
+      "path": "/api/requests/${requestId}",
+      "timeout": "20s",
+      "expect": { "status": 200 },
+      "assert": [
+        { "path": "$.status", "equals": "DONE" }
+      ]
     },
     {
       "id": "await-response-event",

@@ -23,3 +23,9 @@ The surface syntax (ergonomic `given`/`then`, `assert`/`capture` maps, `timeout`
 `${...}` placeholders) is translated into the exact `GenericStep` parameter keys the adapters read. YAML is
 loaded with SnakeYAML's `SafeConstructor`; malformed input fails closed with a located `StandTestException`.
 Full design and the surface→internal mapping: `docs/arch/stand-test-scenario-yaml-design.md`.
+
+REST steps accept `assert` in two forms: the map shorthand `{"$.path": expectedValue}` (equals) and the
+list form `[{path: "$.x", contains: "v"}, ...]` with one matcher per item
+(`equals`/`contains`/`exists`/`notNull`/`matches`) — kafka/grpc accept the map form only (their executors
+run equals). `rest.expectEventually` (GET-polling) takes the usual REST fields minus `body`, plus
+`timeout`/`pollInterval` and at least one of `expectStatus`/`assert`.

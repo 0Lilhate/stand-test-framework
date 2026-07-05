@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * A tiny local HTTP server (JDK {@link HttpServer}) double for the REST examples: it records the request
@@ -21,16 +22,28 @@ final class ExampleHttpServer implements AutoCloseable {
     private final HttpServer server;
     private final Map<String, List<String>> headers = new ConcurrentHashMap<>();
     private final int status;
-    private final String responseBody;
+    private final List<String> responseBodies;
+    private final AtomicInteger served = new AtomicInteger();
     private volatile String requestBody = "";
 
     ExampleHttpServer(int status, String responseBody) {
-        this(status, responseBody, 0);
+        this(status, List.of(responseBody), 0);
     }
 
     ExampleHttpServer(int status, String responseBody, int port) {
+        this(status, List.of(responseBody), port);
+    }
+
+    /**
+     * Serves the bodies in order, one per request, repeating the last one — a converging stand for
+     * the {@code rest.expectEventually} example.
+     */
+    ExampleHttpServer(int status, List<String> responseBodies, int port) {
+        if (responseBodies.isEmpty()) {
+            throw new IllegalArgumentException("at least one response body is required");
+        }
         this.status = status;
-        this.responseBody = responseBody;
+        this.responseBodies = List.copyOf(responseBodies);
         try {
             this.server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
         } catch (IOException failure) {
@@ -61,7 +74,8 @@ final class ExampleHttpServer implements AutoCloseable {
         try {
             this.headers.putAll(exchange.getRequestHeaders());
             this.requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-            byte[] payload = this.responseBody.getBytes(StandardCharsets.UTF_8);
+            int index = Math.min(this.served.getAndIncrement(), this.responseBodies.size() - 1);
+            byte[] payload = this.responseBodies.get(index).getBytes(StandardCharsets.UTF_8);
             if (payload.length == 0) {
                 exchange.sendResponseHeaders(this.status, -1);
             } else {

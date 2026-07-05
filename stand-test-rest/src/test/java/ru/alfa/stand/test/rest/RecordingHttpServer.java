@@ -5,9 +5,11 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 
 /**
  * A tiny local HTTP server (JDK {@link HttpServer}) that records the received request and replies with
@@ -18,12 +20,12 @@ final class RecordingHttpServer implements AutoCloseable {
 
     private final HttpServer server;
     private final Map<String, List<String>> capturedHeaders = new ConcurrentHashMap<>();
+    private final Deque<CannedResponse> responses = new ConcurrentLinkedDeque<>();
     private volatile String capturedMethod;
     private volatile String capturedPath;
     private volatile String capturedRawQuery;
     private volatile String capturedBody;
-    private int responseStatus = 200;
-    private String responseBody = "{}";
+    private volatile CannedResponse lastResponse = new CannedResponse(200, "{}");
 
     RecordingHttpServer() {
         try {
@@ -36,8 +38,16 @@ final class RecordingHttpServer implements AutoCloseable {
     }
 
     RecordingHttpServer respond(int status, String body) {
-        this.responseStatus = status;
-        this.responseBody = body;
+        this.responses.clear();
+        this.lastResponse = new CannedResponse(status, body);
+        return this;
+    }
+
+    /**
+     * Queues a sequence of responses for polling tests; the last one repeats once the queue drains.
+     */
+    RecordingHttpServer respondSequence(int status, String body) {
+        this.responses.addLast(new CannedResponse(status, body));
         return this;
     }
 
@@ -77,11 +87,16 @@ final class RecordingHttpServer implements AutoCloseable {
             this.capturedRawQuery = exchange.getRequestURI().getRawQuery();
             this.capturedHeaders.putAll(exchange.getRequestHeaders());
             this.capturedBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-            byte[] payload = this.responseBody.getBytes(StandardCharsets.UTF_8);
+            CannedResponse queued = this.responses.pollFirst();
+            if (queued != null) {
+                this.lastResponse = queued;
+            }
+            CannedResponse response = this.lastResponse;
+            byte[] payload = response.body().getBytes(StandardCharsets.UTF_8);
             if (payload.length == 0) {
-                exchange.sendResponseHeaders(this.responseStatus, -1);
+                exchange.sendResponseHeaders(response.status(), -1);
             } else {
-                exchange.sendResponseHeaders(this.responseStatus, payload.length);
+                exchange.sendResponseHeaders(response.status(), payload.length);
                 exchange.getResponseBody().write(payload);
             }
         } finally {
@@ -92,5 +107,8 @@ final class RecordingHttpServer implements AutoCloseable {
     @Override
     public void close() {
         this.server.stop(0);
+    }
+
+    private record CannedResponse(int status, String body) {
     }
 }

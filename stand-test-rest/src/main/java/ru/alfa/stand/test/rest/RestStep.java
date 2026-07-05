@@ -1,10 +1,12 @@
 package ru.alfa.stand.test.rest;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import ru.alfa.stand.test.core.assertion.AssertionMatcher;
 import ru.alfa.stand.test.core.scenario.GenericStep;
 import ru.alfa.stand.test.core.scenario.ScenarioStep;
 
@@ -32,6 +34,7 @@ public final class RestStep {
     private final RestMethod method;
     private final String service;
     private final String path;
+    private final boolean expectEventually;
     private final Map<String, String> query = new LinkedHashMap<>();
     private final Map<String, String> headers = new LinkedHashMap<>();
     private final List<RestAssertion> assertions = new ArrayList<>();
@@ -41,11 +44,14 @@ public final class RestStep {
     private String bodyResource;
     private boolean injectCorrelationId;
     private Integer expectedStatus;
+    private Long timeoutMillis;
+    private Long pollIntervalMillis;
 
-    private RestStep(RestMethod method, String service, String path) {
+    private RestStep(RestMethod method, String service, String path, boolean expectEventually) {
         this.method = Objects.requireNonNull(method, "method must not be null");
         this.service = requireNonBlank(service, "service");
         this.path = requireNonBlank(path, "path");
+        this.expectEventually = expectEventually;
     }
 
     /**
@@ -56,7 +62,20 @@ public final class RestStep {
      * @return a new builder
      */
     public static RestStep get(String service, String path) {
-        return new RestStep(RestMethod.GET, service, path);
+        return new RestStep(RestMethod.GET, service, path, false);
+    }
+
+    /**
+     * Starts a polling step: the given path is GET-polled until the declared expectations (status
+     * and/or JSONPath assertions) hold, bounded by {@link #within(Duration)} (default 30 seconds,
+     * poll interval 200 milliseconds). Captures are applied to the final, satisfied response only.
+     *
+     * @param service the logical service alias
+     * @param path the request path
+     * @return a new builder in expect-eventually mode
+     */
+    public static RestStep expectEventually(String service, String path) {
+        return new RestStep(RestMethod.GET, service, path, true);
     }
 
     /**
@@ -67,7 +86,7 @@ public final class RestStep {
      * @return a new builder
      */
     public static RestStep post(String service, String path) {
-        return new RestStep(RestMethod.POST, service, path);
+        return new RestStep(RestMethod.POST, service, path, false);
     }
 
     /**
@@ -78,7 +97,7 @@ public final class RestStep {
      * @return a new builder
      */
     public static RestStep put(String service, String path) {
-        return new RestStep(RestMethod.PUT, service, path);
+        return new RestStep(RestMethod.PUT, service, path, false);
     }
 
     /**
@@ -89,7 +108,7 @@ public final class RestStep {
      * @return a new builder
      */
     public static RestStep delete(String service, String path) {
-        return new RestStep(RestMethod.DELETE, service, path);
+        return new RestStep(RestMethod.DELETE, service, path, false);
     }
 
     /**
@@ -185,6 +204,117 @@ public final class RestStep {
     }
 
     /**
+     * Asserts that the String value at the path contains the expected substring, or that the List
+     * value at the path contains an element equal to the expected value.
+     *
+     * @param jsonPath the JSONPath expression
+     * @param expectedValue the substring / element to look for (never null)
+     * @return this builder
+     */
+    public RestStep assertPathContains(String jsonPath, Object expectedValue) {
+        this.assertions.add(new RestAssertion(jsonPath, expectedValue, AssertionMatcher.CONTAINS));
+        return this;
+    }
+
+    /**
+     * Asserts that the String value at the path fully matches the regular expression.
+     *
+     * @param jsonPath the JSONPath expression
+     * @param regex the regular expression (validated before any IO)
+     * @return this builder
+     */
+    public RestStep assertPathMatches(String jsonPath, String regex) {
+        this.assertions.add(new RestAssertion(jsonPath, Objects.requireNonNull(regex, "regex must not be null"), AssertionMatcher.MATCHES));
+        return this;
+    }
+
+    /**
+     * Asserts that the path is present in the response body (a JSON null counts as present).
+     *
+     * @param jsonPath the JSONPath expression
+     * @return this builder
+     */
+    public RestStep assertPathExists(String jsonPath) {
+        this.assertions.add(new RestAssertion(jsonPath, Boolean.TRUE, AssertionMatcher.EXISTS));
+        return this;
+    }
+
+    /**
+     * Asserts that the path is absent from the response body.
+     *
+     * @param jsonPath the JSONPath expression
+     * @return this builder
+     */
+    public RestStep assertPathAbsent(String jsonPath) {
+        this.assertions.add(new RestAssertion(jsonPath, Boolean.FALSE, AssertionMatcher.EXISTS));
+        return this;
+    }
+
+    /**
+     * Asserts that the path is present and its value is not JSON null.
+     *
+     * @param jsonPath the JSONPath expression
+     * @return this builder
+     */
+    public RestStep assertPathNotNull(String jsonPath) {
+        this.assertions.add(new RestAssertion(jsonPath, Boolean.TRUE, AssertionMatcher.NOT_NULL));
+        return this;
+    }
+
+    /**
+     * Asserts that the path is present and its value is JSON null (for absence use
+     * {@link #assertPathAbsent}).
+     *
+     * @param jsonPath the JSONPath expression
+     * @return this builder
+     */
+    public RestStep assertPathIsNull(String jsonPath) {
+        this.assertions.add(new RestAssertion(jsonPath, Boolean.FALSE, AssertionMatcher.NOT_NULL));
+        return this;
+    }
+
+    /**
+     * Bounds the expect-eventually poll (only valid on a {@link #expectEventually} step).
+     *
+     * @param timeout the maximum time to wait (strictly positive)
+     * @return this builder
+     */
+    public RestStep within(Duration timeout) {
+        Objects.requireNonNull(timeout, "timeout must not be null");
+        if (timeout.isZero() || timeout.isNegative()) {
+            throw new IllegalArgumentException("timeout must be strictly positive");
+        }
+        this.timeoutMillis = timeout.toMillis();
+        return this;
+    }
+
+    /**
+     * Bounds the expect-eventually poll in whole seconds (only valid on a {@link #expectEventually} step).
+     *
+     * @param seconds the maximum time to wait, in seconds (strictly positive)
+     * @return this builder
+     */
+    public RestStep withinSeconds(long seconds) {
+        return within(Duration.ofSeconds(seconds));
+    }
+
+    /**
+     * Sets the poll interval between probes (only valid on a {@link #expectEventually} step;
+     * default 200 milliseconds).
+     *
+     * @param pollInterval the interval between probes (strictly positive)
+     * @return this builder
+     */
+    public RestStep pollInterval(Duration pollInterval) {
+        Objects.requireNonNull(pollInterval, "pollInterval must not be null");
+        if (pollInterval.isZero() || pollInterval.isNegative()) {
+            throw new IllegalArgumentException("pollInterval must be strictly positive");
+        }
+        this.pollIntervalMillis = pollInterval.toMillis();
+        return this;
+    }
+
+    /**
      * Captures the value at the given JSONPath into a run variable for later steps.
      *
      * @param variableName the variable name
@@ -205,15 +335,29 @@ public final class RestStep {
         if (this.body != null && this.bodyResource != null) {
             throw new IllegalStateException("Set either body(...) or bodyFromResource(...), not both");
         }
-        return new GenericStep(resolveId(), this.method.stepType(), description(), toParameterMap());
+        if (this.expectEventually) {
+            if (this.body != null || this.bodyResource != null) {
+                throw new IllegalStateException("expectEventually polls with GET and carries no request body");
+            }
+            if (this.expectedStatus == null && this.assertions.isEmpty()) {
+                throw new IllegalStateException("expectEventually requires at least one expectation: expectStatus(...) or an assertPath*(...)");
+            }
+        } else if (this.timeoutMillis != null || this.pollIntervalMillis != null) {
+            throw new IllegalStateException("within(...)/withinSeconds(...)/pollInterval(...) are only valid on an expectEventually step");
+        }
+        String type = this.expectEventually ? RestStepParameters.EXPECT_EVENTUALLY_TYPE : this.method.stepType();
+        return new GenericStep(resolveId(), type, description(), toParameterMap());
     }
 
     private String resolveId() {
-        return (this.id != null) ? this.id : this.method.name() + " " + this.path;
+        if (this.id != null) {
+            return this.id;
+        }
+        return (this.expectEventually ? "EXPECT " : "") + this.method.name() + " " + this.path;
     }
 
     private String description() {
-        return this.method.name() + " " + this.service + " " + this.path;
+        return (this.expectEventually ? "EXPECT " : "") + this.method.name() + " " + this.service + " " + this.path;
     }
 
     private Map<String, Object> toParameterMap() {
@@ -235,13 +379,23 @@ public final class RestStep {
         if (this.bodyResource != null) {
             parameters.put(RestStepParameters.BODY_RESOURCE, this.bodyResource);
         }
+        if (this.timeoutMillis != null) {
+            parameters.put(RestStepParameters.TIMEOUT_MILLIS, this.timeoutMillis);
+        }
+        if (this.pollIntervalMillis != null) {
+            parameters.put(RestStepParameters.POLL_INTERVAL_MILLIS, this.pollIntervalMillis);
+        }
         return parameters;
     }
 
     private List<Map<String, Object>> assertionMaps() {
         List<Map<String, Object>> list = new ArrayList<>();
         for (RestAssertion assertion : this.assertions) {
-            list.add(Map.of(RestStepParameters.JSON_PATH, assertion.jsonPath(), RestStepParameters.EXPECTED_VALUE, assertion.expectedValue()));
+            if (assertion.matcher() == AssertionMatcher.EQUALS) {
+                list.add(Map.of(RestStepParameters.JSON_PATH, assertion.jsonPath(), RestStepParameters.EXPECTED_VALUE, assertion.expectedValue()));
+            } else {
+                list.add(Map.of(RestStepParameters.JSON_PATH, assertion.jsonPath(), RestStepParameters.EXPECTED_VALUE, assertion.expectedValue(), RestStepParameters.MATCHER, assertion.matcher().name()));
+            }
         }
         return List.copyOf(list);
     }

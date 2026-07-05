@@ -3,9 +3,13 @@ package ru.alfa.stand.test.rest;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+import ru.alfa.stand.test.core.assertion.AssertionMatcher;
 import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.scenario.StepParameterKeys;
 
@@ -24,6 +28,15 @@ public final class RestStepParameters {
 
     /** Prefix of the core step type produced for a REST step (for example {@code rest.get}). */
     public static final String TYPE_PREFIX = StepParameterKeys.REST_PREFIX;
+
+    /** Core step type of the polling step. */
+    public static final String EXPECT_EVENTUALLY_TYPE = "rest.expectEventually";
+
+    /** Default poll timeout when the step sets none: 30 seconds. */
+    public static final long DEFAULT_TIMEOUT_MILLIS = 30_000L;
+
+    /** Default poll interval when the step sets none: 200 milliseconds. */
+    public static final long DEFAULT_POLL_INTERVAL_MILLIS = 200L;
 
     /** Parameter key: HTTP method name (see {@link RestMethod}). */
     public static final String METHOD = StepParameterKeys.METHOD;
@@ -52,8 +65,15 @@ public final class RestStepParameters {
     public static final String JSON_PATH = StepParameterKeys.JSON_PATH;
     /** Nested key (assertion): expected value. */
     public static final String EXPECTED_VALUE = StepParameterKeys.EXPECTED_VALUE;
+    /** Nested key (assertion): matcher name; absent means EQUALS. */
+    public static final String MATCHER = StepParameterKeys.MATCHER;
     /** Nested key (capture): target variable name. */
     public static final String VARIABLE_NAME = StepParameterKeys.VARIABLE_NAME;
+
+    /** Parameter key (expectEventually): maximum time to wait, in milliseconds. */
+    public static final String TIMEOUT_MILLIS = StepParameterKeys.TIMEOUT_MILLIS;
+    /** Parameter key (expectEventually): the poll interval between probes, in milliseconds. */
+    public static final String POLL_INTERVAL_MILLIS = StepParameterKeys.POLL_INTERVAL_MILLIS;
 
     private RestStepParameters() {
     }
@@ -127,9 +147,62 @@ public final class RestStepParameters {
             if (expected == null) {
                 throw new StandTestException("REST assertion '" + EXPECTED_VALUE + "' must not be null");
             }
-            result.add(new RestAssertion(text, expected));
+            AssertionMatcher matcher = matcher(entry);
+            validateMatcherOperand(matcher, expected, text);
+            result.add(new RestAssertion(text, expected, matcher));
         }
         return result;
+    }
+
+    private static AssertionMatcher matcher(Map<String, Object> entry) {
+        Object value = entry.get(MATCHER);
+        if (value == null) {
+            return AssertionMatcher.EQUALS;
+        }
+        if (!(value instanceof String name)) {
+            throw new StandTestException("REST assertion '" + MATCHER + "' must be a string");
+        }
+        try {
+            return AssertionMatcher.valueOf(name.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException unknown) {
+            throw new StandTestException("Unknown REST assertion matcher: '" + name + "'");
+        }
+    }
+
+    /**
+     * Fail-fast operand checks, applied while reading parameters so a structurally broken assertion
+     * never reaches the stand (mirrors the schema's per-matcher value types): EXISTS/NOT_NULL carry a
+     * Boolean polarity, MATCHES carries a compilable regular expression.
+     */
+    private static void validateMatcherOperand(AssertionMatcher matcher, Object expected, String jsonPath) {
+        if ((matcher == AssertionMatcher.EXISTS || matcher == AssertionMatcher.NOT_NULL) && !(expected instanceof Boolean)) {
+            throw new StandTestException("REST assertion at '" + jsonPath + "': matcher " + matcher + " requires a boolean '" + EXPECTED_VALUE + "'");
+        }
+        if (matcher == AssertionMatcher.MATCHES) {
+            if (!(expected instanceof String regex)) {
+                throw new StandTestException("REST assertion at '" + jsonPath + "': matcher MATCHES requires a string regular expression");
+            }
+            try {
+                Pattern.compile(regex);
+            } catch (PatternSyntaxException invalid) {
+                throw new StandTestException("REST assertion at '" + jsonPath + "': invalid regular expression for matcher MATCHES", invalid);
+            }
+        }
+    }
+
+    static long positiveMillis(Map<String, Object> parameters, String key, long defaultMillis) {
+        Object value = parameters.get(key);
+        if (value == null) {
+            return defaultMillis;
+        }
+        if (!(value instanceof Long) && !(value instanceof Integer)) {
+            throw new StandTestException("REST step parameter '" + key + "' must be an integer number of milliseconds");
+        }
+        long millis = ((Number) value).longValue();
+        if (millis <= 0) {
+            throw new StandTestException("REST step parameter '" + key + "' must be strictly positive");
+        }
+        return millis;
     }
 
     static List<RestCapture> captures(Map<String, Object> parameters) {

@@ -21,7 +21,9 @@ import ru.alfa.stand.test.core.exception.StandTestException;
 final class AiStepNormalizer {
 
     private static final Set<String> REST_KNOWN =
-            Set.of("id", "type", "description", "service", "path", "query", "headers", "correlation", "body", "expect", "capture");
+            Set.of("id", "type", "description", "service", "path", "query", "headers", "correlation", "body", "expect", "assert", "capture");
+    private static final Set<String> REST_EXPECT_KNOWN =
+            Set.of("id", "type", "description", "service", "path", "query", "headers", "correlation", "timeout", "expect", "assert", "capture");
     private static final Set<String> KAFKA_SEND_KNOWN =
             Set.of("id", "type", "description", "topic", "key", "correlation", "payload");
     private static final Set<String> KAFKA_EXPECT_KNOWN =
@@ -36,6 +38,9 @@ final class AiStepNormalizer {
     }
 
     static Map<String, Object> normalize(String type, Map<String, Object> fields, String location) {
+        if ("rest.expectEventually".equals(type)) {
+            return restExpectEventually(fields, location);
+        }
         if (type.startsWith("rest.")) {
             return rest(fields, location);
         }
@@ -51,7 +56,7 @@ final class AiStepNormalizer {
         if ("grpc.unary".equals(type)) {
             return grpcUnary(fields, location);
         }
-        throw new StandTestException("Unsupported AI step type '" + type + "' at " + location + " (supported: rest.get/post, kafka.send, kafka.expect, db.expectEventually, grpc.unary)");
+        throw new StandTestException("Unsupported AI step type '" + type + "' at " + location + " (supported: rest.get/post, rest.expectEventually, kafka.send, kafka.expect, db.expectEventually, grpc.unary)");
     }
 
     private static Map<String, Object> rest(Map<String, Object> fields, String location) {
@@ -65,7 +70,40 @@ final class AiStepNormalizer {
         applyCorrelation(fields, out, "inject", YamlStepKeys.INJECT_CORRELATION_ID, location);
         applyPayload(fields, out, "body", YamlStepKeys.BODY_RESOURCE, location);
         applyExpectStatus(fields, out, location);
+        applyRestAssert(fields, out, location);
         return out;
+    }
+
+    private static Map<String, Object> restExpectEventually(Map<String, Object> fields, String location) {
+        SurfaceValues.checkKnownKeys(fields, REST_EXPECT_KNOWN, location);
+        Map<String, Object> out = new LinkedHashMap<>();
+        copyIfPresent(fields, out, "service");
+        copyIfPresent(fields, out, "path");
+        copyIfPresent(fields, out, "query");
+        copyIfPresent(fields, out, "headers");
+        copyIfPresent(fields, out, "timeout");
+        copyIfPresent(fields, out, "capture");
+        applyCorrelation(fields, out, "inject", YamlStepKeys.INJECT_CORRELATION_ID, location);
+        applyExpectStatus(fields, out, location);
+        applyRestAssert(fields, out, location);
+        return out;
+    }
+
+    /**
+     * REST assertions keep their full matcher form as the surface list — {@code RestStepTranslator}
+     * routes them through {@code SurfaceValues.assertionsWithMatchers}, so all five schema matchers
+     * are executable for the REST family (kafka/grpc stay equals-only, see {@link #equalsAssertions}).
+     */
+    private static void applyRestAssert(Map<String, Object> fields, Map<String, Object> out, String location) {
+        if (!fields.containsKey("assert")) {
+            return;
+        }
+        String assertLoc = location + ".assert";
+        List<Object> items = SurfaceValues.asList(fields.get("assert"), assertLoc);
+        for (int i = 0; i < items.size(); i++) {
+            SurfaceValues.checkKnownKeys(SurfaceValues.asMap(items.get(i), assertLoc + "[" + i + "]"), ASSERT_KNOWN, assertLoc + "[" + i + "]");
+        }
+        out.put("assert", items);
     }
 
     private static Map<String, Object> kafkaSend(Map<String, Object> fields, String location) {
@@ -182,7 +220,7 @@ final class AiStepNormalizer {
             String path = SurfaceValues.requireString(item, "path", itemLoc);
             if (item.containsKey("exists") || item.containsKey("notNull")
                     || item.containsKey("contains") || item.containsKey("matches")) {
-                throw new StandTestException("Assertion at " + itemLoc + " uses a matcher that is not executable yet: only 'equals' is supported by the runtime");
+                throw new StandTestException("Assertion at " + itemLoc + " uses a matcher that is only executable for REST assertions: kafka.expect/grpc.unary run 'equals' only for now");
             }
             Object expected = item.get("equals");
             if (expected == null) {

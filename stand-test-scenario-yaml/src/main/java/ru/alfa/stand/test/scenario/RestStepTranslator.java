@@ -17,17 +17,49 @@ final class RestStepTranslator {
 
     private static final Set<String> KNOWN = Set.of("id", "service", "path", "query", "headers",
             "body", "bodyResource", "injectCorrelationId", "expectStatus", "assert", "capture");
+    private static final Set<String> EXPECT_KNOWN = Set.of("id", "service", "path", "query", "headers",
+            "injectCorrelationId", "expectStatus", "assert", "capture", "timeout", "pollInterval");
     private static final Set<String> METHODS = Set.of("GET", "POST", "PUT", "DELETE");
 
     private RestStepTranslator() {
     }
 
     static Map<String, Object> params(String type, Map<String, Object> fields, String location) {
+        if ("rest.expectEventually".equals(type)) {
+            return expectEventually(fields, location);
+        }
         SurfaceValues.checkKnownKeys(fields, KNOWN, location);
         String method = type.substring("rest.".length()).toUpperCase(Locale.ROOT);
         if (!METHODS.contains(method)) {
-            throw new StandTestException("Unsupported REST method in '" + type + "' at " + location + " (use rest.get/post/put/delete)");
+            throw new StandTestException("Unsupported REST method in '" + type + "' at " + location + " (use rest.get/post/put/delete or rest.expectEventually)");
         }
+        Map<String, Object> params = common(fields, method, location);
+        SurfaceValues.putInlineOrResource(params, fields, "body", "bodyResource",
+                YamlStepKeys.BODY, YamlStepKeys.BODY_RESOURCE, false, location);
+        return params;
+    }
+
+    /**
+     * The GET-only polling step: {@code timeout}/{@code pollInterval} map to the bounded await keys,
+     * a body is structurally impossible (not in the known-key set) and at least one expectation
+     * ({@code expectStatus} or {@code assert}) is required — mirroring {@code RestStep.build()}.
+     */
+    private static Map<String, Object> expectEventually(Map<String, Object> fields, String location) {
+        SurfaceValues.checkKnownKeys(fields, EXPECT_KNOWN, location);
+        Map<String, Object> params = common(fields, "GET", location);
+        if (fields.containsKey("timeout")) {
+            params.put(YamlStepKeys.TIMEOUT_MILLIS, SurfaceValues.durationMillis(fields.get("timeout"), location + ".timeout"));
+        }
+        if (fields.containsKey("pollInterval")) {
+            params.put(YamlStepKeys.POLL_INTERVAL_MILLIS, SurfaceValues.durationMillis(fields.get("pollInterval"), location + ".pollInterval"));
+        }
+        if (!fields.containsKey("expectStatus") && !fields.containsKey("assert")) {
+            throw new StandTestException("rest.expectEventually at " + location + " requires at least one expectation: 'expectStatus' or 'assert'");
+        }
+        return params;
+    }
+
+    private static Map<String, Object> common(Map<String, Object> fields, String method, String location) {
         Map<String, Object> params = new LinkedHashMap<>();
         params.put(YamlStepKeys.METHOD, method);
         params.put(YamlStepKeys.SERVICE, SurfaceValues.requireString(fields, "service", location));
@@ -36,11 +68,9 @@ final class RestStepTranslator {
         params.put(YamlStepKeys.HEADERS, SurfaceValues.stringMap(fields.get("headers"), location + ".headers"));
         params.put(YamlStepKeys.INJECT_CORRELATION_ID, SurfaceValues.boolFlag(fields, "injectCorrelationId", location));
         params.put(YamlStepKeys.ASSERTIONS, fields.containsKey("assert")
-                ? SurfaceValues.assertions(fields.get("assert"), location + ".assert") : List.of());
+                ? SurfaceValues.assertionsWithMatchers(fields.get("assert"), location + ".assert") : List.of());
         params.put(YamlStepKeys.CAPTURES, fields.containsKey("capture")
                 ? SurfaceValues.captures(fields.get("capture"), YamlStepKeys.JSON_PATH, location + ".capture") : List.of());
-        SurfaceValues.putInlineOrResource(params, fields, "body", "bodyResource",
-                YamlStepKeys.BODY, YamlStepKeys.BODY_RESOURCE, false, location);
         if (fields.containsKey("expectStatus")) {
             params.put(YamlStepKeys.EXPECTED_STATUS, SurfaceValues.requireInteger(fields, "expectStatus", location));
         }

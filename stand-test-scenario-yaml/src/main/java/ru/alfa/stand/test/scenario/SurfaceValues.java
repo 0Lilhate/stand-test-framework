@@ -15,6 +15,13 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  */
 final class SurfaceValues {
 
+    private static final Map<String, String> ASSERT_MATCHER_KEYS = Map.of(
+            "equals", "EQUALS",
+            "contains", "CONTAINS",
+            "exists", "EXISTS",
+            "notNull", "NOT_NULL",
+            "matches", "MATCHES");
+
     private SurfaceValues() {
     }
 
@@ -169,6 +176,50 @@ final class SurfaceValues {
                 throw new StandTestException("Assertion for '" + entry.getKey() + "' at " + location + " must have a non-null expected value");
             }
             result.add(Map.of(YamlStepKeys.JSON_PATH, entry.getKey(), YamlStepKeys.EXPECTED_VALUE, entry.getValue()));
+        }
+        return List.copyOf(result);
+    }
+
+    /**
+     * Reads a REST {@code assert} block in either surface form: the map shorthand
+     * {@code {"$.path": expectedValue}} (equals-only, identical to {@link #assertions}) or the list form
+     * {@code [{path: "$.x", contains: "v"}, ...]} where each item declares exactly one matcher besides
+     * {@code path}. Only the REST family accepts the list form — kafka/grpc stay on the map shorthand
+     * because their executors run equals only.
+     */
+    static List<Map<String, Object>> assertionsWithMatchers(Object value, String location) {
+        if (value instanceof Map<?, ?>) {
+            return assertions(value, location);
+        }
+        if (!(value instanceof List<?> items)) {
+            throw new StandTestException("'assert' at " + location + " must be a {\"jsonPath\": expectedValue} mapping or a list of {path, <matcher>} items, but found "
+                    + (value == null ? "nothing" : value.getClass().getSimpleName()));
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (int i = 0; i < items.size(); i++) {
+            String itemLoc = location + "[" + i + "]";
+            Map<String, Object> item = asMap(items.get(i), itemLoc);
+            checkKnownKeys(item, Set.of("path", "equals", "contains", "exists", "notNull", "matches"), itemLoc);
+            String path = requireString(item, "path", itemLoc);
+            List<String> present = new ArrayList<>();
+            for (String matcherKey : ASSERT_MATCHER_KEYS.keySet()) {
+                if (item.containsKey(matcherKey)) {
+                    present.add(matcherKey);
+                }
+            }
+            if (present.size() != 1) {
+                throw new StandTestException("Assertion at " + itemLoc + " must declare exactly one matcher besides 'path' (equals/contains/exists/notNull/matches), but found " + present);
+            }
+            String surfaceMatcher = present.get(0);
+            Object expected = item.get(surfaceMatcher);
+            if (expected == null) {
+                throw new StandTestException("Assertion at " + itemLoc + " must have a non-null '" + surfaceMatcher + "' value");
+            }
+            if ("equals".equals(surfaceMatcher)) {
+                result.add(Map.of(YamlStepKeys.JSON_PATH, path, YamlStepKeys.EXPECTED_VALUE, expected));
+            } else {
+                result.add(Map.of(YamlStepKeys.JSON_PATH, path, YamlStepKeys.EXPECTED_VALUE, expected, YamlStepKeys.MATCHER, ASSERT_MATCHER_KEYS.get(surfaceMatcher)));
+            }
         }
         return List.copyOf(result);
     }

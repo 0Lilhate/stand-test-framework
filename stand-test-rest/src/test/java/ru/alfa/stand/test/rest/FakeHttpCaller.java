@@ -1,17 +1,26 @@
 package ru.alfa.stand.test.rest;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.List;
+
 /**
- * In-memory {@link HttpCaller} that records the last request and returns a canned response (or throws
- * a configured failure), so the executor can be unit-tested without a live server.
+ * In-memory {@link HttpCaller} that records every request and returns canned responses (or throws a
+ * configured failure), so the executor can be unit-tested without a live server. Multiple responses
+ * form a sequence for polling tests; the last one repeats once the queue is drained.
  */
 final class FakeHttpCaller implements HttpCaller {
 
-    private RestResponse response;
+    private final Deque<RestResponse> responses = new ArrayDeque<>();
+    private final List<RestRequest> requests = new ArrayList<>();
+    private RestResponse lastResponse;
     private RuntimeException failure;
-    private RestRequest lastRequest;
 
-    FakeHttpCaller respondWith(RestResponse response) {
-        this.response = response;
+    FakeHttpCaller respondWith(RestResponse... responses) {
+        for (RestResponse response : responses) {
+            this.responses.addLast(response);
+        }
         return this;
     }
 
@@ -21,15 +30,22 @@ final class FakeHttpCaller implements HttpCaller {
     }
 
     RestRequest lastRequest() {
-        return this.lastRequest;
+        return this.requests.isEmpty() ? null : this.requests.get(this.requests.size() - 1);
+    }
+
+    List<RestRequest> requests() {
+        return List.copyOf(this.requests);
     }
 
     @Override
     public RestResponse execute(RestRequest request) {
-        this.lastRequest = request;
+        this.requests.add(request);
         if (this.failure != null) {
             throw this.failure;
         }
-        return this.response;
+        if (!this.responses.isEmpty()) {
+            this.lastResponse = this.responses.pollFirst();
+        }
+        return this.lastResponse;
     }
 }

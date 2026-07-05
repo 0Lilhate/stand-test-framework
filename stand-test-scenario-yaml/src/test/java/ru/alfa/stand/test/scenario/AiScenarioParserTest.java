@@ -184,10 +184,60 @@ class AiScenarioParserTest {
     }
 
     @Test
-    @DisplayName("non-equals matchers and rowExists are rejected as not-yet-executable")
+    @DisplayName("an AI rest step carries assert with matchers onto the wire — the historical 'unknown field' rejection is gone")
+    void restAssert_withMatchers_mapsToWire() {
+        Scenario scenario = parser.parse("""
+                {
+                  "id": "flow", "environment": "ift",
+                  "steps": [
+                    {"id":"q","type":"rest.get","service":"s","path":"/x",
+                     "expect":{"status":200},
+                     "assert":[{"path":"$.status","equals":"DONE"},
+                               {"path":"$.list","contains":"P_AS"},
+                               {"path":"$.error","exists":false}]}
+                  ]
+                }
+                """);
+
+        Map<String, Object> rest = params(scenario.steps().get(0));
+        assertThat(rest.get("assertions")).isEqualTo(List.of(
+                Map.of("jsonPath", "$.status", "expectedValue", "DONE"),
+                Map.of("jsonPath", "$.list", "expectedValue", "P_AS", "matcher", "CONTAINS"),
+                Map.of("jsonPath", "$.error", "expectedValue", false, "matcher", "EXISTS")));
+    }
+
+    @Test
+    @DisplayName("an AI rest.expectEventually maps timeout and expectations onto the polling wire keys")
+    void restExpectEventually_mapsToWire() {
+        Scenario scenario = parser.parse("""
+                {
+                  "id": "flow", "environment": "ift",
+                  "steps": [
+                    {"id":"wait","type":"rest.expectEventually","service":"s","path":"/status",
+                     "timeout":"20s","expect":{"status":200},
+                     "assert":[{"path":"$.status","equals":"DONE"}],
+                     "capture":{"requestId":"$.requestId"}}
+                  ]
+                }
+                """);
+
+        ScenarioStep step = scenario.steps().get(0);
+        assertThat(step.type()).isEqualTo("rest.expectEventually");
+        Map<String, Object> wire = params(step);
+        assertThat(wire)
+                .containsEntry("method", "GET")
+                .containsEntry("service", "s")
+                .containsEntry("timeoutMillis", 20_000L)
+                .containsEntry("expectedStatus", 200);
+        assertThat(wire.get("assertions")).isEqualTo(List.of(Map.of("jsonPath", "$.status", "expectedValue", "DONE")));
+        assertThat(wire.get("captures")).isEqualTo(List.of(Map.of("variableName", "requestId", "jsonPath", "$.requestId")));
+    }
+
+    @Test
+    @DisplayName("non-equals matchers on kafka/grpc and rowExists are rejected as not-yet-executable")
     void unsupportedMatchers_rejected() {
         assertThatThrownBy(() -> parser.parse("id: f\nenvironment: ift\nsteps:\n  - type: kafka.expect\n    topic: t\n    timeout: 5s\n    assert:\n      - path: $.x\n        exists: true\n"))
-                .isInstanceOf(StandTestException.class).hasMessageContaining("only 'equals'");
+                .isInstanceOf(StandTestException.class).hasMessageContaining("only executable for REST");
         assertThatThrownBy(() -> parser.parse("id: f\nenvironment: ift\nsteps:\n  - type: db.expectEventually\n    datasource: d\n    timeout: 5s\n    query: SELECT 1\n    expect:\n      rowExists: true\n"))
                 .isInstanceOf(StandTestException.class).hasMessageContaining("rowExists");
     }
@@ -245,7 +295,7 @@ class AiScenarioParserTest {
         assertThatThrownBy(() -> parser.parse(base + "\"expect\":{\"status\":\"OK\"}}]}"))
                 .isInstanceOf(StandTestException.class).hasMessageContaining("expect.status");
         assertThatThrownBy(() -> parser.parse(base + "\"expect\":{\"assert\":[{\"path\":\"$.x\",\"exists\":true}]}}]}"))
-                .isInstanceOf(StandTestException.class).hasMessageContaining("not executable");
+                .isInstanceOf(StandTestException.class).hasMessageContaining("only executable for REST");
         assertThatThrownBy(() -> parser.parse(base + "\"bogus\":1}]}"))
                 .isInstanceOf(StandTestException.class).hasMessageContaining("bogus");
     }

@@ -52,6 +52,7 @@ These are provided by the SDK and may be referenced with `${...}`:
 |-----------------------|------------------------------------------------------|
 | `rest.get`            | Read-only REST call                                  |
 | `rest.post`           | REST call that creates/triggers                      |
+| `rest.expectEventually` | GET-polls a path until the expectations hold (requires `timeout`; at least one of `expect.status`/`assert`; no body) |
 | `kafka.send`          | Publish a message to a topic alias                   |
 | `kafka.expect`        | Await a message on a topic alias (requires `timeout`) |
 | `db.expectEventually` | Read-only DB probe with polling (requires `timeout`) |
@@ -59,12 +60,16 @@ These are provided by the SDK and may be referenced with `${...}`:
 
 ## Assertions
 
-Assertions attach to `kafka.expect`, `rest.get`/`rest.post` (over the response body), and, as a draft,
-`grpc.unary`, as `assert: [ { "path": "$.x", "equals": ... } ]`. Each targets a `path` (JSONPath). The
-schema accepts the matchers `equals`, `exists`, `notNull`, `contains`, `matches`, but **the current
-runtime executes only `equals`** — the parser rejects the others as not-yet-executable (see *Schema vs
-runtime* below). No expression language, no script/Java/Groovy/JS matchers. REST steps always assert the
-response `expect.status`; the optional `assert` list adds response-body checks.
+Assertions attach to `kafka.expect`, `rest.get`/`rest.post`/`rest.expectEventually` (over the response
+body), and, as a draft, `grpc.unary`, as `assert: [ { "path": "$.x", "equals": ... } ]`. Each targets a
+`path` (JSONPath). **REST steps execute all five matchers**: `equals` (type-aware equality),
+`contains` (substring of a String value / element of a List value), `exists` (path presence — JSON null
+counts as present; `exists: false` asserts absence), `notNull` (the present value is/is not JSON null)
+and `matches` (full regex match over a String value). `kafka.expect`/`grpc.unary` still execute
+`equals` only — the parser rejects the others there (see *Schema vs runtime* below). Use **definite**
+JSONPaths with `exists`/`notNull` (`$..x`/`[*]` return a possibly-empty list, which reads as "present").
+Keep `matches` regexes simple — they run in the test JVM. No expression language, no
+script/Java/Groovy/JS matchers.
 
 ## REST query parameters
 
@@ -103,8 +108,11 @@ executable forms:
 - **Bodies/payloads:** use `body.fixture` / `payload.fixture` (a classpath resource). Inline `body.json` /
   `payload.json` is not executable yet. `kafka.send` requires a `payload` (schema fail-closed, matching the
   runtime translator).
-- **Assertions:** use `equals`. `exists` / `notNull` / `contains` / `matches` are not executable yet. This
-  applies to REST-body `assert` too — the schema accepts the list, the runtime currently runs `equals` only.
+- **Assertions:** REST steps (`rest.get`/`rest.post`/`rest.expectEventually`) execute all five matchers.
+  For `kafka.expect` and `grpc.unary` use `equals` — the other matchers are not executable there yet.
+- **REST polling:** `rest.expectEventually` is fully executable: `timeout` is required (poll interval
+  defaults to 200ms), at least one of `expect.status`/`assert` must be present, captures apply to the
+  final satisfied response only.
 - **REST query:** `query` is a `string -> string` map; the runtime passes it through as query parameters.
 - **DB expectation:** use `expect.singleValue` (equals the first column). `expect.rowExists` is not
   executable yet.
