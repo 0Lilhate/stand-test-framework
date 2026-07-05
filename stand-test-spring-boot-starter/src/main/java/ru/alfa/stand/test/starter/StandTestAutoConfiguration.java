@@ -7,6 +7,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import ru.alfa.stand.test.allure.AllureReportingEventPublisher;
 import ru.alfa.stand.test.await.AwaitPolicy;
 import ru.alfa.stand.test.await.Awaiter;
@@ -40,6 +41,16 @@ import ru.alfa.stand.test.rest.RestStepExecutor;
  * so a consumer can override any part by declaring its own. The whole configuration is gated by
  * {@code stand.test.enabled} (default {@code true}); setting it to {@code false} contributes no beans.
  *
+ * <p><strong>Structure constraint (do not flatten).</strong> Every bean whose signature mentions an
+ * optional module's type lives in a nested {@code @Configuration} class gated by a class-level
+ * {@code @ConditionalOnClass}. The methods of this outer class may reference only always-present types
+ * (core, starter, Spring, JDK): Spring's condition evaluation reflects over the declared methods of a
+ * configuration class it processes, and resolving a method signature whose return type is missing from
+ * the classpath throws {@code NoClassDefFoundError} before any {@code @ConditionalOnClass} on that
+ * method is consulted. A nested class that fails its class-level condition is skipped from ASM metadata
+ * and its methods are never reflected, so a consumer with only some adapters on the classpath starts
+ * cleanly.
+ *
  * <p>This class contains no transport/business logic: it only collects and wires the SDK's existing
  * contracts.
  */
@@ -72,72 +83,10 @@ public class StandTestAutoConfiguration {
     }
 
     /**
-     * REST step executor, contributed when {@code stand-test-rest} is on the classpath.
-     *
-     * @return the REST step executor
-     */
-    @Bean
-    @ConditionalOnClass(RestStepExecutor.class)
-    @ConditionalOnMissingBean(RestStepExecutor.class)
-    public RestStepExecutor standTestRestStepExecutor() {
-        return new RestStepExecutor();
-    }
-
-    /**
-     * Kafka step executor, contributed when {@code stand-test-kafka} is on the classpath.
-     *
-     * @return the Kafka step executor
-     */
-    @Bean
-    @ConditionalOnClass(KafkaStepExecutor.class)
-    @ConditionalOnMissingBean(KafkaStepExecutor.class)
-    public KafkaStepExecutor standTestKafkaStepExecutor() {
-        return new KafkaStepExecutor();
-    }
-
-    /**
-     * DB step executor, contributed when {@code stand-test-db} is on the classpath.
-     *
-     * @return the DB step executor
-     */
-    @Bean
-    @ConditionalOnClass(DbStepExecutor.class)
-    @ConditionalOnMissingBean(DbStepExecutor.class)
-    public DbStepExecutor standTestDbStepExecutor() {
-        return new DbStepExecutor();
-    }
-
-    /**
-     * gRPC step executor, contributed when {@code stand-test-grpc} is on the classpath.
-     *
-     * @return the gRPC step executor
-     */
-    @Bean
-    @ConditionalOnClass(GrpcStepExecutor.class)
-    @ConditionalOnMissingBean(GrpcStepExecutor.class)
-    public GrpcStepExecutor standTestGrpcStepExecutor() {
-        return new GrpcStepExecutor();
-    }
-
-    /**
-     * Allure reporting publisher, preferred when {@code stand-test-allure} is on the classpath and
-     * neither the global {@code stand.test.reporting.enabled} nor the specific
-     * {@code stand.test.reporting.allure.enabled} toggle is {@code false}. Declared before the no-op
-     * fallback so its {@code @ConditionalOnMissingBean} yields to it.
-     *
-     * @return the Allure reporting event publisher
-     */
-    @Bean
-    @ConditionalOnClass(AllureReportingEventPublisher.class)
-    @ConditionalOnProperty(prefix = "stand.test.reporting", name = {"enabled", "allure.enabled"}, havingValue = "true", matchIfMissing = true)
-    @ConditionalOnMissingBean(ReportingEventPublisher.class)
-    public ReportingEventPublisher standTestAllureReportingEventPublisher() {
-        return new AllureReportingEventPublisher();
-    }
-
-    /**
      * No-op reporting fallback used when no other {@link ReportingEventPublisher} is present (Allure
-     * absent or disabled, and no user-supplied publisher).
+     * absent or disabled, and no user-supplied publisher). Nested configurations are processed before
+     * this class's own bean methods, so the Allure publisher — when present — wins this
+     * {@code @ConditionalOnMissingBean}.
      *
      * @return the no-op reporting event publisher
      */
@@ -180,34 +129,138 @@ public class StandTestAutoConfiguration {
     }
 
     /**
-     * A fresh system-backed {@link Awaiter} for ad-hoc waits, contributed when {@code stand-test-await}
-     * is on the classpath.
-     *
-     * @return the awaiter
+     * REST executor contribution, active only when {@code stand-test-rest} is on the classpath.
      */
-    @Bean
-    @ConditionalOnClass(Awaiter.class)
-    @ConditionalOnMissingBean
-    public Awaiter standTestAwaiter() {
-        return Awaiter.create();
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(RestStepExecutor.class)
+    static class RestConfiguration {
+
+        /**
+         * REST step executor.
+         *
+         * @return the REST step executor
+         */
+        @Bean
+        @ConditionalOnMissingBean(RestStepExecutor.class)
+        public RestStepExecutor standTestRestStepExecutor() {
+            return new RestStepExecutor();
+        }
     }
 
     /**
-     * A reusable default {@link AwaitPolicy} built from {@code stand.test.await.*}, contributed when
-     * {@code stand-test-await} is on the classpath. A per-await policy is normally built at the call
-     * site; this bean is a convenient, configuration-driven default.
-     *
-     * @param properties the bound stand-test properties
-     * @return the default await policy
+     * Kafka executor contribution, active only when {@code stand-test-kafka} is on the classpath.
      */
-    @Bean
-    @ConditionalOnClass(AwaitPolicy.class)
-    @ConditionalOnMissingBean
-    public AwaitPolicy standTestAwaitPolicy(StandTestProperties properties) {
-        StandTestProperties.Await await = properties.getAwait();
-        return AwaitPolicy.builder("stand-test default await")
-                .timeout(await.getTimeout())
-                .pollInterval(await.getPollInterval())
-                .build();
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(KafkaStepExecutor.class)
+    static class KafkaConfiguration {
+
+        /**
+         * Kafka step executor.
+         *
+         * @return the Kafka step executor
+         */
+        @Bean
+        @ConditionalOnMissingBean(KafkaStepExecutor.class)
+        public KafkaStepExecutor standTestKafkaStepExecutor() {
+            return new KafkaStepExecutor();
+        }
+    }
+
+    /**
+     * DB executor contribution, active only when {@code stand-test-db} is on the classpath.
+     */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(DbStepExecutor.class)
+    static class DbConfiguration {
+
+        /**
+         * DB step executor.
+         *
+         * @return the DB step executor
+         */
+        @Bean
+        @ConditionalOnMissingBean(DbStepExecutor.class)
+        public DbStepExecutor standTestDbStepExecutor() {
+            return new DbStepExecutor();
+        }
+    }
+
+    /**
+     * gRPC executor contribution, active only when {@code stand-test-grpc} is on the classpath.
+     */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(GrpcStepExecutor.class)
+    static class GrpcConfiguration {
+
+        /**
+         * gRPC step executor.
+         *
+         * @return the gRPC step executor
+         */
+        @Bean
+        @ConditionalOnMissingBean(GrpcStepExecutor.class)
+        public GrpcStepExecutor standTestGrpcStepExecutor() {
+            return new GrpcStepExecutor();
+        }
+    }
+
+    /**
+     * Allure reporting contribution, active only when {@code stand-test-allure} is on the classpath.
+     */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(AllureReportingEventPublisher.class)
+    static class AllureConfiguration {
+
+        /**
+         * Allure reporting publisher, preferred when neither the global
+         * {@code stand.test.reporting.enabled} nor the specific {@code stand.test.reporting.allure.enabled}
+         * toggle is {@code false}. Registered from a nested configuration, which Spring processes before
+         * the outer class's no-op fallback, so its {@code @ConditionalOnMissingBean} yields to it.
+         *
+         * @return the Allure reporting event publisher
+         */
+        @Bean
+        @ConditionalOnProperty(prefix = "stand.test.reporting", name = {"enabled", "allure.enabled"}, havingValue = "true", matchIfMissing = true)
+        @ConditionalOnMissingBean(ReportingEventPublisher.class)
+        public ReportingEventPublisher standTestAllureReportingEventPublisher() {
+            return new AllureReportingEventPublisher();
+        }
+    }
+
+    /**
+     * Await contribution, active only when {@code stand-test-await} is on the classpath.
+     */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(Awaiter.class)
+    static class AwaitConfiguration {
+
+        /**
+         * A fresh system-backed {@link Awaiter} for ad-hoc waits.
+         *
+         * @return the awaiter
+         */
+        @Bean
+        @ConditionalOnMissingBean
+        public Awaiter standTestAwaiter() {
+            return Awaiter.create();
+        }
+
+        /**
+         * A reusable default {@link AwaitPolicy} built from {@code stand.test.await.*}. A per-await
+         * policy is normally built at the call site; this bean is a convenient, configuration-driven
+         * default.
+         *
+         * @param properties the bound stand-test properties
+         * @return the default await policy
+         */
+        @Bean
+        @ConditionalOnMissingBean
+        public AwaitPolicy standTestAwaitPolicy(StandTestProperties properties) {
+            StandTestProperties.Await await = properties.getAwait();
+            return AwaitPolicy.builder("stand-test default await")
+                    .timeout(await.getTimeout())
+                    .pollInterval(await.getPollInterval())
+                    .build();
+        }
     }
 }
