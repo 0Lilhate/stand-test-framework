@@ -52,6 +52,21 @@ class RestStepExecutorHttpTest {
     }
 
     @Test
+    @DisplayName("registry-driven basic auth reaches the wire as a correctly encoded Authorization header")
+    void realBasicAuthReachesTheWire() {
+        try (RecordingHttpServer server = new RecordingHttpServer().respond(200, "{}")) {
+            StepExecutionContext context = RestTestSupport.context(RestTestSupport.registryWithBasicAuth(server.baseUrl()), new VariableStore());
+            EnvironmentAuthHeaderResolver authResolver = new EnvironmentAuthHeaderResolver(
+                    java.util.Map.of("CLIENT_USER", "Aladdin", "CLIENT_PASSWORD", "open sesame")::get);
+            RestStepExecutor executor = new RestStepExecutor(new WebClientHttpCaller(), ref -> ref, authResolver);
+
+            executor.execute(RestStep.get(RestTestSupport.SERVICE, "/x").expectStatus(200).build(), context);
+
+            assertThat(server.capturedHeader("Authorization")).isEqualTo("Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
+        }
+    }
+
+    @Test
     @DisplayName("a status mismatch against a live response raises an assertion error")
     void realStatusMismatch() {
         try (RecordingHttpServer server = new RecordingHttpServer().respond(500, "{}")) {

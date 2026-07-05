@@ -115,7 +115,9 @@ YAML DSL ────────────────┘                    
   the schema's value-level guardrails (secret headers, SQL sleep functions, timeout bounds) so a
   document that skipped the schema pass meets the same net. **`EnvironmentRegistry`** resolves logical
   aliases (service/topic/datasource/gRPC) to endpoints + **secret references** (never secret values),
-  and is the whitelist enforcement point.
+  and is the whitelist enforcement point. Service credentials follow the same model: an optional
+  per-service `AuthConfig` (BASIC/BEARER refs) makes the REST executor inject `Authorization` at
+  execution time — the sanctioned path; inline auth headers in scenarios stay banned.
 - Value types are immutable `record`s with defensive copies (`List`/`Set`/`Map.copyOf`).
 
 ## Current state & where to work

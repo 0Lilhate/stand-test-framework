@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Set;
 import ru.alfa.stand.test.core.DefaultStandClient;
 import ru.alfa.stand.test.core.StandClient;
+import ru.alfa.stand.test.core.environment.AuthConfig;
 import ru.alfa.stand.test.core.environment.CorrelationConfig;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
 import ru.alfa.stand.test.core.environment.DatasourceDefinition;
@@ -54,6 +55,20 @@ final class ExampleStand {
                 SERVICE, restBaseUrl, new CorrelationConfig(CorrelationSource.HEADER, CORRELATION_HEADER));
         EnvironmentDefinition environment = new EnvironmentDefinition(
                 ENVIRONMENT, Map.of(SERVICE, service), Map.of(), Map.of(DATASOURCE, datasource()), Map.of());
+        return new InMemoryEnvironmentRegistry(Map.of(ENVIRONMENT, environment));
+    }
+
+    /**
+     * A registry whose REST service carries registry-driven basic auth: the SDK resolves
+     * {@code CLIENT_USER}/{@code CLIENT_PASSWORD} (env refs pinned by the build script) and injects the
+     * {@code Authorization} header itself — scenarios never carry credentials.
+     */
+    static EnvironmentRegistry authRegistry(String restBaseUrl) {
+        ServiceEndpointDefinition service = new ServiceEndpointDefinition(
+                SERVICE, restBaseUrl, new CorrelationConfig(CorrelationSource.HEADER, CORRELATION_HEADER),
+                AuthConfig.basic("CLIENT_USER", "CLIENT_PASSWORD"));
+        EnvironmentDefinition environment = new EnvironmentDefinition(
+                ENVIRONMENT, Map.of(SERVICE, service), Map.of(), Map.of(), Map.of());
         return new InMemoryEnvironmentRegistry(Map.of(ENVIRONMENT, environment));
     }
 

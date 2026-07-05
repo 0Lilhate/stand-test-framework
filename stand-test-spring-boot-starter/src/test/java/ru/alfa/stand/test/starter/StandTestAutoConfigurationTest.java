@@ -14,6 +14,7 @@ import ru.alfa.stand.test.allure.AllureReportingEventPublisher;
 import ru.alfa.stand.test.await.AwaitPolicy;
 import ru.alfa.stand.test.await.Awaiter;
 import ru.alfa.stand.test.core.StandClient;
+import ru.alfa.stand.test.core.environment.AuthConfig;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.event.NoOpReportingEventPublisher;
@@ -76,6 +77,9 @@ class StandTestAutoConfigurationTest {
                 "stand.test.environments.ift.services.client-service.base-url-ref=CLIENT_SERVICE_URL",
                 "stand.test.environments.ift.services.client-service.correlation.source=HEADER",
                 "stand.test.environments.ift.services.client-service.correlation.name=X-Correlation-Id",
+                "stand.test.environments.ift.services.client-service.auth.scheme=BASIC",
+                "stand.test.environments.ift.services.client-service.auth.username-ref=CLIENT_USER",
+                "stand.test.environments.ift.services.client-service.auth.password-ref=CLIENT_PASSWORD",
                 "stand.test.environments.ift.datasources.main-db.url-ref=MAIN_DB_URL",
                 "stand.test.environments.ift.datasources.main-db.user-ref=MAIN_DB_USER",
                 "stand.test.environments.ift.datasources.main-db.password-ref=MAIN_DB_PASSWORD",
@@ -99,6 +103,7 @@ class StandTestAutoConfigurationTest {
         assertThat(ift.service("client-service")).hasValueSatisfying(service -> {
             assertThat(service.baseUrlRef()).isEqualTo("CLIENT_SERVICE_URL");
             assertThat(service.correlation().name()).isEqualTo("X-Correlation-Id");
+            assertThat(service.auth()).isEqualTo(AuthConfig.basic("CLIENT_USER", "CLIENT_PASSWORD"));
         });
         assertThat(ift.datasource("main-db")).hasValueSatisfying(datasource -> {
             assertThat(datasource.urlRef()).isEqualTo("MAIN_DB_URL");
@@ -129,6 +134,28 @@ class StandTestAutoConfigurationTest {
                     assertThat(context.getStartupFailure())
                             .rootCause()
                             .hasMessageContaining("reference NAME");
+                });
+    }
+
+    @Test
+    @DisplayName("an unknown auth property key fails the context (fail-closed binding)")
+    void unknownAuthKey_failsContext() {
+        runner.withPropertyValues(
+                "stand.test.environments.ift.services.svc.base-url-ref=SVC_URL",
+                "stand.test.environments.ift.services.svc.auth.bogus=1").run(context -> assertThat(context).hasFailed());
+    }
+
+    @Test
+    @DisplayName("a broken auth scheme combination fails the context with the environment name")
+    void brokenAuthCombination_failsContext() {
+        runner.withPropertyValues(
+                "stand.test.environments.ift.services.svc.base-url-ref=SVC_URL",
+                "stand.test.environments.ift.services.svc.auth.scheme=BASIC",
+                "stand.test.environments.ift.services.svc.auth.username-ref=CLIENT_USER").run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("passwordRef");
                 });
     }
 

@@ -22,7 +22,9 @@ enforced later at runtime (and therefore cannot be expressed in a static schema)
    and await it with `correlation.fromContext: true` on the consuming step. Never hardcode a correlation
    value.
 5. **Never write secrets inline.** Do not put tokens, passwords, API keys, or `Authorization` headers in
-   the document. Secrets come from secret references configured for the environment.
+   the document. Secrets come from secret references configured for the environment; when a service
+   needs BASIC/BEARER authentication, the SDK injects the `Authorization` header itself from the
+   service's registry-configured auth references — the document never mentions it.
 6. **Data flows through captured variables.** Capture values with `capture` (`variableName -> JSONPath`)
    and reference them as `${variableName}`. Only plain `${identifier}` references are allowed — no
    function calls, arithmetic, nested/script expressions, or shell-style `$(...)` substitutions.

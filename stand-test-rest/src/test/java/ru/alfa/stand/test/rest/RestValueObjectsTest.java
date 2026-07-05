@@ -28,6 +28,27 @@ class RestValueObjectsTest {
     }
 
     @Test
+    @DisplayName("RestRequest.toString never carries header or query values — only their names")
+    void restRequestToString_redactsValues() {
+        RestRequest request = new RestRequest(
+                "POST", "http://x", "/p",
+                Map.of("clientCode", "pin-1"),
+                Map.of("Authorization", "Basic c2VjcmV0"),
+                "{\"token\":\"body-secret\"}");
+
+        String rendered = request.toString();
+
+        assertThat(rendered)
+                .contains("POST")
+                .contains("/p")
+                .contains("Authorization")
+                .contains("clientCode")
+                .doesNotContain("Basic c2VjcmV0")
+                .doesNotContain("pin-1")
+                .doesNotContain("body-secret");
+    }
+
+    @Test
     @DisplayName("RestAssertion rejects a null expected value; RestCapture rejects a blank name")
     void valueObjectValidation() {
         assertThatThrownBy(() -> new RestAssertion("$.x", null)).isInstanceOf(NullPointerException.class);

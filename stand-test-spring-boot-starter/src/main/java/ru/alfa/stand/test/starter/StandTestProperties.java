@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import ru.alfa.stand.test.core.environment.AuthScheme;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
 
 /**
@@ -175,6 +176,8 @@ public class StandTestProperties {
 
         private Correlation correlation;
 
+        private Auth auth;
+
         public String getBaseUrlRef() {
             return baseUrlRef;
         }
@@ -189,6 +192,14 @@ public class StandTestProperties {
 
         public void setCorrelation(Correlation correlation) {
             this.correlation = correlation;
+        }
+
+        public Auth getAuth() {
+            return auth;
+        }
+
+        public void setAuth(Auth auth) {
+            this.auth = auth;
         }
     }
 
@@ -369,6 +380,54 @@ public class StandTestProperties {
 
         public void setName(String name) {
             this.name = name;
+        }
+    }
+
+    /**
+     * Service-level authentication: an {@link AuthScheme} plus secret references (env-var names, never
+     * values) — {@code usernameRef}/{@code passwordRef} for BASIC, {@code tokenRef} for BEARER. The
+     * adapter resolves the references and injects the {@code Authorization} header at execution time.
+     */
+    public static class Auth {
+
+        private AuthScheme scheme;
+
+        private String usernameRef;
+
+        private String passwordRef;
+
+        private String tokenRef;
+
+        public AuthScheme getScheme() {
+            return scheme;
+        }
+
+        public void setScheme(AuthScheme scheme) {
+            this.scheme = scheme;
+        }
+
+        public String getUsernameRef() {
+            return usernameRef;
+        }
+
+        public void setUsernameRef(String usernameRef) {
+            this.usernameRef = usernameRef;
+        }
+
+        public String getPasswordRef() {
+            return passwordRef;
+        }
+
+        public void setPasswordRef(String passwordRef) {
+            this.passwordRef = passwordRef;
+        }
+
+        public String getTokenRef() {
+            return tokenRef;
+        }
+
+        public void setTokenRef(String tokenRef) {
+            this.tokenRef = tokenRef;
         }
     }
 }

@@ -78,6 +78,46 @@ class RestStepExecutorTest {
     }
 
     @Test
+    @DisplayName("a service with an auth config gets the resolved Authorization header injected")
+    void authHeaderInjected() {
+        FakeHttpCaller caller = responding(200, "{}");
+        StepExecutionContext context = context(RestTestSupport.registryWithBasicAuth(BASE_URL), new VariableStore());
+        RestStepExecutor executor = new RestStepExecutor(caller, passthrough, auth -> "Basic dGVzdA==");
+
+        executor.execute(RestStep.get(RestTestSupport.SERVICE, "/x").build(), context);
+
+        assertThat(caller.lastRequest().headers()).containsEntry("Authorization", "Basic dGVzdA==");
+    }
+
+    @Test
+    @DisplayName("a service without an auth config gets no Authorization header and never touches the auth resolver")
+    void noAuth_resolverNotCalled() {
+        FakeHttpCaller caller = responding(200, "{}");
+        StepExecutionContext context = context(RestTestSupport.registry(BASE_URL), new VariableStore());
+        RestStepExecutor executor = new RestStepExecutor(caller, passthrough, auth -> {
+            throw new StandTestException("the auth resolver must not be called for a service without auth");
+        });
+
+        executor.execute(RestStep.get(RestTestSupport.SERVICE, "/x").build(), context);
+
+        assertThat(caller.lastRequest().headers()).doesNotContainKey("Authorization");
+    }
+
+    @Test
+    @DisplayName("auth and correlation injection compose on one request")
+    void authAndCorrelation_bothInjected() {
+        FakeHttpCaller caller = responding(200, "{}");
+        StepExecutionContext context = context(RestTestSupport.registryWithBasicAuth(BASE_URL), new VariableStore());
+        RestStepExecutor executor = new RestStepExecutor(caller, passthrough, auth -> "Basic dGVzdA==");
+
+        executor.execute(RestStep.post(RestTestSupport.SERVICE, "/x").injectCorrelationId().build(), context);
+
+        assertThat(caller.lastRequest().headers())
+                .containsEntry("Authorization", "Basic dGVzdA==")
+                .containsEntry(RestTestSupport.CORRELATION_HEADER, context.scenarioContext().correlationId().value());
+    }
+
+    @Test
     @DisplayName("no correlation header is added when injection is not requested")
     void correlationIdNotInjected() {
         FakeHttpCaller caller = responding(200, "{}");

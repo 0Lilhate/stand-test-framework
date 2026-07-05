@@ -87,11 +87,24 @@ on the classpath). Both build the registry from environment-variable *references
 secrets. Without either, `StandTestExtension` falls back to an empty registry and alias resolution fails
 at run time.
 
+## Registry-driven authentication
+
+A service whose `ServiceEndpointDefinition` carries an `AuthConfig` gets the `Authorization` header
+injected by the executor at execution time — `Basic base64(username:password)` (UTF-8, RFC 7617) or
+`Bearer token`. Every auth field is a secret **reference** (an env-var name) resolved by
+`EnvironmentAuthHeaderResolver` at the point of use; an unresolved reference fails as
+`StandTestException` naming the reference, never a value. This is the sanctioned auth path: an inline
+`Authorization` header in a scenario is still rejected by the validator (`SECRET_IN_SOURCE`), and the
+registry-driven value always wins. Configure it per service via `stand-test-config`
+(`auth: { scheme: BASIC, username-ref: ..., password-ref: ... }`) or the starter
+(`stand.test.environments.<env>.services.<alias>.auth.*`).
+
 ## Not here
 
 No await/`expectEventually` polling for REST (the `rest → await` edge exists but is unused in the MVP —
-plan defines `expectEventually` for DB only); no auth flows, multipart, retry/redirect policies; no
-Allure attachments (those belong to the reporting adapter, fed by the `StepResult` diagnostics).
+plan defines `expectEventually` for DB only); no auth schemes beyond BASIC/BEARER, no multipart,
+retry/redirect policies; no Allure attachments (those belong to the reporting adapter, fed by the
+`StepResult` diagnostics).
 
 ## Testing
 

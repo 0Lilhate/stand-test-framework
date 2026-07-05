@@ -44,14 +44,30 @@ import ru.alfa.stand.test.core.variable.VariableStore;
  */
 public final class RestStepExecutor implements StepExecutor {
 
+    private static final String AUTHORIZATION_HEADER = "Authorization";
+
     private final HttpCaller httpCaller;
+
     private final BaseUrlResolver baseUrlResolver;
 
+    private final AuthHeaderResolver authHeaderResolver;
+
     /**
-     * Creates an executor with the default WebClient-based caller and environment base-URL resolver.
+     * Creates an executor with the default WebClient-based caller and environment-backed resolvers.
      */
     public RestStepExecutor() {
-        this(new WebClientHttpCaller(), new EnvironmentBaseUrlResolver());
+        this(new WebClientHttpCaller(), new EnvironmentBaseUrlResolver(), new EnvironmentAuthHeaderResolver());
+    }
+
+    /**
+     * Creates an executor with explicit transport collaborators and the default environment-backed
+     * auth resolver (for tests that need no auth).
+     *
+     * @param httpCaller the HTTP transport
+     * @param baseUrlResolver the base-URL reference resolver
+     */
+    public RestStepExecutor(HttpCaller httpCaller, BaseUrlResolver baseUrlResolver) {
+        this(httpCaller, baseUrlResolver, new EnvironmentAuthHeaderResolver());
     }
 
     /**
@@ -59,10 +75,12 @@ public final class RestStepExecutor implements StepExecutor {
      *
      * @param httpCaller the HTTP transport
      * @param baseUrlResolver the base-URL reference resolver
+     * @param authHeaderResolver the service-auth reference resolver
      */
-    public RestStepExecutor(HttpCaller httpCaller, BaseUrlResolver baseUrlResolver) {
+    public RestStepExecutor(HttpCaller httpCaller, BaseUrlResolver baseUrlResolver, AuthHeaderResolver authHeaderResolver) {
         this.httpCaller = Objects.requireNonNull(httpCaller, "httpCaller must not be null");
         this.baseUrlResolver = Objects.requireNonNull(baseUrlResolver, "baseUrlResolver must not be null");
+        this.authHeaderResolver = Objects.requireNonNull(authHeaderResolver, "authHeaderResolver must not be null");
     }
 
     @Override
@@ -118,8 +136,19 @@ public final class RestStepExecutor implements StepExecutor {
         Map<String, String> query = resolveValues(RestStepParameters.stringMap(parameters, RestStepParameters.QUERY), resolver);
         Map<String, String> headers = resolveValues(RestStepParameters.stringMap(parameters, RestStepParameters.HEADERS), resolver);
         injectCorrelationId(parameters, endpoint, headers, context);
+        injectAuth(endpoint, headers);
         String body = resolveBody(parameters, resolver);
         return new RestRequest(method, baseUrl, path, query, headers, body);
+    }
+
+    private void injectAuth(ServiceEndpointDefinition endpoint, Map<String, String> headers) {
+        if (endpoint.auth() == null) {
+            return;
+        }
+        // Applied whenever the registry declares auth for the service — auth is a service property,
+        // not a per-step choice; inline Authorization headers are rejected by the validator, so the
+        // registry-driven value is the only sanctioned source and always wins.
+        headers.put(AUTHORIZATION_HEADER, this.authHeaderResolver.resolve(endpoint.auth()));
     }
 
     private static Map<String, String> resolveValues(Map<String, String> source, VariableResolver resolver) {

@@ -3,6 +3,8 @@ package ru.alfa.stand.test.config;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import ru.alfa.stand.test.core.environment.AuthConfig;
+import ru.alfa.stand.test.core.environment.AuthScheme;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
 import ru.alfa.stand.test.core.environment.DatasourceDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
@@ -64,13 +66,79 @@ class EnvironmentConfigTest {
                 environments:
                   dev:
                     services:
-                      svc: { baseUrlRef: SVC_URL }
+                      svc: { baseUrlRef: SVC_URL, auth: { scheme: BEARER, tokenRef: SVC_TOKEN } }
                     grpcTargets:
                       t: { targetRef: T_ADDR }
                 """;
         EnvironmentDefinition dev = parse(yaml).environment("dev").orElseThrow();
         assertThat(dev.service("svc").orElseThrow().baseUrlRef()).isEqualTo("SVC_URL");
+        assertThat(dev.service("svc").orElseThrow().auth()).isEqualTo(AuthConfig.bearer("SVC_TOKEN"));
         assertThat(dev.grpcTarget("t").orElseThrow().targetRef()).isEqualTo("T_ADDR");
+    }
+
+    @Test
+    @DisplayName("a service auth block maps to an AuthConfig of references; a service without one carries no auth")
+    void serviceAuthParsed() {
+        String yaml = """
+                environments:
+                  ift:
+                    services:
+                      secured:
+                        base-url-ref: SECURED_URL
+                        auth: { scheme: basic, username-ref: CLIENT_USER, password-ref: CLIENT_PASSWORD }
+                      open:
+                        base-url-ref: OPEN_URL
+                """;
+        EnvironmentDefinition ift = parse(yaml).environment("ift").orElseThrow();
+
+        assertThat(ift.service("secured").orElseThrow().auth())
+                .isEqualTo(new AuthConfig(AuthScheme.BASIC, "CLIENT_USER", "CLIENT_PASSWORD", null));
+        assertThat(ift.service("open").orElseThrow().auth()).isNull();
+    }
+
+    @Test
+    @DisplayName("an unknown auth key, an unknown scheme and a broken scheme combination are rejected with their location")
+    void authValidationFailClosed() {
+        assertThatThrownBy(() -> parse("""
+                environments:
+                  ift:
+                    services:
+                      svc: { base-url-ref: U, auth: { scheme: BASIC, username-ref: A, password-ref: B, bogus: 1 } }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("bogus")
+                .hasMessageContaining("environments.ift.services.svc.auth");
+        assertThatThrownBy(() -> parse("""
+                environments:
+                  ift:
+                    services:
+                      svc: { base-url-ref: U, auth: { scheme: DIGEST } }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("scheme")
+                .hasMessageContaining("DIGEST");
+        assertThatThrownBy(() -> parse("""
+                environments:
+                  ift:
+                    services:
+                      svc: { base-url-ref: U, auth: { scheme: BASIC, username-ref: A } }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("passwordRef")
+                .hasMessageContaining("environments.ift.services.svc.auth");
+    }
+
+    @Test
+    @DisplayName("a value-shaped auth reference is rejected fail-closed")
+    void authValueShapedReferenceRejected() {
+        assertThatThrownBy(() -> parse("""
+                environments:
+                  ift:
+                    services:
+                      svc: { base-url-ref: U, auth: { scheme: BEARER, token-ref: "Bearer sk-abc123def" } }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("reference NAME");
     }
 
     @Test

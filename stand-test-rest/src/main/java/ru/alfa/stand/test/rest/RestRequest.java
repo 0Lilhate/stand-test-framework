@@ -36,4 +36,18 @@ public record RestRequest(
         query = (query == null) ? Map.of() : Map.copyOf(query);
         headers = (headers == null) ? Map.of() : Map.copyOf(headers);
     }
+
+    /**
+     * Redacted string form: header and query VALUES never appear (the headers map can carry a
+     * resolved {@code Authorization} credential), only their names — so an accidentally logged or
+     * re-thrown request cannot leak a secret.
+     */
+    @Override
+    public String toString() {
+        return "RestRequest[method=" + this.method
+                + ", path=" + this.path
+                + ", query=" + this.query.keySet()
+                + ", headers=" + this.headers.keySet()
+                + ", body=" + (this.body == null ? "null" : this.body.length() + " chars") + "]";
+    }
 }

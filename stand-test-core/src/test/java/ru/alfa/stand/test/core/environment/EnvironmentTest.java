@@ -67,6 +67,17 @@ class EnvironmentTest {
     }
 
     @Test
+    @DisplayName("a service endpoint carries no auth by default; the four-arg form carries it")
+    void serviceEndpoint_authArities() {
+        ServiceEndpointDefinition plain = new ServiceEndpointDefinition("svc", "URL_REF", null);
+        assertThat(plain.auth()).isNull();
+
+        AuthConfig auth = AuthConfig.basic("CLIENT_USER", "CLIENT_PASSWORD");
+        ServiceEndpointDefinition secured = new ServiceEndpointDefinition("svc", "URL_REF", null, auth);
+        assertThat(secured.auth()).isEqualTo(auth);
+    }
+
+    @Test
     @DisplayName("environment definition resolves aliases via Optional and is immutable")
     void environmentDefinition_resolvesAliases() {
         ServiceEndpointDefinition service = new ServiceEndpointDefinition(

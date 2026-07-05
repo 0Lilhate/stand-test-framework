@@ -2,6 +2,7 @@ package ru.alfa.stand.test.rest;
 
 import java.util.Map;
 import ru.alfa.stand.test.core.context.ScenarioContext;
+import ru.alfa.stand.test.core.environment.AuthConfig;
 import ru.alfa.stand.test.core.environment.CorrelationConfig;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
@@ -32,6 +33,11 @@ final class RestTestSupport {
 
     static EnvironmentRegistry registryWithoutCorrelation(String baseUrl) {
         return registry(new ServiceEndpointDefinition(SERVICE, baseUrl, null));
+    }
+
+    static EnvironmentRegistry registryWithBasicAuth(String baseUrl) {
+        return registry(new ServiceEndpointDefinition(
+                SERVICE, baseUrl, new CorrelationConfig(CorrelationSource.HEADER, CORRELATION_HEADER), AuthConfig.basic("CLIENT_USER", "CLIENT_PASSWORD")));
     }
 
     static EnvironmentRegistry registry(ServiceEndpointDefinition endpoint) {

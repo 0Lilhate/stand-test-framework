@@ -11,6 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import ru.alfa.stand.test.config.YamlEnvironmentConfigLoader;
+import ru.alfa.stand.test.core.environment.AuthScheme;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
@@ -47,6 +48,15 @@ class EnvironmentRegistryParityTest {
                         correlation:
                           source: HEADER
                           name: X-Correlation-Id
+                        auth:
+                          scheme: BASIC
+                          username-ref: CLIENT_USER
+                          password-ref: CLIENT_PASSWORD
+                      token-service:
+                        base-url-ref: TOKEN_SERVICE_URL
+                        auth:
+                          scheme: BEARER
+                          token-ref: TOKEN_SERVICE_TOKEN
                     topics:
                       events:
                         name: ift.events.v1
@@ -107,14 +117,56 @@ class EnvironmentRegistryParityTest {
                 .hasMessageContaining("reference NAME");
     }
 
-    private static StandTestProperties standTestProperties() {
+    @Test
+    @DisplayName("both surfaces reject the same value-shaped auth reference — the auth guard cannot drift one-sided")
+    void bothSurfacesRejectValueShapedAuthReference() {
         final StandTestProperties properties = new StandTestProperties();
         StandTestProperties.Environment ift = new StandTestProperties.Environment();
+        StandTestProperties.Service service = new StandTestProperties.Service();
+        service.setBaseUrlRef("CLIENT_SERVICE_URL");
+        StandTestProperties.Auth auth = new StandTestProperties.Auth();
+        auth.setScheme(AuthScheme.BEARER);
+        auth.setTokenRef("Bearer sk-abc123def");
+        service.setAuth(auth);
+        ift.getServices().put("client-service", service);
+        properties.getEnvironments().put("ift", ift);
+
+        assertThatThrownBy(() -> EnvironmentRegistryFactory.build(properties))
+                .hasMessageContaining("reference NAME");
+        assertThatThrownBy(() -> loadFromYaml("""
+                environments:
+                  ift:
+                    services:
+                      client-service:
+                        base-url-ref: CLIENT_SERVICE_URL
+                        auth:
+                          scheme: BEARER
+                          token-ref: "Bearer sk-abc123def"
+                """))
+                .hasMessageContaining("reference NAME");
+    }
+
+    private static StandTestProperties standTestProperties() {
+        final StandTestProperties properties = new StandTestProperties();
+        final StandTestProperties.Environment ift = new StandTestProperties.Environment();
 
         StandTestProperties.Service service = new StandTestProperties.Service();
         service.setBaseUrlRef("CLIENT_SERVICE_URL");
         service.setCorrelation(correlation(CorrelationSource.HEADER, "X-Correlation-Id"));
+        StandTestProperties.Auth basicAuth = new StandTestProperties.Auth();
+        basicAuth.setScheme(AuthScheme.BASIC);
+        basicAuth.setUsernameRef("CLIENT_USER");
+        basicAuth.setPasswordRef("CLIENT_PASSWORD");
+        service.setAuth(basicAuth);
         ift.getServices().put("client-service", service);
+
+        StandTestProperties.Service tokenService = new StandTestProperties.Service();
+        tokenService.setBaseUrlRef("TOKEN_SERVICE_URL");
+        StandTestProperties.Auth bearerAuth = new StandTestProperties.Auth();
+        bearerAuth.setScheme(AuthScheme.BEARER);
+        bearerAuth.setTokenRef("TOKEN_SERVICE_TOKEN");
+        tokenService.setAuth(bearerAuth);
+        ift.getServices().put("token-service", tokenService);
 
         StandTestProperties.Topic topic = new StandTestProperties.Topic();
         topic.setName("ift.events.v1");

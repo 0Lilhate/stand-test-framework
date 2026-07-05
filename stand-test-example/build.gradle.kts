@@ -75,6 +75,9 @@ tasks.withType<Test>().configureEach {
     environment("MAIN_DB_USER", "sa")
     environment("MAIN_DB_PASSWORD", "sa")
     environment("CLIENT_SERVICE_URL", "http://127.0.0.1:$exampleRestPort")
+    // RFC 7617 example credentials for the registry-driven auth example (RestAuthExampleTest).
+    environment("CLIENT_USER", "Aladdin")
+    environment("CLIENT_PASSWORD", "open sesame")
     environment("GRPC_TARGET", "127.0.0.1:$exampleGrpcPort")
     environment("KAFKA_BOOTSTRAP_SERVERS", (findProperty("kafkaBootstrapServers") as String?) ?: "localhost:9092")
 }

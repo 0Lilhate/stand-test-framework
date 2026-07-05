@@ -78,6 +78,7 @@ stand:
           client-service:
             base-url-ref: CLIENT_SERVICE_URL
             correlation: { source: HEADER, name: X-Correlation-Id }
+            auth: { scheme: BASIC, username-ref: CLIENT_USER, password-ref: CLIENT_PASSWORD }
         datasources:
           main-db:
             url-ref: MAIN_DB_URL

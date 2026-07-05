@@ -42,6 +42,8 @@ environments:
       client-service:
         base-url-ref: CLIENT_SERVICE_URL           # env-var NAME, never the URL
         correlation: { source: HEADER, name: X-Correlation-Id }
+        auth: { scheme: BASIC, username-ref: CLIENT_USER, password-ref: CLIENT_PASSWORD }
+        # or: auth: { scheme: BEARER, token-ref: CLIENT_TOKEN }
     topics:
       response-topic: { name: pakt.response.ift, correlation: { source: HEADER, name: X-Correlation-Id } }
     datasources:
@@ -93,7 +95,10 @@ Every address/secret field is a `*-ref` — the **name of an environment variabl
 URLs, JDBC connection strings, tokens and `Bearer`/`Basic` values are rejected fail-closed). The adapters
 resolve references at run time (`System.getenv`), so secrets stay out of source and out of the config
 file — unless you opt into an inline `${NAME:default}` (see above). Field names are kebab-case
-(canonical); camelCase is also accepted.
+(canonical); camelCase is also accepted. Service `auth` refs (`username-ref`/`password-ref`/`token-ref`)
+follow the same rule; note the shape guard cannot recognise a *bare* token pasted as a "name" (it catches
+whitespace, `://` and `Bearer `/`Basic ` prefixes) — the same residual trust applies to datasource
+passwords today.
 
 ## Relationship to the Spring Boot starter
 

@@ -3,6 +3,7 @@ package ru.alfa.stand.test.starter;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import ru.alfa.stand.test.core.environment.AuthConfig;
 import ru.alfa.stand.test.core.environment.CorrelationConfig;
 import ru.alfa.stand.test.core.environment.DatasourceDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
@@ -69,9 +70,26 @@ public final class EnvironmentRegistryFactory {
         for (Map.Entry<String, StandTestProperties.Service> entry : env.getServices().entrySet()) {
             String alias = entry.getKey();
             StandTestProperties.Service service = entry.getValue();
-            result.put(alias, new ServiceEndpointDefinition(alias, ref(service.getBaseUrlRef(), "base-url-ref", alias), correlation(service.getCorrelation())));
+            result.put(alias, new ServiceEndpointDefinition(alias, ref(service.getBaseUrlRef(), "base-url-ref", alias), correlation(service.getCorrelation()), auth(service.getAuth(), alias)));
         }
         return result;
+    }
+
+    private static AuthConfig auth(StandTestProperties.Auth auth, String alias) {
+        if (auth == null) {
+            return null;
+        }
+        // A missing scheme must surface as the environment-labelled IllegalStateException like every
+        // other misconfiguration, so it is rejected here as IllegalArgumentException rather than
+        // letting the core constructor's NullPointerException escape the toEnvironment wrapper.
+        if (auth.getScheme() == null) {
+            throw new IllegalArgumentException("service '" + alias + "' auth.scheme must not be null");
+        }
+        return new AuthConfig(
+                auth.getScheme(),
+                ref(auth.getUsernameRef(), "username-ref", alias),
+                ref(auth.getPasswordRef(), "password-ref", alias),
+                ref(auth.getTokenRef(), "token-ref", alias));
     }
 
     private static Map<String, TopicDefinition> topics(StandTestProperties.Environment env) {

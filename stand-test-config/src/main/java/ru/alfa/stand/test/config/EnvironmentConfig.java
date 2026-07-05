@@ -8,6 +8,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
+import ru.alfa.stand.test.core.environment.AuthConfig;
+import ru.alfa.stand.test.core.environment.AuthScheme;
 import ru.alfa.stand.test.core.environment.CorrelationConfig;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
 import ru.alfa.stand.test.core.environment.DatasourceDefinition;
@@ -36,7 +38,9 @@ public final class EnvironmentConfig {
 
     private static final Set<String> ROOT_KEYS = Set.of("environments");
     private static final Set<String> ENV_KEYS = Set.of("services", "topics", "datasources", "grpc-targets", "grpcTargets", "kafka-cluster", "kafkaCluster", "kafka-clusters", "kafkaClusters");
-    private static final Set<String> SERVICE_KEYS = Set.of("base-url-ref", "baseUrlRef", "correlation");
+    private static final Set<String> SERVICE_KEYS = Set.of("base-url-ref", "baseUrlRef", "correlation", "auth");
+
+    private static final Set<String> AUTH_KEYS = Set.of("scheme", "username-ref", "usernameRef", "password-ref", "passwordRef", "token-ref", "tokenRef");
     private static final Set<String> TOPIC_KEYS = Set.of("name", "correlation", "cluster");
     private static final Set<String> DATASOURCE_KEYS = Set.of("url-ref", "urlRef", "user-ref", "userRef", "password-ref", "passwordRef", "allowed-schemas", "allowedSchemas", "write-allowed", "writeAllowed");
     private static final Set<String> GRPC_KEYS = Set.of("target-ref", "targetRef", "correlation");
@@ -99,7 +103,8 @@ public final class EnvironmentConfig {
         checkKnownKeys(fields, SERVICE_KEYS, location);
         String baseUrlRef = requireReference(fields, "base-url-ref", "baseUrlRef", location);
         CorrelationConfig correlation = correlation(fields.get("correlation"), location + ".correlation");
-        return build(location, () -> new ServiceEndpointDefinition(alias, baseUrlRef, correlation));
+        AuthConfig auth = auth(fields.get("auth"), location + ".auth");
+        return build(location, () -> new ServiceEndpointDefinition(alias, baseUrlRef, correlation, auth));
     }
 
     private static TopicDefinition topic(String alias, Object value, String location) {
@@ -159,6 +164,27 @@ public final class EnvironmentConfig {
             return CorrelationSource.valueOf(source.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException unknown) {
             throw new StandTestException("Field 'source' at " + location + " must be one of " + Set.of(CorrelationSource.values()) + ", but was '" + source + "'");
+        }
+    }
+
+    private static AuthConfig auth(Object value, String location) {
+        if (value == null) {
+            return null;
+        }
+        Map<String, Object> fields = asMap(value, location);
+        checkKnownKeys(fields, AUTH_KEYS, location);
+        AuthScheme scheme = authScheme(requireString(fields, "scheme", "scheme", location), location);
+        String usernameRef = optionalReference(fields, "username-ref", "usernameRef", location);
+        String passwordRef = optionalReference(fields, "password-ref", "passwordRef", location);
+        String tokenRef = optionalReference(fields, "token-ref", "tokenRef", location);
+        return build(location, () -> new AuthConfig(scheme, usernameRef, passwordRef, tokenRef));
+    }
+
+    private static AuthScheme authScheme(String scheme, String location) {
+        try {
+            return AuthScheme.valueOf(scheme.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException unknown) {
+            throw new StandTestException("Field 'scheme' at " + location + " must be one of " + Set.of(AuthScheme.values()) + ", but was '" + scheme + "'");
         }
     }
 
