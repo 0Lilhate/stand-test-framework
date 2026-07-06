@@ -1,0 +1,92 @@
+# AI-format (steps/type) scenario template — stand-test-ai-schema.
+# YAML spelling; JSON is equally valid (AiScenarioParser loads both).
+# Rules: SKILL.md in this directory (stand-test-yaml-authoring)
+# Source of truth: /ai/stand-test-ai-generation-rules.md + /schema/stand-test-scenario.schema.json
+#   (in the stand-test-ai-schema jar; on conflict the jar resources win).
+#
+# HARD RULES (schema is additionalProperties:false — unknown fields FAIL):
+#   * top-level key is "environment" (NOT "env" — that belongs to the given/then surface)
+#   * aliases only (service/topic/datasource/target) — never URLs/hosts/JDBC
+#   * every async step has "timeout": <n>ms (1-99999) | <n>s (1-999) | <n>m (1-60)
+#   * bodies/payloads/requests ONLY as {fixture: relative/path.json} — inline json is rejected
+#   * non-equals matchers (contains/matches/exists/notNull) ONLY on rest.* steps
+#   * db query: single SELECT statement, :name binds via params, values may use ${var}
+#   * step ids unique (runtime-checked, not schema-checked)
+#   * data flow: capture {var: "$.path"} then ${var}; built-ins:
+#     ${scenarioId} ${testRunId} ${correlationId} ${environment}
+
+id: replace-scenario-id                # kebab-case, ^[A-Za-z0-9][A-Za-z0-9._-]*$
+title: Replace with a human-readable behaviour statement
+environment: replace-env-alias         # registry key, e.g. ift
+tags: [integration]
+
+steps:
+  # --- trigger: REST call with correlation + capture -------------------------
+  - id: create-entity
+    type: rest.post
+    service: replace-service-alias
+    path: /api/entities
+    headers:
+      Content-Type: application/json   # NEVER Authorization/token/cookie/api-key
+    correlation:
+      inject: true                     # requires HEADER correlation config on the alias
+    body:
+      fixture: fixtures/create-entity.json
+    expect:
+      status: 200
+    assert:
+      - path: $.status
+        equals: ACCEPTED               # rest.* may also use: contains / matches / exists / notNull
+    capture:
+      entityId: $.entityId
+
+  # --- await async event on Kafka (equals-only) ------------------------------
+  - id: await-entity-event
+    type: kafka.expect
+    topic: replace-topic-alias
+    correlation:
+      fromContext: true
+    timeout: 30s
+    assert:
+      - path: $.status
+        equals: CREATED
+    capture:
+      eventId: $.eventId
+
+  # --- poll REST until processed (all five matchers available) ---------------
+  - id: await-processed
+    type: rest.expectEventually
+    service: replace-service-alias
+    path: /api/entities/${entityId}
+    timeout: 30s
+    expect:
+      status: 200
+    assert:
+      - path: $.status
+        equals: DONE
+
+  # --- verify DB projection (read-only SELECT, single value) -----------------
+  - id: verify-projection
+    type: db.expectEventually
+    datasource: replace-datasource-alias
+    timeout: 10s
+    query: SELECT status FROM entities WHERE entity_id = :entityId
+    params:
+      entityId: ${entityId}
+    expect:
+      singleValue: DONE                # NEVER rowExists — rejected by the parser
+
+  # --- optional gRPC unary (equals-only; deadline mandatory) ------------------
+  # - id: check-billing
+  #   type: grpc.unary
+  #   target: replace-grpc-alias
+  #   method: billing.BillingService/Charge     # exactly package.Service/Method
+  #   correlation: { inject: true }             # requires METADATA correlation on the target
+  #   request: { fixture: fixtures/charge-request.json }
+  #   timeout: 5s
+  #   expect:
+  #     assert:                                 # NOTE: nested under expect (unlike kafka)
+  #       - path: $.status
+  #         equals: OK                          # NEVER expect.status — rejected
+  #   capture:
+  #     chargeId: $.chargeId

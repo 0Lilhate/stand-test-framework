@@ -1,0 +1,9 @@
+{
+  "_comment_delete_me": "Fixture template — rules: SKILL.md in this directory (stand-test-fixture-authoring). Placeholders ${...} resolve at execution time from the per-run VariableStore. Unique keys derive from ${testRunId}. NO secrets, NO PII, NO production values, NO URLs. Delete every _comment field before use — the AI schema and real endpoints will not accept unknown fields.",
+
+  "externalId": "entity-${testRunId}",
+  "amount": 100,
+  "currency": "EUR",
+  "customerName": "Test Customer",
+  "comment": "created by stand-test scenario ${scenarioId}"
+}
