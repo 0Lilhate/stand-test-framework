@@ -35,8 +35,11 @@ import ru.alfa.stand.test.core.environment.TopicDefinition;
  * an empty one, from an unset variable behind {@code ${VAR:}}) is wrapped with
  * {@link SecretReferences#literal} so the core record invariants hold and adapters resolve it verbatim;
  * an empty value then fails lazily at step execution, preserving skip-without-stand behaviour. Each
- * value field is mutually exclusive with its {@code *-ref} twin. Secret fields (auth, datasource
- * user/password, SASL) have no value twins by design.
+ * value field is mutually exclusive with its {@code *-ref} twin. Credentials (auth
+ * username/password/token, datasource user/password, Kafka SASL) also have value twins; supplying one
+ * routes the Spring-resolved value through {@link SecretReferences#literal}, so a secret given that way
+ * materialises in the Spring Environment — the {@code *-ref} spelling remains the choice when it must
+ * not.
  */
 public final class EnvironmentRegistryFactory {
 
@@ -96,9 +99,9 @@ public final class EnvironmentRegistryFactory {
         }
         return new AuthConfig(
                 auth.getScheme(),
-                ref(auth.getUsernameRef(), "username-ref", alias),
-                ref(auth.getPasswordRef(), "password-ref", alias),
-                ref(auth.getTokenRef(), "token-ref", alias));
+                refOrLiteral(auth.getUsername(), auth.getUsernameRef(), "username", "username-ref", alias),
+                refOrLiteral(auth.getPassword(), auth.getPasswordRef(), "password", "password-ref", alias),
+                refOrLiteral(auth.getToken(), auth.getTokenRef(), "token", "token-ref", alias));
     }
 
     private static Map<String, TopicDefinition> topics(StandTestProperties.Environment env) {
@@ -119,8 +122,8 @@ public final class EnvironmentRegistryFactory {
             result.put(alias, new DatasourceDefinition(
                     alias,
                     refOrLiteral(ds.getUrl(), ds.getUrlRef(), "url", "url-ref", alias),
-                    ref(ds.getUserRef(), "user-ref", alias),
-                    ref(ds.getPasswordRef(), "password-ref", alias),
+                    refOrLiteral(ds.getUser(), ds.getUserRef(), "user", "user-ref", alias),
+                    refOrLiteral(ds.getPassword(), ds.getPasswordRef(), "password", "password-ref", alias),
                     Set.copyOf(ds.getAllowedSchemas()),
                     ds.isWriteAllowed()));
         }
@@ -152,7 +155,7 @@ public final class EnvironmentRegistryFactory {
         return new KafkaClusterDefinition(
                 refOrLiteral(cluster.getBootstrapServers(), cluster.getBootstrapServersRef(), "bootstrap-servers", "bootstrap-servers-ref", "kafka-cluster"),
                 refOrLiteral(cluster.getSecurityProtocol(), cluster.getSecurityProtocolRef(), "security-protocol", "security-protocol-ref", "kafka-cluster"),
-                ref(cluster.getSaslJaasConfigRef(), "sasl-jaas-config-ref", "kafka-cluster"));
+                refOrLiteral(cluster.getSaslJaasConfig(), cluster.getSaslJaasConfigRef(), "sasl-jaas-config", "sasl-jaas-config-ref", "kafka-cluster"));
     }
 
     /**

@@ -19,7 +19,7 @@ class EnvironmentRegistryFactoryTest {
     @Test
     @DisplayName("value-only endpoint fields are wrapped as literals for every resource kind")
     void valueFields_wrapAsLiterals() {
-        StandTestProperties properties = new StandTestProperties();
+        final StandTestProperties properties = new StandTestProperties();
         StandTestProperties.Environment ift = new StandTestProperties.Environment();
 
         StandTestProperties.Service service = new StandTestProperties.Service();
@@ -51,6 +51,62 @@ class EnvironmentRegistryFactoryTest {
         assertThat(resolveLiteral(definition.grpcTarget("billing-grpc").orElseThrow().targetRef())).isEqualTo("billing.stand.local:6565");
         assertThat(resolveLiteral(definition.kafkaCluster().bootstrapServersRef())).isEqualTo("broker-1:9092,broker-2:9092");
         assertThat(resolveLiteral(definition.kafkaCluster().securityProtocolReference().orElseThrow())).isEqualTo("PLAINTEXT");
+    }
+
+    @Test
+    @DisplayName("credential value twins (datasource user/password, auth, SASL) are wrapped as literals")
+    void credentialValueTwins_wrapAsLiterals() {
+        final StandTestProperties properties = new StandTestProperties();
+        final StandTestProperties.Environment ift = new StandTestProperties.Environment();
+
+        StandTestProperties.Service service = new StandTestProperties.Service();
+        service.setBaseUrlRef("CLIENT_SERVICE_URL");
+        StandTestProperties.Auth auth = new StandTestProperties.Auth();
+        auth.setScheme(ru.alfa.stand.test.core.environment.AuthScheme.BASIC);
+        auth.setUsername("alice");
+        auth.setPassword("wonderland");
+        service.setAuth(auth);
+        ift.getServices().put("client-service", service);
+
+        StandTestProperties.Datasource datasource = new StandTestProperties.Datasource();
+        datasource.setUrlRef("MAIN_DB_URL");
+        datasource.setUser("objects");
+        datasource.setPassword("s3cr3t");
+        ift.getDatasources().put("main-db", datasource);
+
+        StandTestProperties.KafkaCluster cluster = new StandTestProperties.KafkaCluster();
+        cluster.setBootstrapServersRef("KAFKA_BOOTSTRAP");
+        cluster.setSaslJaasConfig("org.apache.kafka.common.security.plain.PlainLoginModule required;");
+        ift.setKafkaCluster(cluster);
+
+        properties.getEnvironments().put("ift", ift);
+
+        EnvironmentDefinition definition = EnvironmentRegistryFactory.build(properties).environment("ift").orElseThrow();
+
+        assertThat(resolveLiteral(definition.service("client-service").orElseThrow().auth().usernameRef())).isEqualTo("alice");
+        assertThat(resolveLiteral(definition.service("client-service").orElseThrow().auth().passwordRef())).isEqualTo("wonderland");
+        assertThat(resolveLiteral(definition.datasource("main-db").orElseThrow().userRef())).isEqualTo("objects");
+        assertThat(resolveLiteral(definition.datasource("main-db").orElseThrow().passwordRef())).isEqualTo("s3cr3t");
+    }
+
+    @Test
+    @DisplayName("setting both a credential value and its *-ref twin is ambiguous and fails with both field names")
+    void bothCredentialTwins_areRejected() {
+        final StandTestProperties properties = new StandTestProperties();
+        StandTestProperties.Environment ift = new StandTestProperties.Environment();
+        StandTestProperties.Datasource datasource = new StandTestProperties.Datasource();
+        datasource.setUrlRef("MAIN_DB_URL");
+        datasource.setUser("objects");
+        datasource.setUserRef("MAIN_DB_USER");
+        datasource.setPasswordRef("MAIN_DB_PASSWORD");
+        ift.getDatasources().put("main-db", datasource);
+        properties.getEnvironments().put("ift", ift);
+
+        assertThatThrownBy(() -> EnvironmentRegistryFactory.build(properties))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("main-db")
+                .hasMessageContaining("'user' and 'user-ref'")
+                .hasMessageContaining("configure exactly one");
     }
 
     @Test

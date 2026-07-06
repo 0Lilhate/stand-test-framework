@@ -15,6 +15,7 @@ import ru.alfa.stand.test.await.AwaitPolicy;
 import ru.alfa.stand.test.await.Awaiter;
 import ru.alfa.stand.test.core.StandClient;
 import ru.alfa.stand.test.core.environment.AuthConfig;
+import ru.alfa.stand.test.core.environment.DatasourceDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.SecretReferences;
@@ -171,6 +172,48 @@ class StandTestAutoConfigurationTest {
                     assertThat(context).hasNotFailed();
                     EnvironmentDefinition ift = context.getBean(EnvironmentRegistry.class).environment("ift").orElseThrow();
                     assertThat(resolveLiteral(ift.service("client-service").orElseThrow().baseUrlRef())).isEmpty();
+                });
+    }
+
+    @Test
+    @DisplayName("credential value twins resolve ${VAR} through Spring and wrap as SDK-internal literals")
+    void secretValueTwins_resolveAndWrapAsLiterals() {
+        runner.withPropertyValues(
+                "CLIENT_BASIC_USER=alice",
+                "CLIENT_BASIC_PASS=wonderland",
+                "OBJECTS_DB_U_USER=objects",
+                "OBJECTS_DB_U_PASSWORD=s3cr3t",
+                "stand.test.environments.ift.services.client-service.base-url-ref=CLIENT_SERVICE_URL",
+                "stand.test.environments.ift.services.client-service.auth.scheme=BASIC",
+                "stand.test.environments.ift.services.client-service.auth.username=${CLIENT_BASIC_USER}",
+                "stand.test.environments.ift.services.client-service.auth.password=${CLIENT_BASIC_PASS}",
+                "stand.test.environments.ift.datasources.main-db.url-ref=MAIN_DB_URL",
+                "stand.test.environments.ift.datasources.main-db.user=${OBJECTS_DB_U_USER}",
+                "stand.test.environments.ift.datasources.main-db.password=${OBJECTS_DB_U_PASSWORD}").run(context -> {
+                    assertThat(context).hasNotFailed();
+                    EnvironmentDefinition ift = context.getBean(EnvironmentRegistry.class).environment("ift").orElseThrow();
+                    AuthConfig auth = ift.service("client-service").orElseThrow().auth();
+                    assertThat(resolveLiteral(auth.usernameRef())).isEqualTo("alice");
+                    assertThat(resolveLiteral(auth.passwordRef())).isEqualTo("wonderland");
+                    DatasourceDefinition datasource = ift.datasource("main-db").orElseThrow();
+                    assertThat(resolveLiteral(datasource.userRef())).isEqualTo("objects");
+                    assertThat(resolveLiteral(datasource.passwordRef())).isEqualTo("s3cr3t");
+                });
+    }
+
+    @Test
+    @DisplayName("setting both a credential value and its *-ref twin fails the context with both field names")
+    void bothCredentialValueAndRef_failContext() {
+        runner.withPropertyValues(
+                "stand.test.environments.ift.datasources.main-db.url-ref=MAIN_DB_URL",
+                "stand.test.environments.ift.datasources.main-db.user=objects",
+                "stand.test.environments.ift.datasources.main-db.user-ref=MAIN_DB_USER",
+                "stand.test.environments.ift.datasources.main-db.password-ref=MAIN_DB_PASSWORD").run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("'user' and 'user-ref'")
+                            .hasMessageContaining("configure exactly one");
                 });
     }
 

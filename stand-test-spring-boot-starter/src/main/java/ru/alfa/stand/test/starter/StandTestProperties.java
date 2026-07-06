@@ -16,8 +16,13 @@ import ru.alfa.stand.test.core.environment.CorrelationSource;
  * so they cannot be bound by Spring's relaxed setter binding directly. This class therefore holds
  * <strong>mutable</strong> nested POJOs (plain getters/setters, relaxed kebab-case binding); the
  * immutable core records ({@link ru.alfa.stand.test.core.environment.EnvironmentDefinition} and friends)
- * are assembled from them by {@link EnvironmentRegistryFactory}. No endpoint, secret or credential
- * <em>value</em> is ever bound here — only {@code *Ref} names that the adapters resolve at run time.
+ * are assembled from them by {@link EnvironmentRegistryFactory}. Endpoints and credentials may be bound
+ * either as a {@code *Ref} name (resolved lazily from the OS environment by the adapters, never entering
+ * the Spring Environment) or as a Spring-resolved <em>value</em> twin ({@code base-url}/{@code url}/
+ * {@code target}/{@code bootstrap-servers}/{@code security-protocol}, and the credential twins {@code
+ * user}/{@code password}/{@code username}/{@code token}/{@code sasl-jaas-config}). A value twin resolves
+ * {@code ${VAR}} through the Spring Environment at startup, so a secret supplied that way materialises
+ * there — prefer {@code ${ENV_VAR}} and never inline a literal secret in a value twin.
  */
 @ConfigurationProperties(value = "stand.test", ignoreUnknownFields = false)
 public class StandTestProperties {
@@ -215,11 +220,14 @@ public class StandTestProperties {
     }
 
     /**
-     * A logical datasource. {@code urlRef}/{@code userRef}/{@code passwordRef} are secret references,
-     * never values; writes are opt-in ({@code writeAllowed}) and confined to {@code allowedSchemas}.
-     * {@code url} is the value twin of {@code urlRef}: resolved by Spring at context startup, mutually
-     * exclusive with it. Credentials ({@code userRef}/{@code passwordRef}) deliberately have NO value
-     * twins — secrets never materialise in the Spring Environment.
+     * A logical datasource. {@code urlRef}/{@code userRef}/{@code passwordRef} are secret references
+     * (env-var names, resolved lazily by the SDK); writes are opt-in ({@code writeAllowed}) and
+     * confined to {@code allowedSchemas}. {@code url}/{@code user}/{@code password} are the value
+     * twins: resolved by Spring at context startup (real {@code ${VAR}} placeholders), each mutually
+     * exclusive with its {@code *-ref}. Note: a credential supplied through {@code user}/{@code
+     * password} DOES materialise in the Spring Environment — prefer {@code ${ENV_VAR}} there and
+     * never inline a literal secret; keep the {@code *-ref} spelling when a secret must never enter
+     * the Environment.
      */
     public static class Datasource {
 
@@ -227,7 +235,11 @@ public class StandTestProperties {
 
         private String urlRef;
 
+        private String user;
+
         private String userRef;
+
+        private String password;
 
         private String passwordRef;
 
@@ -251,12 +263,28 @@ public class StandTestProperties {
             this.urlRef = urlRef;
         }
 
+        public String getUser() {
+            return user;
+        }
+
+        public void setUser(String user) {
+            this.user = user;
+        }
+
         public String getUserRef() {
             return userRef;
         }
 
         public void setUserRef(String userRef) {
             this.userRef = userRef;
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
+        public void setPassword(String password) {
+            this.password = password;
         }
 
         public String getPasswordRef() {
@@ -357,10 +385,11 @@ public class StandTestProperties {
     /**
      * The Kafka cluster of an environment. Broker address and credentials are references, never values;
      * {@code securityProtocolRef}/{@code saslJaasConfigRef} are optional (SASL/SSL stands only).
-     * {@code bootstrapServers}/{@code securityProtocol} are value twins resolved by Spring at context
-     * startup, each mutually exclusive with its {@code *-ref} twin (idiom:
-     * {@code security-protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}}). {@code saslJaasConfigRef}
-     * deliberately has NO value twin — it carries credentials.
+     * {@code bootstrapServers}/{@code securityProtocol}/{@code saslJaasConfig} are value twins resolved
+     * by Spring at context startup, each mutually exclusive with its {@code *-ref} twin (idiom:
+     * {@code security-protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}}). Note: a {@code saslJaasConfig}
+     * value materialises in the Spring Environment — prefer {@code ${ENV_VAR}} and never inline a
+     * literal secret; keep {@code saslJaasConfigRef} when a secret must never enter the Environment.
      */
     public static class KafkaCluster {
 
@@ -371,6 +400,8 @@ public class StandTestProperties {
         private String securityProtocol;
 
         private String securityProtocolRef;
+
+        private String saslJaasConfig;
 
         private String saslJaasConfigRef;
 
@@ -404,6 +435,14 @@ public class StandTestProperties {
 
         public void setSecurityProtocolRef(String securityProtocolRef) {
             this.securityProtocolRef = securityProtocolRef;
+        }
+
+        public String getSaslJaasConfig() {
+            return saslJaasConfig;
+        }
+
+        public void setSaslJaasConfig(String saslJaasConfig) {
+            this.saslJaasConfig = saslJaasConfig;
         }
 
         public String getSaslJaasConfigRef() {
@@ -443,17 +482,27 @@ public class StandTestProperties {
     }
 
     /**
-     * Service-level authentication: an {@link AuthScheme} plus secret references (env-var names, never
-     * values) — {@code usernameRef}/{@code passwordRef} for BASIC, {@code tokenRef} for BEARER. The
-     * adapter resolves the references and injects the {@code Authorization} header at execution time.
+     * Service-level authentication: an {@link AuthScheme} plus credentials —
+     * {@code usernameRef}/{@code passwordRef} for BASIC, {@code tokenRef} for BEARER. The adapter
+     * resolves them and injects the {@code Authorization} header at execution time. {@code username}/
+     * {@code password}/{@code token} are the value twins resolved by Spring at context startup, each
+     * mutually exclusive with its {@code *-ref}. Note: a credential supplied through a value twin
+     * materialises in the Spring Environment — prefer {@code ${ENV_VAR}} and never inline a literal
+     * secret; keep the {@code *-ref} spelling when a secret must never enter the Environment.
      */
     public static class Auth {
 
         private AuthScheme scheme;
 
+        private String username;
+
         private String usernameRef;
 
+        private String password;
+
         private String passwordRef;
+
+        private String token;
 
         private String tokenRef;
 
@@ -465,6 +514,14 @@ public class StandTestProperties {
             this.scheme = scheme;
         }
 
+        public String getUsername() {
+            return username;
+        }
+
+        public void setUsername(String username) {
+            this.username = username;
+        }
+
         public String getUsernameRef() {
             return usernameRef;
         }
@@ -473,12 +530,28 @@ public class StandTestProperties {
             this.usernameRef = usernameRef;
         }
 
+        public String getPassword() {
+            return password;
+        }
+
+        public void setPassword(String password) {
+            this.password = password;
+        }
+
         public String getPasswordRef() {
             return passwordRef;
         }
 
         public void setPasswordRef(String passwordRef) {
             this.passwordRef = passwordRef;
+        }
+
+        public String getToken() {
+            return token;
+        }
+
+        public void setToken(String token) {
+            this.token = token;
         }
 
         public String getTokenRef() {

@@ -101,10 +101,10 @@ stand:
 > `MAIN_DB_PASSWORD`, `KAFKA_BOOTSTRAP` etc. are resolved by the adapters from the OS environment at
 > execution time — the SDK keeps endpoints and secrets out of source.
 
-## Endpoint values via Spring placeholders
+## Endpoint & credential values via Spring placeholders
 
-Non-secret **endpoint** fields have value twins that Spring resolves at context startup, so real
-`${VAR:}` placeholders work:
+**Every** endpoint and credential field has a value twin that Spring resolves at context startup, so
+real `${VAR}` / `${VAR:default}` placeholders work uniformly:
 
 | Value field (Spring-resolved) | `*-ref` twin (lazy, adapter-resolved) | Resource |
 |---|---|---|
@@ -113,6 +113,11 @@ Non-secret **endpoint** fields have value twins that Spring resolves at context 
 | `target` | `target-ref` | gRPC target |
 | `bootstrap-servers` | `bootstrap-servers-ref` | Kafka cluster |
 | `security-protocol` | `security-protocol-ref` | Kafka cluster |
+| `user` | `user-ref` | datasource (**secret**) |
+| `password` | `password-ref` | datasource / auth (**secret**) |
+| `username` | `username-ref` | auth (**secret**) |
+| `token` | `token-ref` | auth (**secret**) |
+| `sasl-jaas-config` | `sasl-jaas-config-ref` | Kafka cluster (**secret**) |
 
 ```yaml
 stand:
@@ -127,8 +132,8 @@ stand:
         datasources:
           main-db:
             url: ${MAIN_DB_URL:}
-            user-ref: MAIN_DB_USER
-            password-ref: MAIN_DB_PASSWORD
+            user: ${MAIN_DB_USER}                     # Spring-resolved credential value twin
+            password: ${MAIN_DB_PASSWORD}             # (or keep user-ref/password-ref for lazy refs)
             allowed-schemas: [test_data]
             write-allowed: true
         kafka-cluster:
@@ -146,9 +151,14 @@ Rules:
   `@EnabledIfEnvironmentVariable` are simply **skipped** on machines without stand access — same
   behaviour as the ref form. Without the `:` default, Spring fails the startup on the unresolved
   placeholder.
-- **Secrets have NO value twins.** `auth.username-ref`/`password-ref`/`token-ref`, datasource
-  `user-ref`/`password-ref` and `sasl-jaas-config-ref` stay references — credentials never
-  materialise in the Spring Environment.
+- **Secrets have value twins too, but read the tradeoff.** `auth.username`/`password`/`token`,
+  datasource `user`/`password` and `sasl-jaas-config` are Spring-resolved twins of their `*-ref`
+  fields. A credential supplied through a value twin **does materialise in the Spring Environment**
+  (unlike the `*-ref` spelling, which the SDK resolves lazily from the OS environment and never
+  places in the Environment). There is **no `requireReferenceShape` guard** on the value-twin path, so
+  a literal secret (`password: hunter2`) is technically accepted just like a hardcoded URL — always
+  use `${ENV_VAR}` in a value twin, and keep the `*-ref` spelling when a secret must never enter the
+  Spring Environment.
 - Internally a configured value is wrapped with an SDK-internal literal marker (`SecretReferences`)
   so every adapter resolves it verbatim; that marker itself is rejected fail-closed if it ever
   appears in a `*-ref` field. A hardcoded URL in a value field is technically accepted (Spring has
