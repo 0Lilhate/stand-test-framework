@@ -25,7 +25,9 @@ Any unchecked box = no commit proposal.
 - [ ] grep of the diff is clean:
       `Thread.sleep|Awaitility|http://|https://|jdbc:|Authorization|Bearer |Basic |password|secret|new DefaultScenarioRunner|DriverManager|KafkaConsumer|ManagedChannelBuilder`.
 - [ ] No real credentials, PII, production values, real endpoints anywhere in the diff
-      (fixtures and registry additions included — registry holds env-var NAMES only).
+      (fixtures and registry additions included — registry holds env-var NAMES in `*-ref`
+      fields, or `${ENV_VAR:...}` placeholders in the Spring starter's endpoint value twins;
+      never a resolved endpoint or secret value).
 
 ## Bookkeeping
 

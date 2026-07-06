@@ -22,7 +22,8 @@
 
 - Consumer shape: `@SpringBootTest` + `@Autowired StandClient` | `@StandTest` (plain JUnit)
 - Run gate: `@EnabledIfEnvironmentVariable(named = "<ENV_VAR>", matches = ".+")`
-- Env vars required at run time: <list of `*-ref` names from the mapping report>
+- Env vars required at run time: <list from the mapping report — `*-ref` names plus variables
+  inside starter value-twin `${ENV_VAR:...}` placeholders>
 
 ## Step table (execution order)
 

@@ -31,8 +31,10 @@ The agent authors CONSUMER tests. It never crosses into the SDK. Verify on every
 ## Configuration stays configuration
 
 - [ ] Endpoints/credentials appear ONLY as env-var references in the registry
-      (`stand-test-environments.yml` or `stand.test.environments.*`), never in test code or
-      fixtures.
+      (`stand-test-environments.yml` or `stand.test.environments.*`) — or, on the Spring
+      surface only, as endpoint value twins (`base-url`/`url`/`target`/`bootstrap-servers`/
+      `security-protocol`) holding `${ENV_VAR:...}` placeholders — never in test code or
+      fixtures. Secrets stay `*-ref` references on every surface.
 - [ ] Registry changes are separate, human-approved edits — never bundled silently into a
       generated test commit.
 - [ ] Exactly ONE `EnvironmentRegistry` provider on the test classpath (config module XOR a

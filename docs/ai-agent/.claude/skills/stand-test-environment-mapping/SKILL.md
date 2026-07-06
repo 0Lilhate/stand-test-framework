@@ -74,8 +74,9 @@ An **environment mapping report** with four tables:
 3. **Forbidden directs** — any URL/host/port/JDBC/bootstrap string found in the case text that
    someone might be tempted to paste into a test. Explicitly mark: goes into an env var behind
    a `*-ref`, never into a scenario.
-4. **Env vars required to run** — the union of `*-ref` names the scenario will need at
-   execution time (drives the `@EnabledIfEnvironmentVariable` gate choice).
+4. **Env vars required to run** — the union of env-var names the scenario will need at
+   execution time: every `*-ref` name PLUS every variable named inside a starter value twin's
+   `${ENV_VAR:...}` placeholder (drives the `@EnabledIfEnvironmentVariable` gate choice).
 
 ## Failure-mode knowledge (encode in the report when relevant)
 
@@ -86,7 +87,10 @@ An **environment mapping report** with four tables:
 - Registry file missing while `stand-test-config` is on the classpath → **silent empty
   registry** → misleading `Environment '...' is not whitelisted` at first run. (The loud
   "No EnvironmentRegistry provider" diagnostic appears only when no provider exists at all.)
-- Env var unset at run time → `StandTestException "... did not resolve"` naming the ref.
+- Env var unset at run time → for `*-ref` fields: `StandTestException "... did not resolve"`
+  naming the ref; for starter value twins: the field binds EMPTY at startup and the step fails
+  with `"... configured as a literal value but it is empty"` — the message names NO variable,
+  find it inside the twin's `${VAR:}` placeholder in `application.yml`.
 
 ## Forbidden
 

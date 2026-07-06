@@ -39,6 +39,9 @@ From the exception message, `ScenarioResult`, or Allure test-case parameters:
 | `No EnvironmentRegistry provider found` | `stand-test-config` (or starter) not on test classpath | add the module |
 | `... is not whitelisted in environment` (service/topic/target/datasource) | alias missing/typo — surfaces at execution for service/topic/grpc, pre-flight for datasource | fix alias or registry (human approves registry changes) |
 | `did not resolve` / `environment variable not set` | `*-ref` env var unset | export the variable; verify the `@EnabledIfEnvironmentVariable` gate lists it |
+| `configured as a literal value but it is empty` | Spring-starter endpoint value twin (`base-url`/`url`/`target`/`bootstrap-servers`/`security-protocol`) whose `${VAR:}` env var is unset — Spring bound the empty default at startup, the SDK fails lazily at step execution; the message names NO variable | find the variable inside the twin's placeholder in `application.yml`; export it; verify the gate lists it |
+| `sets both '...' and '...-ref' — configure exactly one` | registry alias configured both an endpoint value twin and its `*-ref` — ambiguous, fails Spring context startup before any step | keep exactly one: `${ENV_VAR:...}` in the value field OR the env-var NAME in `*-ref` (human applies) |
+| `carries the SDK-internal literal marker` | a `literal://` value was hand-written into a `*-ref` field — the marker is internal-only | use the sibling value field with a `${ENV_VAR:...}` placeholder, or a plain env-var NAME in the `*-ref` |
 | `No step executor registered for step type` | adapter module missing from test classpath | add `stand-test-rest/-kafka/-db/-grpc` |
 | `Unresolved variable: '${...}'` | capture missing/typo, or step order wrong | add/fix the producing capture |
 | `Multiple <SPI> providers` | two registries/publishers on classpath | remove one dependency |
@@ -48,7 +51,7 @@ From the exception message, `ScenarioResult`, or Allure test-case parameters:
 | `buffered more than 10000` | selection matches nothing on a busy topic | fix selection; narrower topic |
 | db `ambiguous` (>1 row) | polling SELECT under-constrained | add id predicate |
 | `JSONPath assertion failed at '...': expected X but got Y` | value mismatch — possibly a REAL defect | verify expected value against the case before touching the test |
-| `Response body is not valid JSON` | endpoint returned non-JSON/empty; assertions need JSON | assert status-only, or fix endpoint expectation |
+| `Response body is not valid JSON` (REST) / `Message value is not valid JSON` (Kafka) / `Response is not valid JSON` (gRPC) | payload is non-JSON/empty; JSONPath assertions need JSON | assert status-only (REST), or fix the expectation |
 | gRPC `Server Reflection (grpc.reflection.v1) is not implemented by the target` | server lacks Reflection v1 (or exposes v1alpha only / reflection disabled) | not callable by the SDK today — flag |
 | gRPC `failed with status UNIMPLEMENTED` (no reflection hint) | the called method/service is not implemented on the target | check `package.Service/Method` spelling |
 | gRPC `DEADLINE_EXCEEDED` | deadline too small or stand slow | check SLA; deadline covers reflection + call |

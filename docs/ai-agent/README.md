@@ -141,7 +141,9 @@ Generated tests are gated to **skip** (not fail) without stand configuration:
 @EnabledIfEnvironmentVariable(named = "ORDER_SERVICE_URL", matches = ".+")
 ```
 
-Run `./gradlew test` with the env vars named by the registry's `*-ref` fields exported.
+Run `./gradlew test` with the env vars the registry names exported — the `*-ref` fields'
+names plus, on the Spring-starter surface, the variables inside the endpoint value twins'
+`${ENV_VAR:...}` placeholders.
 Assertion failures surface as `StandTestAssertionError` (JUnit red), infra/config problems
 as `StandTestException` (JUnit error).
 

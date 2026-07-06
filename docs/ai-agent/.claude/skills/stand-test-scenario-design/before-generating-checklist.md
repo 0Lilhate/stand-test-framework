@@ -19,8 +19,9 @@ generate "to see how it looks".
       (HEADER for REST/Kafka topics; METADATA for gRPC; Kafka is HEADER-only).
 - [ ] For any DB write: datasource has `write-allowed: true` and the target schema is in
       `allowed-schemas`.
-- [ ] The list of env vars (`*-ref` names) needed at run time is known — one of them chosen
-      for the `@EnabledIfEnvironmentVariable` gate.
+- [ ] The list of env vars needed at run time is known (`*-ref` names plus variables inside
+      starter value-twin `${ENV_VAR:...}` placeholders) — one of them chosen for the
+      `@EnabledIfEnvironmentVariable` gate.
 
 ## Design sound
 
