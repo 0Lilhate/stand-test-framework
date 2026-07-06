@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.function.UnaryOperator;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import ru.alfa.stand.test.core.environment.SecretReferences;
 import ru.alfa.stand.test.core.exception.StandTestException;
 
 class EnvironmentBaseUrlResolverTest {
@@ -31,6 +32,28 @@ class EnvironmentBaseUrlResolverTest {
         assertThatThrownBy(() -> resolver.resolve("${MISSING_URL}"))
                 .isInstanceOf(StandTestException.class)
                 .hasMessageContaining("did not resolve");
+    }
+
+    @Test
+    @DisplayName("a literal-wrapped value resolves verbatim without any environment lookup")
+    void literalResolvesVerbatimWithoutLookup() {
+        UnaryOperator<String> failingLookup = name -> {
+            throw new AssertionError("lookup must not be called for a literal, but was called with '" + name + "'");
+        };
+        BaseUrlResolver resolver = new EnvironmentBaseUrlResolver(failingLookup);
+
+        assertThat(resolver.resolve(SecretReferences.literal("http://stand.local:8080"))).isEqualTo("http://stand.local:8080");
+    }
+
+    @Test
+    @DisplayName("an empty literal (unset variable behind ${VAR:}) fails lazily with a literal-specific message")
+    void emptyLiteralFailsWithLiteralMessage() {
+        BaseUrlResolver resolver = new EnvironmentBaseUrlResolver(ref -> null);
+
+        assertThatThrownBy(() -> resolver.resolve(SecretReferences.literal("")))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("literal value but it is empty")
+                .hasMessageNotContaining("environment variable not set");
     }
 
     @Test

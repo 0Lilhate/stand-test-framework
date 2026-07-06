@@ -32,12 +32,48 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  * prefix is rejected as "obviously a value, not a name". It is deliberately NOT enforced by the core
  * {@code *Definition} records: broker-free tests legitimately store resolved addresses in the ref
  * fields together with an identity resolver.
+ *
+ * <p><strong>LITERAL contract (SDK-internal).</strong> A trusted configuration mapper that has
+ * already resolved an endpoint value (the Spring starter, where Spring expands {@code ${VAR:}}
+ * placeholders at context startup) may wrap the value with {@link #literal(String)} before building
+ * the core {@code *Definition} records. {@link #resolve} returns the wrapped remainder verbatim —
+ * including the empty string — without any environment lookup, so every adapter resolver accepts it
+ * unchanged. The marker is an internal protocol, never a configuration spelling:
+ * {@link #requireReferenceShape} rejects it fail-closed on both configuration front-ends, and
+ * secret-bearing fields (auth, datasource user/password, SASL) are never wrapped — they stay pure
+ * references.
  */
 public final class SecretReferences {
 
     private static final Pattern PLACEHOLDER = Pattern.compile("^\\$\\{([^:{}\\s]+)(?::(.*))?\\}$");
 
+    private static final String LITERAL_PREFIX = "literal://";
+
     private SecretReferences() {
+    }
+
+    /**
+     * Wraps an already-resolved value with the SDK-internal literal marker so it rides through the
+     * {@code *Ref} model fields and the adapters' default resolvers verbatim. The empty string is a
+     * legal value: the marker keeps the wrapped form non-blank for the core record invariants while
+     * {@link #resolve} still yields {@code ""}, deferring the failure to step execution.
+     *
+     * @param value the resolved value to carry verbatim (may be empty, never null)
+     * @return the marker-wrapped value
+     */
+    public static String literal(String value) {
+        Objects.requireNonNull(value, "value must not be null");
+        return LITERAL_PREFIX + value;
+    }
+
+    /**
+     * Tells whether the given reference carries the SDK-internal literal marker.
+     *
+     * @param reference the reference to inspect (may be null)
+     * @return true when the reference is a {@link #literal(String)}-wrapped value
+     */
+    public static boolean isLiteral(String reference) {
+        return reference != null && reference.startsWith(LITERAL_PREFIX);
     }
 
     /**
@@ -54,6 +90,9 @@ public final class SecretReferences {
         Objects.requireNonNull(lookup, "lookup must not be null");
         if (reference == null) {
             return null;
+        }
+        if (isLiteral(reference)) {
+            return reference.substring(LITERAL_PREFIX.length());
         }
         Matcher placeholder = PLACEHOLDER.matcher(reference.trim());
         if (!placeholder.matches()) {
@@ -80,6 +119,10 @@ public final class SecretReferences {
     public static String requireReferenceShape(String value, String field, String location) {
         if (value == null || value.isBlank()) {
             throw new StandTestException("Field '" + field + "' at " + location + " must be a non-blank reference name");
+        }
+        if (isLiteral(value.trim())) {
+            throw new StandTestException("Field '" + field + "' at " + location
+                    + " carries the SDK-internal literal marker — it must never appear in configuration; in the Spring starter use the sibling value field (base-url/url/target/bootstrap-servers/security-protocol) instead");
         }
         if (PLACEHOLDER.matcher(value.trim()).matches()) {
             return value;

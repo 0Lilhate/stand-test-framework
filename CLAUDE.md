@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `stand-test-framework` is a multi-module Gradle (Kotlin DSL) build that produces **`stand-test-sdk`** —
 an internal Java **test SDK** consumed by other teams as a Gradle `testImplementation` dependency. It
-is a **thin facade** over mature tools (RestAssured/OkHttp, `kafka-clients`, JDBC, gRPC, JUnit 5,
+is a **thin facade** over mature tools (Spring WebClient, `kafka-clients`, JDBC, gRPC, JUnit 5,
 Allure) that gives one consistent way to write integration/e2e tests against **real DEV/IFT stands**
 (Testcontainers is explicitly *not* the basis). The SDK standardizes `scenarioId`/`testRunId`/
 `correlationId`, a single await mechanism (no `Thread.sleep`), unified reporting, and a constrained
@@ -22,7 +22,9 @@ declarative format safe for AI-generated tests.
 
 **`docs/arch/stand-test-sdk-implementation-plan.md` is the source of truth.** Read it before
 implementing anything — it defines the module graph, the core contracts (§8 "Итерация 0"), the MVP
-scope (§6), and the strict implementation order (§7). Each module also has a `README.md`.
+scope (§6), and the strict implementation order (§7). Each module also has a `README.md`, and the root
+`README.md` is the consumer-facing quick start (module table, `stand-test-environments.yml` example,
+plain-JUnit and Spring Boot setup) — keep it in sync when consumer-visible behaviour changes.
 
 ## Build & test commands
 
@@ -115,7 +117,11 @@ YAML DSL ────────────────┘                    
   the schema's value-level guardrails (secret headers, SQL sleep functions, timeout bounds) so a
   document that skipped the schema pass meets the same net. **`EnvironmentRegistry`** resolves logical
   aliases (service/topic/datasource/gRPC) to endpoints + **secret references** (never secret values),
-  and is the whitelist enforcement point. Service credentials follow the same model: an optional
+  and is the whitelist enforcement point. Nuance: in the Spring starter path, non-secret ENDPOINT
+  fields may instead carry Spring-resolved values via value twins (`base-url`/`url`/`target`/
+  `bootstrap-servers`/`security-protocol`), wrapped internally as `SecretReferences.literal(...)` so
+  adapters resolve them verbatim; secrets are ALWAYS refs on every surface, and the literal marker is
+  rejected fail-closed in user configuration. Service credentials follow the same model: an optional
   per-service `AuthConfig` (BASIC/BEARER refs) makes the REST executor inject `Authorization` at
   execution time — the sanctioned path; inline auth headers in scenarios stay banned.
 - Value types are immutable `record`s with defensive copies (`List`/`Set`/`Map.copyOf`).
@@ -124,16 +130,21 @@ YAML DSL ────────────────┘                    
 
 **All modules are implemented** (the plan's iterations 0–10 plus the follow-on modules):
 **`stand-test-core`** (models, value objects, contracts, SPI, the `core.validation` SQL
-classifier/`SqlSpanScanner`, the pre-flight guardrail validator and the `core.event` reporting events),
-**`stand-test-await`**, **`stand-test-junit`**, **`stand-test-rest`**, **`stand-test-kafka`**,
-**`stand-test-db`** (design record in `docs/arch/stand-test-db-decisions.md`, hardening in
-`docs/arch/stand-test-db-remediation-plan.md`), **`stand-test-grpc`** (unary via server reflection +
-`DynamicMessage`), **`stand-test-allure`**, **`stand-test-scenario-yaml`** (two surfaces: given/then
-YAML and the AI steps/type format), **`stand-test-ai-schema`** (JSON Schema + generation rules),
-**`stand-test-spring-boot-starter`** (Boot-3 auto-configuration, adapters as `compileOnly` optionals)
-and **`stand-test-config`** (file-based `EnvironmentRegistry` SPI provider). **`stand-test-example`**
-is a test-only showcase (offline doubles, not published); **`stand-test-bom`** is the `java-platform`
-carrying constraints for every published module.
+classifier/`SqlSpanScanner`, the pre-flight guardrail validator, the `core.event` reporting events and
+the `core.assertion` matcher evaluator — `AssertionMatcher`/`AssertionMatchers`, absent wire key =
+EQUALS), **`stand-test-await`**, **`stand-test-junit`**, **`stand-test-rest`** (all five assertion
+matchers, registry-driven service auth, `rest.expectEventually` GET-polling through the await engine —
+transport errors abort as infra failures, 5xx polls through, captures apply to the final response only),
+**`stand-test-kafka`**, **`stand-test-db`** (design record in `docs/arch/stand-test-db-decisions.md`,
+hardening in `docs/arch/stand-test-db-remediation-plan.md`), **`stand-test-grpc`** (unary via server
+reflection + `DynamicMessage`), **`stand-test-allure`** (with sink-side secret masking of attachment
+bodies), **`stand-test-scenario-yaml`** (two surfaces: given/then YAML and the AI steps/type format),
+**`stand-test-ai-schema`** (JSON Schema + generation rules; a cross-check test pins the matcher grammar
+to the core enum), **`stand-test-spring-boot-starter`** (Boot-3 auto-configuration, adapters as
+`compileOnly` optionals) and **`stand-test-config`** (file-based `EnvironmentRegistry` SPI provider).
+**`stand-test-example`** is a test-only showcase (offline doubles, not published); **`stand-test-bom`**
+is the `java-platform` carrying constraints for every published module. Known asymmetry: Kafka/gRPC
+assertions are still equals-only (REST is the only adapter with the full matcher set).
 
 Publishing is fully wired but endpoint-less: the repository URL/credentials arrive via
 `standTestPublish*` Gradle properties or `STAND_TEST_PUBLISH_*` env vars (snapshot/release repo chosen by

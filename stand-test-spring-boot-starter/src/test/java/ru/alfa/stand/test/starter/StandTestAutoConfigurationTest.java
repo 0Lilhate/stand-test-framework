@@ -17,6 +17,7 @@ import ru.alfa.stand.test.core.StandClient;
 import ru.alfa.stand.test.core.environment.AuthConfig;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
+import ru.alfa.stand.test.core.environment.SecretReferences;
 import ru.alfa.stand.test.core.event.NoOpReportingEventPublisher;
 import ru.alfa.stand.test.core.event.ReportingEventPublisher;
 import ru.alfa.stand.test.core.event.ScenarioEvent;
@@ -117,6 +118,91 @@ class StandTestAutoConfigurationTest {
         assertThat(ift.kafkaCluster()).isNotNull();
         assertThat(ift.kafkaCluster().bootstrapServersRef()).isEqualTo("KAFKA_BOOTSTRAP");
         assertThat(ift.kafkaCluster().securityProtocolReference()).contains("KAFKA_SECURITY");
+    }
+
+    @Test
+    @DisplayName("endpoint value fields bind through the context and are wrapped as SDK-internal literals")
+    void valueFields_bindAndWrapAsLiterals() {
+        runner.withPropertyValues(
+                "stand.test.environments.ift.services.client-service.base-url=https://stand.example:8443/api",
+                "stand.test.environments.ift.datasources.main-db.url=jdbc:postgresql://stand:5432/app",
+                "stand.test.environments.ift.datasources.main-db.user-ref=MAIN_DB_USER",
+                "stand.test.environments.ift.datasources.main-db.password-ref=MAIN_DB_PASSWORD",
+                "stand.test.environments.ift.grpc-targets.billing-grpc.target=billing.stand.local:6565",
+                "stand.test.environments.ift.kafka-cluster.bootstrap-servers=broker-1:9092",
+                "stand.test.environments.ift.kafka-cluster.security-protocol=PLAINTEXT").run(context -> {
+                    EnvironmentDefinition ift = context.getBean(EnvironmentRegistry.class).environment("ift").orElseThrow();
+                    assertThat(resolveLiteral(ift.service("client-service").orElseThrow().baseUrlRef())).isEqualTo("https://stand.example:8443/api");
+                    assertThat(resolveLiteral(ift.datasource("main-db").orElseThrow().urlRef())).isEqualTo("jdbc:postgresql://stand:5432/app");
+                    assertThat(resolveLiteral(ift.grpcTarget("billing-grpc").orElseThrow().targetRef())).isEqualTo("billing.stand.local:6565");
+                    assertThat(resolveLiteral(ift.kafkaCluster().bootstrapServersRef())).isEqualTo("broker-1:9092");
+                    assertThat(resolveLiteral(ift.kafkaCluster().securityProtocolReference().orElseThrow())).isEqualTo("PLAINTEXT");
+                });
+    }
+
+    @Test
+    @DisplayName("an EMPTY value field binds as configured-but-empty (Binder pin) — the context starts and the failure is deferred to execution")
+    void emptyValueField_bindsAsConfiguredEmpty() {
+        runner.withPropertyValues(
+                "stand.test.environments.ift.services.client-service.base-url=").run(context -> {
+                    assertThat(context).hasNotFailed();
+                    EnvironmentDefinition ift = context.getBean(EnvironmentRegistry.class).environment("ift").orElseThrow();
+                    assertThat(resolveLiteral(ift.service("client-service").orElseThrow().baseUrlRef())).isEmpty();
+                });
+    }
+
+    @Test
+    @DisplayName("a real Spring ${VAR:} placeholder in a value field is resolved at startup from the Environment")
+    void springPlaceholder_resolvesIntoLiteral() {
+        runner.withPropertyValues(
+                "CLIENT_SERVICE_URL=https://stand.example",
+                "stand.test.environments.ift.services.client-service.base-url=${CLIENT_SERVICE_URL:}").run(context -> {
+                    assertThat(context).hasNotFailed();
+                    EnvironmentDefinition ift = context.getBean(EnvironmentRegistry.class).environment("ift").orElseThrow();
+                    assertThat(resolveLiteral(ift.service("client-service").orElseThrow().baseUrlRef())).isEqualTo("https://stand.example");
+                });
+    }
+
+    @Test
+    @DisplayName("an UNSET variable behind ${VAR:} does not fail the context — the empty default defers the failure to execution")
+    void springPlaceholderUnset_startsAndDefersFailure() {
+        runner.withPropertyValues(
+                "stand.test.environments.ift.services.client-service.base-url=${CLIENT_SERVICE_URL_UNSET:}").run(context -> {
+                    assertThat(context).hasNotFailed();
+                    EnvironmentDefinition ift = context.getBean(EnvironmentRegistry.class).environment("ift").orElseThrow();
+                    assertThat(resolveLiteral(ift.service("client-service").orElseThrow().baseUrlRef())).isEmpty();
+                });
+    }
+
+    @Test
+    @DisplayName("setting both a value field and its *-ref twin fails the context with both field names")
+    void bothValueAndRef_failContext() {
+        runner.withPropertyValues(
+                "stand.test.environments.ift.services.client-service.base-url=https://stand.example",
+                "stand.test.environments.ift.services.client-service.base-url-ref=CLIENT_SERVICE_URL").run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("'base-url' and 'base-url-ref'")
+                            .hasMessageContaining("configure exactly one");
+                });
+    }
+
+    @Test
+    @DisplayName("the SDK-internal literal marker smuggled into a *-ref field fails the context")
+    void literalMarkerInRefField_failsContext() {
+        runner.withPropertyValues(
+                "stand.test.environments.ift.services.client-service.base-url-ref=literal://https://stand.example").run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("literal marker");
+                });
+    }
+
+    private static String resolveLiteral(String reference) {
+        assertThat(SecretReferences.isLiteral(reference)).as("expected a literal-wrapped reference but got: %s", reference).isTrue();
+        return SecretReferences.resolve(reference, name -> null);
     }
 
     @Test

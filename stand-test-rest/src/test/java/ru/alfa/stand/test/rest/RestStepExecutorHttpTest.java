@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import ru.alfa.stand.test.core.environment.SecretReferences;
 import ru.alfa.stand.test.core.exception.StandTestAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.execution.StepExecutionContext;
@@ -32,6 +33,23 @@ class RestStepExecutorHttpTest {
             assertThat(server.capturedPath()).isEqualTo("/api/items");
             assertThat(server.capturedHeader(RestTestSupport.CORRELATION_HEADER)).isEqualTo(context.scenarioContext().correlationId().value());
             assertThat(store.get("requestId")).contains("r-1");
+        }
+    }
+
+    @Test
+    @DisplayName("a literal-wrapped base URL rides through the PRODUCTION resolver end-to-end (Spring starter value fields)")
+    void literalBaseUrlResolvesThroughProductionResolver() {
+        try (RecordingHttpServer server = new RecordingHttpServer().respond(200, "{\"requestId\":\"r-9\"}")) {
+            VariableStore store = new VariableStore();
+            StepExecutionContext context = RestTestSupport.context(RestTestSupport.registry(SecretReferences.literal(server.baseUrl())), store);
+            ScenarioStep step = RestStep.get(RestTestSupport.SERVICE, "/api/items")
+                    .expectStatus(200)
+                    .capture("requestId", "$.requestId")
+                    .build();
+            RestStepExecutor executor = new RestStepExecutor(new WebClientHttpCaller(), new EnvironmentBaseUrlResolver());
+            StepResult result = executor.execute(step, context);
+            assertThat(result.status()).isEqualTo(StepStatus.SUCCESS);
+            assertThat(store.get("requestId")).contains("r-9");
         }
     }
 

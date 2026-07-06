@@ -14,7 +14,8 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  * <p>This keeps stand URLs out of source (plan §9 / {@code ServiceEndpointDefinition}: the registry
  * stores a reference, never a hardcoded URL). Tests that need a literal URL inject their own
  * {@link BaseUrlResolver} via {@link RestStepExecutor}'s constructor rather than embedding URLs in the
- * registry.
+ * registry. Literal-wrapped values produced by a trusted mapper (the Spring starter's endpoint value
+ * fields) resolve verbatim without an environment lookup — see {@link SecretReferences}.
  */
 public final class EnvironmentBaseUrlResolver implements BaseUrlResolver {
 
@@ -43,6 +44,9 @@ public final class EnvironmentBaseUrlResolver implements BaseUrlResolver {
         }
         String resolved = SecretReferences.resolve(baseUrlRef, this.lookup);
         if (resolved == null || resolved.isBlank()) {
+            if (SecretReferences.isLiteral(baseUrlRef)) {
+                throw new StandTestException("Base URL is configured as a literal value but it is empty — an unset environment variable behind a ${VAR:} placeholder resolves to the empty default");
+            }
             throw new StandTestException("Base URL reference '" + baseUrlRef + "' did not resolve (environment variable not set)");
         }
         return resolved;

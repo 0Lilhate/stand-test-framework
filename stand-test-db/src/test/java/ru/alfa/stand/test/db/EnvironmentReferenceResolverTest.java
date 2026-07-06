@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.function.UnaryOperator;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import ru.alfa.stand.test.core.environment.SecretReferences;
 import ru.alfa.stand.test.core.exception.StandTestException;
 
 /**
@@ -30,6 +31,14 @@ class EnvironmentReferenceResolverTest {
         EnvironmentReferenceResolver resolver = new EnvironmentReferenceResolver(reference -> "");
 
         assertThat(resolver.resolve("MAIN_DB_PASSWORD")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("an empty literal-wrapped value is allowed, mirroring the empty-password parity")
+    void anEmptyLiteralIsAllowed() {
+        EnvironmentReferenceResolver resolver = new EnvironmentReferenceResolver(reference -> null);
+
+        assertThat(resolver.resolve(SecretReferences.literal(""))).isEmpty();
     }
 
     @Test

@@ -101,6 +101,62 @@ stand:
 > `MAIN_DB_PASSWORD`, `KAFKA_BOOTSTRAP` etc. are resolved by the adapters from the OS environment at
 > execution time — the SDK keeps endpoints and secrets out of source.
 
+## Endpoint values via Spring placeholders
+
+Non-secret **endpoint** fields have value twins that Spring resolves at context startup, so real
+`${VAR:}` placeholders work:
+
+| Value field (Spring-resolved) | `*-ref` twin (lazy, adapter-resolved) | Resource |
+|---|---|---|
+| `base-url` | `base-url-ref` | service |
+| `url` | `url-ref` | datasource |
+| `target` | `target-ref` | gRPC target |
+| `bootstrap-servers` | `bootstrap-servers-ref` | Kafka cluster |
+| `security-protocol` | `security-protocol-ref` | Kafka cluster |
+
+```yaml
+stand:
+  test:
+    environments:
+      ift:
+        services:
+          client-service:
+            base-url: ${CLIENT_SERVICE_URL:}          # Spring resolves this at startup
+            correlation: { source: HEADER, name: X-Correlation-Id }
+            auth: { scheme: BASIC, username-ref: CLIENT_USER, password-ref: CLIENT_PASSWORD }
+        datasources:
+          main-db:
+            url: ${MAIN_DB_URL:}
+            user-ref: MAIN_DB_USER
+            password-ref: MAIN_DB_PASSWORD
+            allowed-schemas: [test_data]
+            write-allowed: true
+        kafka-cluster:
+          bootstrap-servers: ${KAFKA_BOOTSTRAP:}
+          security-protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
+```
+
+Rules:
+
+- **Exactly one twin per field.** Setting both (`base-url` and `base-url-ref`) fails the context
+  startup with `"... sets both 'base-url' and 'base-url-ref' — configure exactly one"`.
+- **Always append `:` inside the placeholder** (`${CLIENT_SERVICE_URL:}`): with the variable unset the
+  value binds as an empty string, the context still starts, and the failure is deferred to step
+  execution (`"... configured as a literal value but it is empty"`). Tests gated with
+  `@EnabledIfEnvironmentVariable` are simply **skipped** on machines without stand access — same
+  behaviour as the ref form. Without the `:` default, Spring fails the startup on the unresolved
+  placeholder.
+- **Secrets have NO value twins.** `auth.username-ref`/`password-ref`/`token-ref`, datasource
+  `user-ref`/`password-ref` and `sasl-jaas-config-ref` stay references — credentials never
+  materialise in the Spring Environment.
+- Internally a configured value is wrapped with an SDK-internal literal marker (`SecretReferences`)
+  so every adapter resolves it verbatim; that marker itself is rejected fail-closed if it ever
+  appears in a `*-ref` field. A hardcoded URL in a value field is technically accepted (Spring has
+  already resolved it) — keep values as `${VAR:...}` placeholders by policy.
+- This is a **starter-only** feature: the plain-JUnit `stand-test-environments.yml` file
+  (`stand-test-config`) remains refs-only — there is no Spring there to resolve placeholders, and the
+  file stays committable by construction.
+
 ## Disable the starter
 
 ```yaml

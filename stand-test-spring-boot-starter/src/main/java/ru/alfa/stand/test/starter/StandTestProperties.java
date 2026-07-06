@@ -168,15 +168,26 @@ public class StandTestProperties {
 
     /**
      * A logical REST/HTTP service endpoint. {@code baseUrlRef} is a reference (an env-var name), never a
-     * URL value.
+     * URL value. {@code baseUrl} is its value twin: resolved by Spring at context startup (real
+     * {@code ${VAR:}} placeholders), mutually exclusive with {@code baseUrlRef}.
      */
     public static class Service {
+
+        private String baseUrl;
 
         private String baseUrlRef;
 
         private Correlation correlation;
 
         private Auth auth;
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
 
         public String getBaseUrlRef() {
             return baseUrlRef;
@@ -206,8 +217,13 @@ public class StandTestProperties {
     /**
      * A logical datasource. {@code urlRef}/{@code userRef}/{@code passwordRef} are secret references,
      * never values; writes are opt-in ({@code writeAllowed}) and confined to {@code allowedSchemas}.
+     * {@code url} is the value twin of {@code urlRef}: resolved by Spring at context startup, mutually
+     * exclusive with it. Credentials ({@code userRef}/{@code passwordRef}) deliberately have NO value
+     * twins — secrets never materialise in the Spring Environment.
      */
     public static class Datasource {
+
+        private String url;
 
         private String urlRef;
 
@@ -218,6 +234,14 @@ public class StandTestProperties {
         private final List<String> allowedSchemas = new ArrayList<>();
 
         private boolean writeAllowed;
+
+        public String getUrl() {
+            return url;
+        }
+
+        public void setUrl(String url) {
+            this.url = url;
+        }
 
         public String getUrlRef() {
             return urlRef;
@@ -294,13 +318,24 @@ public class StandTestProperties {
 
     /**
      * A logical gRPC target. {@code targetRef} is a reference (an env-var name), never a {@code host:port}
-     * value.
+     * value. {@code target} is its value twin: resolved by Spring at context startup, mutually exclusive
+     * with {@code targetRef}.
      */
     public static class GrpcTarget {
+
+        private String target;
 
         private String targetRef;
 
         private Correlation correlation;
+
+        public String getTarget() {
+            return target;
+        }
+
+        public void setTarget(String target) {
+            this.target = target;
+        }
 
         public String getTargetRef() {
             return targetRef;
@@ -322,14 +357,30 @@ public class StandTestProperties {
     /**
      * The Kafka cluster of an environment. Broker address and credentials are references, never values;
      * {@code securityProtocolRef}/{@code saslJaasConfigRef} are optional (SASL/SSL stands only).
+     * {@code bootstrapServers}/{@code securityProtocol} are value twins resolved by Spring at context
+     * startup, each mutually exclusive with its {@code *-ref} twin (idiom:
+     * {@code security-protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}}). {@code saslJaasConfigRef}
+     * deliberately has NO value twin — it carries credentials.
      */
     public static class KafkaCluster {
 
+        private String bootstrapServers;
+
         private String bootstrapServersRef;
+
+        private String securityProtocol;
 
         private String securityProtocolRef;
 
         private String saslJaasConfigRef;
+
+        public String getBootstrapServers() {
+            return bootstrapServers;
+        }
+
+        public void setBootstrapServers(String bootstrapServers) {
+            this.bootstrapServers = bootstrapServers;
+        }
 
         public String getBootstrapServersRef() {
             return bootstrapServersRef;
@@ -337,6 +388,14 @@ public class StandTestProperties {
 
         public void setBootstrapServersRef(String bootstrapServersRef) {
             this.bootstrapServersRef = bootstrapServersRef;
+        }
+
+        public String getSecurityProtocol() {
+            return securityProtocol;
+        }
+
+        public void setSecurityProtocol(String securityProtocol) {
+            this.securityProtocol = securityProtocol;
         }
 
         public String getSecurityProtocolRef() {

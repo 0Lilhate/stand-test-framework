@@ -112,7 +112,9 @@ Add `stand-test-spring-boot-starter` plus the adapters you use, declare the envi
 `stand.test.environments.*` in `application.yml`, and `@Autowired StandClient` — see the
 [starter README](stand-test-spring-boot-starter/README.md) for the full `application.yml` example,
 bean override rules and troubleshooting. `stand.test.enabled: false` switches the whole
-auto-configuration off.
+auto-configuration off. Non-secret endpoint fields also accept real Spring placeholders via value
+twins (`base-url: ${CLIENT_SERVICE_URL:}` instead of `base-url-ref: CLIENT_SERVICE_URL`); secrets
+stay `*-ref` — see "Endpoint values via Spring placeholders" in the starter README.
 
 ## AI-generated scenarios
 

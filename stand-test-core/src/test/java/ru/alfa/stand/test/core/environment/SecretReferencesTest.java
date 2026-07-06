@@ -54,6 +54,40 @@ class SecretReferencesTest {
     }
 
     @Test
+    @DisplayName("literal-wrapped values resolve verbatim without any environment lookup")
+    void literalResolvesVerbatim() {
+        java.util.function.UnaryOperator<String> failingLookup = name -> {
+            throw new AssertionError("lookup must not be called for a literal, but was called with '" + name + "'");
+        };
+
+        assertThat(SecretReferences.resolve(SecretReferences.literal("https://x:8080/a}b:c{"), failingLookup)).isEqualTo("https://x:8080/a}b:c{");
+        assertThat(SecretReferences.resolve(SecretReferences.literal(""), failingLookup)).isEmpty();
+        // A value that itself looks like a placeholder is NOT re-resolved.
+        assertThat(SecretReferences.resolve(SecretReferences.literal("${FOO}"), failingLookup)).isEqualTo("${FOO}");
+    }
+
+    @Test
+    @DisplayName("isLiteral recognises wrapped values and nothing else")
+    void isLiteralRecognisesWrappedValues() {
+        assertThat(SecretReferences.isLiteral(SecretReferences.literal("https://x"))).isTrue();
+        assertThat(SecretReferences.isLiteral(SecretReferences.literal(""))).isTrue();
+        assertThat(SecretReferences.isLiteral(null)).isFalse();
+        assertThat(SecretReferences.isLiteral("MAIN_DB_URL")).isFalse();
+        assertThat(SecretReferences.isLiteral("${MAIN_DB_URL}")).isFalse();
+    }
+
+    @Test
+    @DisplayName("the SDK-internal literal marker is rejected in configuration fail-closed")
+    void literalMarkerRejectedInConfiguration() {
+        assertThatThrownBy(() -> SecretReferences.requireReferenceShape("literal://https://real-stand.example", "base-url-ref", "env.ift"))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("literal marker");
+        assertThatThrownBy(() -> SecretReferences.requireReferenceShape("  literal://x  ", "url-ref", "env.ift"))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("literal marker");
+    }
+
+    @Test
     @DisplayName("values that are obviously resolved endpoints or inline secrets are rejected fail-closed")
     void valueShapedInputRejected() {
         assertThatThrownBy(() -> SecretReferences.requireReferenceShape("jdbc:postgresql://db:5432/app", "url-ref", "env.ift"))

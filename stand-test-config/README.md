@@ -106,6 +106,12 @@ The Spring Boot starter builds its registry from `@ConfigurationProperties("stan
 need this module. This module is the non-Spring counterpart; the YAML shape here mirrors the Spring
 `stand.test.environments.<env>...` tree (minus the `stand.test` prefix).
 
+**This surface is refs-only by design.** The starter's endpoint value twins (`base-url`, `url`,
+`target`, `bootstrap-servers`, `security-protocol` with real Spring `${VAR:}` placeholders) do NOT
+exist here: there is no Spring resolver when this file is loaded, and a committable YAML file must
+never carry resolved endpoints. A value field in `stand-test-environments.yml` is rejected
+fail-closed as an unknown key.
+
 **Known limitation (drift risk):** the mapping lives in two places — this module's `EnvironmentConfig`
 (from a YAML map) and the starter's `EnvironmentRegistryFactory` (from Spring POJOs). They share one
 logical schema but are not a single implementation; keep them in sync. Unifying them (e.g. the starter

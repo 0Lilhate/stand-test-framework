@@ -28,6 +28,15 @@ import ru.alfa.stand.test.core.environment.TopicDefinition;
  * is empty. After the strict runtime guardrail (an unknown environment is rejected before any step runs),
  * an empty registry means every scenario fails fast on {@code run} — so environments are effectively
  * mandatory. This is intentional: the starter never silently connects to a stand.
+ *
+ * <p><strong>Endpoint value fields.</strong> Non-secret endpoint fields have value twins
+ * ({@code base-url}/{@code url}/{@code target}/{@code bootstrap-servers}/{@code security-protocol})
+ * resolved by Spring at context startup — real {@code ${VAR:}} placeholders. A configured value (even
+ * an empty one, from an unset variable behind {@code ${VAR:}}) is wrapped with
+ * {@link SecretReferences#literal} so the core record invariants hold and adapters resolve it verbatim;
+ * an empty value then fails lazily at step execution, preserving skip-without-stand behaviour. Each
+ * value field is mutually exclusive with its {@code *-ref} twin. Secret fields (auth, datasource
+ * user/password, SASL) have no value twins by design.
  */
 public final class EnvironmentRegistryFactory {
 
@@ -70,7 +79,7 @@ public final class EnvironmentRegistryFactory {
         for (Map.Entry<String, StandTestProperties.Service> entry : env.getServices().entrySet()) {
             String alias = entry.getKey();
             StandTestProperties.Service service = entry.getValue();
-            result.put(alias, new ServiceEndpointDefinition(alias, ref(service.getBaseUrlRef(), "base-url-ref", alias), correlation(service.getCorrelation()), auth(service.getAuth(), alias)));
+            result.put(alias, new ServiceEndpointDefinition(alias, refOrLiteral(service.getBaseUrl(), service.getBaseUrlRef(), "base-url", "base-url-ref", alias), correlation(service.getCorrelation()), auth(service.getAuth(), alias)));
         }
         return result;
     }
@@ -109,7 +118,7 @@ public final class EnvironmentRegistryFactory {
             StandTestProperties.Datasource ds = entry.getValue();
             result.put(alias, new DatasourceDefinition(
                     alias,
-                    ref(ds.getUrlRef(), "url-ref", alias),
+                    refOrLiteral(ds.getUrl(), ds.getUrlRef(), "url", "url-ref", alias),
                     ref(ds.getUserRef(), "user-ref", alias),
                     ref(ds.getPasswordRef(), "password-ref", alias),
                     Set.copyOf(ds.getAllowedSchemas()),
@@ -123,7 +132,7 @@ public final class EnvironmentRegistryFactory {
         for (Map.Entry<String, StandTestProperties.GrpcTarget> entry : env.getGrpcTargets().entrySet()) {
             String alias = entry.getKey();
             StandTestProperties.GrpcTarget target = entry.getValue();
-            result.put(alias, new GrpcTargetDefinition(alias, ref(target.getTargetRef(), "target-ref", alias), correlation(target.getCorrelation())));
+            result.put(alias, new GrpcTargetDefinition(alias, refOrLiteral(target.getTarget(), target.getTargetRef(), "target", "target-ref", alias), correlation(target.getCorrelation())));
         }
         return result;
     }
@@ -141,9 +150,27 @@ public final class EnvironmentRegistryFactory {
             return null;
         }
         return new KafkaClusterDefinition(
-                ref(cluster.getBootstrapServersRef(), "bootstrap-servers-ref", "kafka-cluster"),
-                ref(cluster.getSecurityProtocolRef(), "security-protocol-ref", "kafka-cluster"),
+                refOrLiteral(cluster.getBootstrapServers(), cluster.getBootstrapServersRef(), "bootstrap-servers", "bootstrap-servers-ref", "kafka-cluster"),
+                refOrLiteral(cluster.getSecurityProtocol(), cluster.getSecurityProtocolRef(), "security-protocol", "security-protocol-ref", "kafka-cluster"),
                 ref(cluster.getSaslJaasConfigRef(), "sasl-jaas-config-ref", "kafka-cluster"));
+    }
+
+    /**
+     * Chooses between an endpoint's Spring-resolved value field and its {@code *-ref} twin. A value is
+     * "configured" when it is non-null — including the empty string an unset environment variable
+     * behind a {@code ${VAR:}} placeholder resolves to; it is wrapped with
+     * {@link SecretReferences#literal} so the failure is deferred to step execution. Setting both twins
+     * is ambiguous and fails the context startup.
+     */
+    private static String refOrLiteral(String value, String reference, String valueField, String refField, String alias) {
+        if (value == null) {
+            return ref(reference, refField, alias);
+        }
+        if (reference != null && !reference.isBlank()) {
+            throw new IllegalArgumentException(
+                    "alias '" + alias + "' sets both '" + valueField + "' and '" + refField + "' — configure exactly one");
+        }
+        return SecretReferences.literal(value);
     }
 
     /**

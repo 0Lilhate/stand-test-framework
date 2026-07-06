@@ -146,6 +146,19 @@ class EnvironmentRegistryParityTest {
                 .hasMessageContaining("reference NAME");
     }
 
+    @Test
+    @DisplayName("endpoint value fields are deliberately starter-only: the config YAML surface rejects them fail-closed")
+    void valueFieldsAreStarterOnly() {
+        assertThatThrownBy(() -> loadFromYaml("""
+                environments:
+                  ift:
+                    services:
+                      client-service:
+                        base-url: https://real-stand.example
+                """))
+                .hasMessageContaining("Unknown field");
+    }
+
     private static StandTestProperties standTestProperties() {
         final StandTestProperties properties = new StandTestProperties();
         final StandTestProperties.Environment ift = new StandTestProperties.Environment();
