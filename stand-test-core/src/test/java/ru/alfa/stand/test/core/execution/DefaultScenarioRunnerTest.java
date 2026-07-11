@@ -15,8 +15,15 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import ru.alfa.stand.test.core.context.ScenarioContext;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
@@ -57,6 +64,11 @@ class DefaultScenarioRunnerTest {
     private static EnvironmentRegistry iftRegistry() {
         return new InMemoryEnvironmentRegistry(
                 Map.of("ift", new EnvironmentDefinition("ift", Map.of(), Map.of(), Map.of(), Map.of())));
+    }
+
+    @AfterEach
+    void clearMdc() {
+        MDC.clear();
     }
 
     @Test
@@ -108,15 +120,19 @@ class DefaultScenarioRunnerTest {
     }
 
     @Test
-    @DisplayName("an assertion error thrown by an executor propagates unchanged")
-    void run_executorThrowsAssertionError_propagates() {
+    @DisplayName("an assertion error thrown by an executor is re-raised with the failing step's context and the original cause")
+    void run_executorThrowsAssertionError_isAnnotatedWithStepContext() {
         StandTestAssertionError thrown = new StandTestAssertionError("boom");
         DefaultScenarioRunner runner = runner(new FakeStepExecutor("fake.throw", (step, context) -> {
             throw thrown;
         }));
 
         assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.throw"))))
-                .isSameAs(thrown);
+                .isInstanceOf(StandTestAssertionError.class)
+                .hasMessageContaining("s1")
+                .hasMessageContaining("fake.throw")
+                .hasMessageContaining("boom")
+                .hasCause(thrown);
     }
 
     @Test
@@ -656,5 +672,54 @@ class DefaultScenarioRunnerTest {
         assertThat(testRunIds).hasSize(runs);
         assertThat(Set.copyOf(testRunIds)).as("every run's testRunId is unique").hasSize(runs);
         assertThat(Set.copyOf(correlationIds)).as("every run's correlationId is unique").hasSize(runs);
+    }
+
+    @Test
+    @DisplayName("scenario and step identity are stamped into the MDC during a step and restored after the run")
+    void run_stampsMdc_duringStep_andRestoresAfter() {
+        Map<String, String> seen = new java.util.HashMap<>();
+        FakeStepExecutor capturing = new FakeStepExecutor("fake.mdc", (step, context) -> {
+            for (String key : List.of("scenarioId", "testRunId", "correlationId", "environment", "stepId", "stepType", "stepIndex")) {
+                seen.put(key, MDC.get(key));
+            }
+            return StepResult.success(step.id(), step.type(), Instant.now(), Instant.now());
+        });
+
+        runner(capturing).run(scenario(GenericStep.of("s1", "fake.mdc")));
+
+        assertThat(seen.get("scenarioId")).isEqualTo("example-flow");
+        assertThat(seen.get("environment")).isEqualTo("ift");
+        assertThat(seen.get("stepId")).isEqualTo("s1");
+        assertThat(seen.get("stepType")).isEqualTo("fake.mdc");
+        assertThat(seen.get("stepIndex")).isEqualTo("1");
+        assertThat(seen.get("testRunId")).isNotBlank();
+        assertThat(seen.get("correlationId")).isNotBlank();
+        // The run must not leak MDC keys into the calling thread once it returns.
+        assertThat(MDC.get("scenarioId")).isNull();
+        assertThat(MDC.get("stepId")).isNull();
+    }
+
+    @Test
+    @DisplayName("a failing step logs a WARN line that names the step and states the reason")
+    void run_failingStep_logsStepContextAndReason() {
+        Logger runnerLogger = (Logger) LoggerFactory.getLogger(DefaultScenarioRunner.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        runnerLogger.addAppender(appender);
+        try {
+            DefaultScenarioRunner runner = runner(FakeStepExecutor.failing("fake.fail", "status was PENDING"));
+
+            assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.fail"))))
+                    .isInstanceOf(StandTestAssertionError.class);
+
+            assertThat(appender.list).anySatisfy(event -> {
+                assertThat(event.getLevel()).isEqualTo(Level.WARN);
+                assertThat(event.getFormattedMessage())
+                        .contains("Step [1/1] 's1' (fake.fail)")
+                        .contains("status was PENDING");
+            });
+        } finally {
+            runnerLogger.detachAppender(appender);
+        }
     }
 }

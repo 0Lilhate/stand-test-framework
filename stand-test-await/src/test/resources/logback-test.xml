@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Test-only Logback config for stand-test-await. Keeps unit-test output quiet (WARN and above) while
+  demonstrating the correlation pattern the SDK stamps into the MDC (plan §17). The awaiter's DEBUG
+  poll-tracing lines stay suppressed here (they carry metadata only) but remain capturable by a
+  ListAppender that raises the DefaultAwaiter logger to DEBUG in a test.
+-->
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} %-5level [scenarioId=%X{scenarioId} testRunId=%X{testRunId} correlationId=%X{correlationId} step=%X{stepId}/%X{stepType}] %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    <root level="WARN">
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>

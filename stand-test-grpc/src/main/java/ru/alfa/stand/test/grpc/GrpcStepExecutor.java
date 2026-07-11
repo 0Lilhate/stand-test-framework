@@ -3,6 +3,7 @@ package ru.alfa.stand.test.grpc;
 import com.jayway.jsonpath.DocumentContext;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
+import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -15,6 +16,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ru.alfa.stand.test.core.environment.CorrelationConfig;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
@@ -54,6 +57,8 @@ import ru.alfa.stand.test.core.variable.VariableResolver;
  * is raised as a {@link StandTestException} that preserves the gRPC status code.
  */
 public final class GrpcStepExecutor implements StepExecutor {
+
+    private static final Logger LOG = LoggerFactory.getLogger(GrpcStepExecutor.class);
 
     /**
      * Namespace prefix for this adapter's {@link ResourceScope} keys, so a gRPC target alias can never
@@ -136,9 +141,13 @@ public final class GrpcStepExecutor implements StepExecutor {
     }
 
     private String invoke(ManagedChannel channel, String methodFullName, String requestJson, Metadata metadata, long deadlineMillis, String targetAlias) {
+        LOG.debug("gRPC {} (deadline={} ms)", methodFullName, deadlineMillis);
         try {
-            return this.invoker.invokeUnary(channel, methodFullName, requestJson, metadata, deadlineMillis);
+            String responseJson = this.invoker.invokeUnary(channel, methodFullName, requestJson, metadata, deadlineMillis);
+            LOG.debug("gRPC {} -> status {}", methodFullName, Status.Code.OK);
+            return responseJson;
         } catch (StatusRuntimeException status) {
+            LOG.debug("gRPC {} -> status {}", methodFullName, status.getStatus().getCode());
             String description = (status.getStatus().getDescription() == null) ? "" : ": " + status.getStatus().getDescription();
             throw new StandTestException("gRPC call to '" + targetAlias + "' method '" + methodFullName + "' failed with status " + status.getStatus().getCode() + description, status);
         }

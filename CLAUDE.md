@@ -86,7 +86,9 @@ YAML DSL ────────────────┘                    
 - **The Java DSL is a lazy builder.** It assembles an immutable `Scenario` and executes nothing;
   imperative eager-IO in a fluent chain is forbidden because it would bypass the validator/guardrails.
 - **`stand-test-core` is the dependency-graph sink** — it depends on no sibling module and on no
-  adapter/IO library (JDK-only). It owns the generic model (`Scenario`/`ScenarioStep`), the SPI
+  adapter/IO library. Its one sanctioned external dependency is the logging facade `slf4j-api` (plan
+  §17: SLF4J + MDC) — a pure facade with no binding/IO, so the "JDK-only, no IO" invariant still holds
+  and the consumer supplies the binding. It owns the generic model (`Scenario`/`ScenarioStep`), the SPI
   (`ScenarioRunner`, `StepExecutor`, `StepExecutionContext`), value objects, result/event models,
   validation and exceptions. **Typed steps (`RestStep`/`KafkaStep`/…) and `StepExecutor`
   implementations live in the adapter modules**, never in core; the runner dispatches by

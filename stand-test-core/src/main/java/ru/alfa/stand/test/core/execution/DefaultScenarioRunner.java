@@ -1,12 +1,15 @@
 package ru.alfa.stand.test.core.execution;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ru.alfa.stand.test.core.compensation.CleanupPolicy;
 import ru.alfa.stand.test.core.compensation.CompensationOutcome;
 import ru.alfa.stand.test.core.compensation.CompensationReport;
@@ -48,20 +51,33 @@ import ru.alfa.stand.test.core.variable.VariableStore;
  * converted into a thrown failure with the same classification as the thrown path:
  * {@link StepStatus#FAILED}/{@link StepStatus#TIMEOUT} (an unmet expectation) become a
  * {@link StandTestAssertionError} and {@link StepStatus#BROKEN} (an infrastructure/configuration
- * problem) becomes a {@link StandTestException}. A thrown {@link AssertionError} propagates
- * as a test failure (recorded {@link StepStatus#FAILED}); a {@link StandTestException} propagates as an
- * infrastructure error and any other runtime exception is wrapped as a {@link StandTestException} (both
- * recorded {@link StepStatus#BROKEN}, so a reporting consumer can tell an unmet assertion from an
- * infrastructure problem). A successful run returns a {@link StepStatus#SUCCESS SUCCESS}
- * {@link ScenarioResult}.
+ * problem) becomes a {@link StandTestException}. A thrown {@link AssertionError} is re-raised as a
+ * {@link StandTestAssertionError} (recorded {@link StepStatus#FAILED}); a thrown or unexpected runtime
+ * failure is raised as a {@link StandTestException} (recorded {@link StepStatus#BROKEN}, so a reporting
+ * consumer can tell an unmet assertion from an infrastructure problem). In every case the runner
+ * annotates the failing step's context — {@code Step [index/total] 'id' (type)} — onto the thrown
+ * message and, via SLF4J {@code MDC} + log lines, into the logs (plan §17), so "which step failed and
+ * why" is visible without a reporting adapter; the original failure is kept as the cause. A successful
+ * run returns a {@link StepStatus#SUCCESS SUCCESS} {@link ScenarioResult}. (One documented exception: a
+ * {@link StandTestException} already thrown by a step's {@code prepare} phase — an adapter's own arming
+ * failure — is propagated unwrapped so its precise classification survives, but is still logged with the
+ * step context.)
  *
  * <p>Lifecycle reporting events ({@link ScenarioEvent}/{@link StepEvent}) are published throughout, so
- * a reporting adapter (Allure, later) sees the full run: every attempted step emits STARTED and
+ * a reporting adapter (Allure) sees the full run: every attempted step emits STARTED and
  * FINISHED events (including the no-executor and executor-thrown failure paths) with per-step
- * diagnostics. Publishing is best-effort — a throwing publisher is swallowed and never changes the test
- * outcome (a pre-run validation failure is rejected before the run starts and so emits no events).
+ * diagnostics. Publishing is best-effort — a throwing publisher is swallowed (logged at WARN) and never
+ * changes the test outcome (a pre-run validation failure is rejected before the run starts and so emits
+ * no events).
+ *
+ * <p><strong>Correlation in logs.</strong> Each run stamps {@code scenarioId}/{@code testRunId}/
+ * {@code correlationId}/{@code environment} into the {@code MDC} for the whole run and
+ * {@code stepId}/{@code stepType}/{@code stepIndex} for the duration of each step (see {@link MdcScope}),
+ * so every log line emitted while a step runs carries the correlation context.
  */
 public final class DefaultScenarioRunner implements ScenarioRunner {
+
+    private static final Logger LOG = LoggerFactory.getLogger(DefaultScenarioRunner.class);
 
     /** Synthetic step type used for the reporting events emitted during the compensation drain. */
     private static final String COMPENSATION_STEP_TYPE = "db.compensate";
@@ -137,46 +153,56 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
         StepExecutionContext executionContext = new StepExecutionContext(
                 context, new VariableStore(), environmentRegistry, reportingEventPublisher, resourceScope, undoLog);
 
+        List<ScenarioStep> steps = scenario.steps();
+        int total = steps.size();
         Instant startedAt = clock.instant();
-        publishScenario(context, ScenarioPhase.STARTED);
         List<StepResult> stepResults = new ArrayList<>();
         // primary is a LOCAL — never an instance field: this runner is a shared singleton invoked
         // concurrently, so per-run failure state must stay thread-confined (parallel isolation, plan §8.2).
         Throwable primary = null;
-        try {
-            prepareSteps(scenario, executionContext, context, stepResults);
-            for (ScenarioStep step : scenario.steps()) {
-                StepResult result = executeStep(step, executionContext, context, stepResults);
-                if (result.status() == StepStatus.BROKEN) {
-                    throw new StandTestException(failureMessage(step, result));
+        // The whole run is wrapped in an MDC scope so every log line — the SDK's, the adapters', and the
+        // system-under-test client's on this thread — carries scenarioId/testRunId/correlationId (plan §17).
+        // MdcScope restores the prior MDC on close, keeping concurrent runs isolated.
+        try (MdcScope scenarioScope = MdcScope.of(scenarioMdc(context))) {
+            publishScenario(context, ScenarioPhase.STARTED);
+            LOG.info("Scenario '{}' started: {} step(s), env={}", context.scenarioId(), total, context.environment());
+            try {
+                prepareSteps(scenario, total, executionContext, context, stepResults);
+                for (int index = 0; index < total; index++) {
+                    ScenarioStep step = steps.get(index);
+                    StepResult result = executeStep(step, index + 1, total, executionContext, context, stepResults);
+                    if (result.status() == StepStatus.BROKEN) {
+                        throw new StandTestException(failureMessage(index + 1, total, step, result));
+                    }
+                    if (result.status().isFailure()) {
+                        throw new StandTestAssertionError(failureMessage(index + 1, total, step, result));
+                    }
                 }
-                if (result.status().isFailure()) {
-                    throw new StandTestAssertionError(failureMessage(step, result));
+            } catch (RuntimeException | Error failure) {
+                // Capture the in-flight failure (the step loop throws StandTestException (RuntimeException) or
+                // StandTestAssertionError (extends Error)) so the finally can gate ON_FAILURE compensation and
+                // attach any cleanup failure as suppressed instead of masking it. Rethrown unchanged.
+                primary = failure;
+                throw failure;
+            } finally {
+                // Order is load-bearing: drain compensations while the run-scoped connection is still open,
+                // THEN close resources and publish FINISHED, and only as the final act decide whether a
+                // compensation failure fails a green run or is suppressed onto the in-flight failure. Never
+                // throw before closeQuietly/publish — that would leak the connection and break the report.
+                CompensationReport report = drainCompensations(undoLog, scenario.cleanupPolicy(), primary != null, context);
+                closeQuietly(resourceScope);
+                publishScenario(context, ScenarioPhase.FINISHED);
+                logScenarioFinished(context, primary != null || report.hasFailures(), primary, startedAt);
+                if (report.hasFailures()) {
+                    StandTestException cleanupFailure = compensationFailure(report);
+                    if (primary == null) {
+                        throw cleanupFailure;
+                    }
+                    primary.addSuppressed(cleanupFailure);
                 }
             }
-        } catch (RuntimeException | Error failure) {
-            // Capture the in-flight failure (the step loop throws StandTestException (RuntimeException) or
-            // StandTestAssertionError (extends Error)) so the finally can gate ON_FAILURE compensation and
-            // attach any cleanup failure as suppressed instead of masking it. Rethrown unchanged.
-            primary = failure;
-            throw failure;
-        } finally {
-            // Order is load-bearing: drain compensations while the run-scoped connection is still open,
-            // THEN close resources and publish FINISHED, and only as the final act decide whether a
-            // compensation failure fails a green run or is suppressed onto the in-flight failure. Never
-            // throw before closeQuietly/publish — that would leak the connection and break the report.
-            CompensationReport report = drainCompensations(undoLog, scenario.cleanupPolicy(), primary != null, context);
-            closeQuietly(resourceScope);
-            publishScenario(context, ScenarioPhase.FINISHED);
-            if (report.hasFailures()) {
-                StandTestException cleanupFailure = compensationFailure(report);
-                if (primary == null) {
-                    throw cleanupFailure;
-                }
-                primary.addSuppressed(cleanupFailure);
-            }
+            return ScenarioResult.from(context, stepResults, startedAt, clock.instant());
         }
-        return ScenarioResult.from(context, stepResults, startedAt, clock.instant());
     }
 
     /**
@@ -301,23 +327,33 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
      */
     private void prepareSteps(
             Scenario scenario,
+            int total,
             StepExecutionContext executionContext,
             ScenarioContext context,
             List<StepResult> stepResults) {
-        for (ScenarioStep step : scenario.steps()) {
+        List<ScenarioStep> steps = scenario.steps();
+        for (int index = 0; index < total; index++) {
+            ScenarioStep step = steps.get(index);
             StepExecutor executor = findExecutor(step.type());
             if (executor == null) {
                 continue;
             }
-            Instant start = clock.instant();
-            try {
-                executor.prepare(step, executionContext);
-            } catch (StandTestException alreadyClassified) {
-                recordPrepareFailure(step, start, context, stepResults, alreadyClassified);
-                throw alreadyClassified;
-            } catch (RuntimeException unexpected) {
-                recordPrepareFailure(step, start, context, stepResults, unexpected);
-                throw new StandTestException("Step '" + step.id() + "' (" + step.type() + ") failed to prepare", unexpected);
+            try (MdcScope stepScope = MdcScope.of(stepMdc(step, index + 1))) {
+                Instant start = clock.instant();
+                try {
+                    executor.prepare(step, executionContext);
+                } catch (StandTestException alreadyClassified) {
+                    recordPrepareFailure(step, start, context, stepResults, alreadyClassified);
+                    // Already classified by the adapter — propagated unwrapped so its precise diagnosis
+                    // survives; the step context still reaches the operator through this log line.
+                    LOG.error("{} failed to prepare: {}", stepLabel(index + 1, total, step), safeMessage(alreadyClassified), alreadyClassified);
+                    throw alreadyClassified;
+                } catch (RuntimeException unexpected) {
+                    recordPrepareFailure(step, start, context, stepResults, unexpected);
+                    String message = stepLabel(index + 1, total, step) + " failed to prepare";
+                    LOG.error("{}", message, unexpected);
+                    throw new StandTestException(message, unexpected);
+                }
             }
         }
     }
@@ -339,39 +375,51 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
             // Closing run-scoped resources is best-effort in the finally block: a faulty close must never
             // mask the real test outcome (a thrown step failure), fail an otherwise-passing run, or skip the
             // FINISHED publish that follows. Throwable (not just RuntimeException) is swallowed so an Error
-            // from a resource's close() cannot alter the outcome either. Becomes a WARN log once SLF4J is
-            // wired (plan §17).
+            // from a resource's close() cannot alter the outcome either — but it is logged at WARN (plan §17).
+            LOG.warn("Failed to close run-scoped resources (best-effort, ignored)", closeFailure);
         }
     }
 
     private StepResult executeStep(
             ScenarioStep step,
+            int index,
+            int total,
             StepExecutionContext executionContext,
             ScenarioContext context,
             List<StepResult> stepResults) {
-        publishStep(context, step, StepPhase.STARTED, null, null, Map.of(), List.of());
-        Instant start = clock.instant();
-        StepResult result;
-        try {
-            StepExecutor executor = resolveExecutor(step);
-            result = executor.execute(step, executionContext);
-            Objects.requireNonNull(result, "step executor returned a null result for step '" + step.id() + "'");
-        } catch (AssertionError assertionFailure) {
-            recordFailure(step, start, context, stepResults, StepStatus.FAILED, assertionFailure);
-            throw assertionFailure;
-        } catch (StandTestException infraFailure) {
-            recordFailure(step, start, context, stepResults, StepStatus.BROKEN, infraFailure);
-            throw infraFailure;
-        } catch (RuntimeException unexpected) {
-            recordFailure(step, start, context, stepResults, StepStatus.BROKEN, unexpected);
-            throw new StandTestException("Step '" + step.id() + "' (" + step.type() + ") failed unexpectedly", unexpected);
+        try (MdcScope stepScope = MdcScope.of(stepMdc(step, index))) {
+            publishStep(context, step, StepPhase.STARTED, null, null, Map.of(), List.of());
+            LOG.debug("{} starting", stepLabel(index, total, step));
+            Instant start = clock.instant();
+            StepResult result;
+            try {
+                StepExecutor executor = resolveExecutor(step);
+                result = executor.execute(step, executionContext);
+                Objects.requireNonNull(result, "step executor returned a null result for step '" + step.id() + "'");
+            } catch (AssertionError assertionFailure) {
+                recordFailure(step, start, context, stepResults, StepStatus.FAILED, assertionFailure);
+                String message = stepLabel(index, total, step) + " FAILED: " + safeMessage(assertionFailure);
+                LOG.warn("{}", message);
+                throw new StandTestAssertionError(message, assertionFailure);
+            } catch (StandTestException infraFailure) {
+                recordFailure(step, start, context, stepResults, StepStatus.BROKEN, infraFailure);
+                String message = stepLabel(index, total, step) + " BROKEN: " + safeMessage(infraFailure);
+                LOG.error("{}", message, infraFailure);
+                throw new StandTestException(message, infraFailure);
+            } catch (RuntimeException unexpected) {
+                recordFailure(step, start, context, stepResults, StepStatus.BROKEN, unexpected);
+                String message = stepLabel(index, total, step) + " failed unexpectedly";
+                LOG.error("{}", message, unexpected);
+                throw new StandTestException(message, unexpected);
+            }
+            // The executor returned normally. Recording and the FINISHED event happen OUTSIDE the try above
+            // so that a failure of the (best-effort) reporting publisher can never reclassify a passing step
+            // as failed or add a duplicate StepResult (plan §17: reporting is a side-channel).
+            stepResults.add(result);
+            publishStep(context, step, StepPhase.FINISHED, result.status(), result.errorMessage(), result.diagnostics(), result.attachments());
+            logStepOutcome(index, total, step, result);
+            return result;
         }
-        // The executor returned normally. Recording and the FINISHED event happen OUTSIDE the try above
-        // so that a failure of the (best-effort) reporting publisher can never reclassify a passing step
-        // as failed or add a duplicate StepResult (plan §17: reporting is a side-channel).
-        stepResults.add(result);
-        publishStep(context, step, StepPhase.FINISHED, result.status(), result.errorMessage(), result.diagnostics(), result.attachments());
-        return result;
     }
 
     /**
@@ -388,7 +436,7 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
             List<StepResult> stepResults,
             StepStatus status,
             Throwable cause) {
-        String message = (cause.getMessage() == null) ? cause.toString() : cause.getMessage();
+        String message = safeMessage(cause);
         Map<String, Object> diagnostics = Map.of("exception.class", cause.getClass().getName());
         StepResult failed = new StepResult(step.id(), step.type(), status, start, clock.instant(), message, diagnostics);
         stepResults.add(failed);
@@ -451,7 +499,8 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
             reportingEventPublisher.publish(event);
         } catch (RuntimeException reportingFailure) {
             // Reporting is a best-effort side-channel (plan §17): a publisher failure must never change
-            // the test outcome. Swallowed here; becomes a WARN log once SLF4J is wired.
+            // the test outcome. Swallowed here, but logged at WARN.
+            LOG.warn("Reporting publisher failed for a scenario event (best-effort, ignored)", reportingFailure);
         }
     }
 
@@ -460,13 +509,73 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
             reportingEventPublisher.publish(event);
         } catch (RuntimeException reportingFailure) {
             // Reporting is a best-effort side-channel (plan §17): a publisher failure must never change
-            // the test outcome. Swallowed here; becomes a WARN log once SLF4J is wired.
+            // the test outcome. Swallowed here, but logged at WARN.
+            LOG.warn("Reporting publisher failed for a step event (best-effort, ignored)", reportingFailure);
         }
     }
 
-    private static String failureMessage(ScenarioStep step, StepResult result) {
-        String base = "Step '" + step.id() + "' (" + step.type() + ") " + result.status();
+    private static String failureMessage(int index, int total, ScenarioStep step, StepResult result) {
+        String base = stepLabel(index, total, step) + " " + result.status();
         String message = result.errorMessage();
         return (message == null) ? base : base + ": " + message;
+    }
+
+    /**
+     * The single human-readable label for a step, used identically in log lines and thrown-exception
+     * messages so "which step" reads the same everywhere: {@code Step [index/total] 'id' (type)}.
+     */
+    private static String stepLabel(int index, int total, ScenarioStep step) {
+        return "Step [" + index + "/" + total + "] '" + step.id() + "' (" + step.type() + ")";
+    }
+
+    private static String safeMessage(Throwable cause) {
+        return (cause.getMessage() == null) ? cause.toString() : cause.getMessage();
+    }
+
+    private static Map<String, String> scenarioMdc(ScenarioContext context) {
+        return Map.of(
+                MdcScope.SCENARIO_ID, context.scenarioId().value(),
+                MdcScope.TEST_RUN_ID, context.testRunId().value(),
+                MdcScope.CORRELATION_ID, context.correlationId().value(),
+                MdcScope.ENVIRONMENT, context.environment());
+    }
+
+    private static Map<String, String> stepMdc(ScenarioStep step, int index) {
+        return Map.of(
+                MdcScope.STEP_ID, step.id(),
+                MdcScope.STEP_TYPE, step.type(),
+                MdcScope.STEP_INDEX, Integer.toString(index));
+    }
+
+    /**
+     * Logs the outcome of a step that returned normally: DEBUG on success, WARN for a returned
+     * FAILED/TIMEOUT (unmet expectation) and ERROR for a returned BROKEN (infrastructure) result. A step
+     * that threw is logged at its catch site instead, so each step logs its outcome exactly once.
+     */
+    private void logStepOutcome(int index, int total, ScenarioStep step, StepResult result) {
+        String label = stepLabel(index, total, step);
+        long durationMs = result.duration().toMillis();
+        if (!result.status().isFailure()) {
+            LOG.debug("{} {} in {} ms", label, result.status(), durationMs);
+            return;
+        }
+        String reason = (result.errorMessage() == null) ? "" : ": " + result.errorMessage();
+        String message = label + " " + result.status() + reason;
+        if (result.status() == StepStatus.BROKEN) {
+            LOG.error("{}", message);
+        } else {
+            LOG.warn("{}", message);
+        }
+    }
+
+    private void logScenarioFinished(ScenarioContext context, boolean failed, Throwable primary, Instant startedAt) {
+        long durationMs = Duration.between(startedAt, clock.instant()).toMillis();
+        if (!failed) {
+            LOG.info("Scenario '{}' finished: SUCCESS ({} ms)", context.scenarioId(), durationMs);
+        } else if (primary != null) {
+            LOG.warn("Scenario '{}' finished: FAILED ({} ms): {}", context.scenarioId(), durationMs, safeMessage(primary));
+        } else {
+            LOG.warn("Scenario '{}' finished: FAILED ({} ms): test-data compensation failed", context.scenarioId(), durationMs);
+        }
     }
 }

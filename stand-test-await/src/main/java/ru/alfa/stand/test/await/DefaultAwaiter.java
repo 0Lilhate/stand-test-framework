@@ -5,6 +5,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ru.alfa.stand.test.core.exception.StandTestException;
 
 /**
@@ -20,6 +22,8 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  * arithmetic, per the {@link System#nanoTime()} contract.
  */
 public final class DefaultAwaiter implements Awaiter {
+
+    private static final Logger LOG = LoggerFactory.getLogger(DefaultAwaiter.class);
 
     private final TimeSource timeSource;
 
@@ -58,6 +62,7 @@ public final class DefaultAwaiter implements Awaiter {
                 T observed = probe.get();
                 lastValue = observed;
                 if (condition.test(observed)) {
+                    LOG.debug("await '{}' resolved in {} attempt(s)", policy.description(), attempts);
                     return AwaitResult.satisfied(observed, attempts, elapsedSince(start));
                 }
             } catch (RuntimeException ex) {
@@ -66,6 +71,8 @@ public final class DefaultAwaiter implements Awaiter {
                 }
                 lastError = ex;
             }
+            // Metadata only: the polled value and any error can carry sensitive payloads, so they are never logged.
+            LOG.debug("await '{}' attempt {}: not satisfied", policy.description(), attempts);
             long now = timeSource.nanoTime();
             if (now - deadline >= 0) {
                 break;
@@ -74,6 +81,7 @@ public final class DefaultAwaiter implements Awaiter {
         }
 
         Duration elapsed = elapsedSince(start);
+        LOG.debug("await '{}' timed out: {} attempt(s), elapsed {}, pollInterval {}, lastError {}", policy.description(), attempts, elapsed, policy.pollInterval(), lastError == null ? "none" : lastError.getClass().getSimpleName());
         TimeoutDiagnostics diagnostics = new TimeoutDiagnostics(
                 policy.description(), policy.timeout(), policy.pollInterval(), attempts, elapsed, lastValue, render(lastError), Map.of());
         return AwaitResult.timedOut(lastValue, attempts, elapsed, lastError, diagnostics);

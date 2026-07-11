@@ -8,6 +8,12 @@ checkstyle = "10.18.2"
 junit = "5.11.4"
 assertj = "3.26.3"
 jacoco = "0.8.15"
+# SLF4J is the SDK's logging facade (plan §17): every module logs through `slf4j-api` (a pure facade,
+# no binding, no IO). The published SDK ships ONLY the facade — the consumer supplies the binding
+# (Logback via Spring Boot, etc.), so there is never a multiple-bindings clash. Logback is TEST-ONLY:
+# it gives the build a working MDCAdapter plus a capturable ListAppender for asserting log output.
+slf4j = "2.0.16"
+logback = "1.5.12"
 # stand-test-rest adapter: mature HTTP client (Spring WebClient, plan §4) + JSONPath.
 # spring-webflux is used with the JDK HttpClient connector (JdkClientHttpConnector), so
 # reactor-netty is deliberately NOT pulled in; json-path uses the json-smart provider (no Jackson).
@@ -55,6 +61,10 @@ junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 junit-platform-testkit = { module = "org.junit.platform:junit-platform-testkit" }
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+# Test-only binding: provides a functional MDCAdapter and ch.qos.logback.core.read.ListAppender so
+# tests can capture and assert emitted log lines. Never a runtime dependency of any published module.
+logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 spring-webflux = { module = "org.springframework:spring-webflux", version.ref = "springWebflux" }
 json-path = { module = "com.jayway.jsonpath:json-path", version.ref = "jsonPath" }
 kafka-clients = { module = "org.apache.kafka:kafka-clients", version.ref = "kafkaClients" }

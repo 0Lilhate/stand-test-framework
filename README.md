@@ -182,6 +182,33 @@ above enforce the write/expect side; scope your reads too). Recommended pilot: s
 in-memory tests, then opt in adapter tests, then a small parallel factor against a stand, watching for
 timeout diagnostics before widening `dynamic.factor`.
 
+## Logging
+
+The SDK logs through **SLF4J** and ships **only the facade** (`slf4j-api`) — you supply the binding
+(Logback via Spring Boot, `slf4j-simple`, etc.) and control levels/format, so there is no
+multiple-bindings clash.
+
+Every run stamps correlation ids into the **MDC** so each log line — the SDK's, the adapters', and your
+own test-thread code during the run — carries them:
+
+| MDC key | scope | example |
+|---|---|---|
+| `scenarioId` / `testRunId` / `correlationId` / `environment` | whole run | `full-framework-example` / uuid / uuid / `ift` |
+| `stepId` / `stepType` / `stepIndex` | current step | `create-request` / `rest.post` / `1` |
+
+Levels: **INFO** — scenario start/finish; **DEBUG** — per-step start/success (+ duration) and per-adapter
+request/response/await traces; **WARN** — a failed assertion (`FAILED`/`TIMEOUT`) and best-effort hiccups
+(resource close, a throwing reporting publisher); **ERROR** — an infrastructure/unexpected step failure
+(`BROKEN`). A failure names the step the same way in the log and in the thrown exception:
+`Step [2/6] 'seed-order' (db.seed) FAILED: <reason>`. Adapter DEBUG traces are **metadata only** — never
+request/response bodies, headers/`Authorization`, message keys/values, SQL text or bound values, or secret
+references.
+
+A ready-to-copy consumer config lives at
+[`stand-test-example/src/test/resources/logback-test.xml`](stand-test-example/src/test/resources/logback-test.xml)
+(pattern with `%X{scenarioId}`/`%X{stepId}`, `ru.alfa.stand.test` at DEBUG). Run
+`./gradlew :stand-test-example:test` to see the correlated output for a full REST→DB→gRPC scenario.
+
 ## Build
 
 ```bash

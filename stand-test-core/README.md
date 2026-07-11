@@ -5,7 +5,9 @@
 `stand-test-core` is the foundation of the stand-test SDK. It contains **only** immutable models,
 value objects, contracts and SPI — the canonical `Scenario Model` that both the Java DSL and the
 (future) YAML DSL converge to. It is the single sink of the dependency graph: it depends on **no
-sibling module** and on **no adapter / IO library**.
+sibling module** and on **no adapter / IO library**. The one sanctioned external dependency is the
+logging facade `slf4j-api` (plan §17) — a pure facade with no binding and no IO, so "core performs no
+IO" still holds; the consumer supplies the SLF4J binding.
 
 > ⚠️ **No REST / Kafka / DB / gRPC / JUnit / Allure / YAML / Spring logic lives here.** This module
 > performs no IO. Transports and reporting are implemented by the adapter modules, which depend on

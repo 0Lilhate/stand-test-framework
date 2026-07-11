@@ -48,6 +48,10 @@ dependencies {
     testImplementation(libs.assertj.core)
     testImplementation(libs.h2)
     testRuntimeOnly(libs.junit.platform.launcher)
+    // The SDK ships only the SLF4J facade; the CONSUMER supplies a binding. The example plays the
+    // consumer: Logback (test-only) turns the SDK's scenario/step/adapter logs and MDC correlation
+    // (scenarioId/testRunId/correlationId/stepId) into visible console output — see logback-test.xml.
+    testRuntimeOnly(libs.logback.classic)
 }
 
 // env-ref wiring for the doubles. DB: DbStepExecutor's no-arg form resolves datasource refs from the

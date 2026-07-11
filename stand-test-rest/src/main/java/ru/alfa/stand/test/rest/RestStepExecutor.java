@@ -15,6 +15,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ru.alfa.stand.test.await.AwaitPolicy;
 import ru.alfa.stand.test.await.AwaitResult;
 import ru.alfa.stand.test.await.Awaiter;
@@ -48,6 +51,8 @@ import ru.alfa.stand.test.core.variable.VariableStore;
  * unresolved base URL, transport error, missing variable) is raised as a {@link StandTestException}.
  */
 public final class RestStepExecutor implements StepExecutor {
+
+    private static final Logger LOG = LoggerFactory.getLogger(RestStepExecutor.class);
 
     private static final String AUTHORIZATION_HEADER = "Authorization";
 
@@ -116,7 +121,10 @@ public final class RestStepExecutor implements StepExecutor {
         if (RestStepParameters.EXPECT_EVENTUALLY_TYPE.equals(step.type())) {
             return executeExpectEventually(step, startedAt, parameters, request, expectedStatus, assertions, captures, context);
         }
+        LOG.debug("REST {} {}", request.method(), request.path());
+        final Instant sentAt = Instant.now();
         RestResponse response = this.httpCaller.execute(request);
+        LOG.debug("REST {} {} -> {} in {} ms", request.method(), request.path(), response.statusCode(), Duration.between(sentAt, Instant.now()).toMillis());
         String mismatch = firstMismatch(expectedStatus, assertions, response, request);
         if (mismatch != null) {
             throw new StandTestAssertionError(mismatch);
@@ -140,13 +148,21 @@ public final class RestStepExecutor implements StepExecutor {
         // an unreachable service is an infrastructure problem, not an unmet expectation. An HTTP 5xx
         // is NOT an exception (the caller returns the response), so transient error statuses are
         // polled through until the expectations hold or the timeout expires.
+        AtomicInteger attempt = new AtomicInteger();
         AwaitResult<PollProbe> result = this.awaiter.await(
                 policy,
-                () -> probe(request, expectedStatus, assertions),
+                () -> {
+                    PollProbe polled = probe(request, expectedStatus, assertions);
+                    LOG.debug("REST poll #{} {} {} -> {}", attempt.incrementAndGet(), request.method(), request.path(), polled.response().statusCode());
+                    return polled;
+                },
                 observed -> observed.mismatch() == null);
-        PollProbe last = result.orElseThrow(diagnostics -> new StandTestAssertionError(
-                "rest.expectEventually '" + service + " " + request.path() + "' did not observe the expected response: " + diagnostics.summary()
-                        + " (service=" + service + ", path=" + request.path() + ")"));
+        PollProbe last = result.orElseThrow(diagnostics -> {
+            LOG.debug("REST poll {} {} timed out: {}", request.method(), request.path(), diagnostics.summary());
+            return new StandTestAssertionError(
+                    "rest.expectEventually '" + service + " " + request.path() + "' did not observe the expected response: " + diagnostics.summary()
+                            + " (service=" + service + ", path=" + request.path() + ")");
+        });
         if (!captures.isEmpty()) {
             applyCaptures(captures, parse(last.response().body()), context.variableStore());
         }

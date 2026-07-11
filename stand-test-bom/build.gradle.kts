@@ -36,6 +36,10 @@ dependencies {
     api(project(":stand-test-config"))
     api(project(":stand-test-spring-boot-starter"))
 
+    // Logging facade every SDK module compiles against (plan §17). Constrained so a consumer's binding
+    // resolves against the same slf4j-api the SDK was built with; the binding itself is the consumer's.
+    api(libs.slf4j.api)
+
     // Curated third-party versions the adapters are built and tested against.
     api(libs.spring.webflux)
     api(libs.json.path)

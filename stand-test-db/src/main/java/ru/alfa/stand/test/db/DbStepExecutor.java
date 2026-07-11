@@ -16,6 +16,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ru.alfa.stand.test.await.AwaitPolicy;
 import ru.alfa.stand.test.await.AwaitResult;
 import ru.alfa.stand.test.await.Awaiter;
@@ -65,6 +67,8 @@ import ru.alfa.stand.test.core.variable.VariableResolver;
  */
 public final class DbStepExecutor implements StepExecutor {
 
+    private static final Logger LOG = LoggerFactory.getLogger(DbStepExecutor.class);
+
     private static final String CONNECTION_KEY_PREFIX = "db.datasource:";
     private static final int TIMEOUT_RENDER_LIMIT = 200;
 
@@ -107,6 +111,11 @@ public final class DbStepExecutor implements StepExecutor {
         String datasourceAlias = DbStepParameters.requireString(parameters, DbStepParameters.DATASOURCE);
         DatasourceDefinition datasource = datasource(context, datasourceAlias);
         String finalSql = assembleSql(parameters);
+        if (LOG.isDebugEnabled()) {
+            // Metadata only: the classified SQL keyword (SELECT/INSERT/UPDATE/DELETE) and the logical
+            // datasource alias — never the SQL text, bound values, result rows, JDBC URL or credentials.
+            LOG.debug("DB {} on datasource '{}'", SqlStatementClassifier.classify(finalSql).leadingKeyword(), datasourceAlias);
+        }
         if (operation == DbOperation.WRITE) {
             return executeBusinessWrite(step, parameters, datasource, datasourceAlias, context, finalSql);
         }
@@ -169,6 +178,7 @@ public final class DbStepExecutor implements StepExecutor {
         } catch (SQLException failure) {
             throw new StandTestException("db.write failed on datasource '" + datasourceAlias + "': " + failure.getMessage(), failure);
         }
+        LOG.debug("DB {} on datasource '{}' -> {} row(s)", classification.leadingKeyword(), datasourceAlias, rowsAffected);
         String qualifiedTable = classification.writeSchema() + "." + classification.writeTable();
         // Register the undo only if the INSERT actually created a row: a 0-row write has nothing to
         // compensate, and arming a DELETE by the bound PK could otherwise remove a pre-existing row.
@@ -244,6 +254,9 @@ public final class DbStepExecutor implements StepExecutor {
             rowsAffected = prepared.executeUpdate();
         } catch (SQLException failure) {
             throw new StandTestException(operation.stepType() + " failed on datasource '" + datasourceAlias + "': " + failure.getMessage(), failure);
+        }
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("DB {} on datasource '{}' -> {} row(s)", SqlStatementClassifier.classify(finalSql).leadingKeyword(), datasourceAlias, rowsAffected);
         }
         return writeSuccess(step, operation, startedAt, datasourceAlias, rowsAffected);
     }

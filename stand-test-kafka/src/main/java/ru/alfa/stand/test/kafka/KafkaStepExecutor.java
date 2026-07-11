@@ -24,6 +24,8 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.internals.RecordHeader;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ru.alfa.stand.test.await.AwaitPolicy;
 import ru.alfa.stand.test.await.AwaitResult;
 import ru.alfa.stand.test.await.Awaiter;
@@ -69,6 +71,8 @@ import ru.alfa.stand.test.core.variable.VariableResolver;
  * REST adapter's HEADER-only injection.
  */
 public final class KafkaStepExecutor implements StepExecutor {
+
+    private static final Logger LOG = LoggerFactory.getLogger(KafkaStepExecutor.class);
 
     // Mode (a) of plan §4: the blocking consumer.poll(pollTimeout) carries the pause, so the await
     // poll interval is kept near-zero (AwaitPolicy forbids exactly zero) rather than adding a second,
@@ -206,6 +210,7 @@ public final class KafkaStepExecutor implements StepExecutor {
             MessageAssertions.verify(assertions, document);
             MessageAssertions.applyCaptures(captures, document, context.variableStore());
         }
+        LOG.debug("Kafka expect on topic '{}': messagesSeen={}", topicAlias, armed.messagesSeen());
         return expectSuccess(step, startedAt, topicAlias, armed, record);
     }
 
@@ -230,6 +235,7 @@ public final class KafkaStepExecutor implements StepExecutor {
         } catch (RuntimeException failure) {
             throw new StandTestException("Failed to arm Kafka consumer for topic '" + topicAlias + "'", failure);
         }
+        LOG.debug("Kafka armed consumer for topic '{}' partition(s) {}", topicAlias, armed.partitions());
     }
 
     private ArmedConsumer armedConsumer(StepExecutionContext context, String topicAlias) {
@@ -331,6 +337,7 @@ public final class KafkaStepExecutor implements StepExecutor {
     }
 
     private RecordMetadata send(ResolvedKafkaCluster cluster, String topicAlias, String topic, String key, String value, Map<String, String> headers) {
+        LOG.debug("Kafka produce to topic '{}'", topic);
         List<Header> recordHeaders = new ArrayList<>();
         headers.forEach((name, headerValue) -> recordHeaders.add(new RecordHeader(name, headerValue.getBytes(StandardCharsets.UTF_8))));
         ProducerRecord<String, String> record = new ProducerRecord<>(topic, null, key, value, recordHeaders);
@@ -394,6 +401,7 @@ public final class KafkaStepExecutor implements StepExecutor {
     }
 
     private static StandTestAssertionError timeout(TimeoutDiagnostics diagnostics, String topicAlias, ArmedConsumer armed, String correlationHeaderName, String correlationId, String key) {
+        LOG.debug("Kafka expect on topic '{}': no message matched, messagesSeen={}", topicAlias, armed.messagesSeen());
         return new StandTestAssertionError("kafka.expect '" + topicAlias + "' did not receive a matching message: " + diagnostics.summary()
                 + " (realTopic=" + armed.realTopic() + ", partitions=" + armed.partitions() + ", messagesSeen=" + armed.messagesSeen()
                 + ", selection=[correlationId=" + correlationId + ", key=" + key + "]"

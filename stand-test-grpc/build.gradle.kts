@@ -31,6 +31,7 @@ dependencies {
     implementation(libs.protobuf.java)
     implementation(libs.protobuf.java.util)
     implementation(libs.json.path)
+    implementation(libs.slf4j.api)
 
     runtimeOnly(libs.grpc.netty.shaded)
 
@@ -38,5 +39,6 @@ dependencies {
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
     testImplementation(libs.grpc.inprocess)
+    testImplementation(libs.logback.classic)
     testRuntimeOnly(libs.junit.platform.launcher)
 }

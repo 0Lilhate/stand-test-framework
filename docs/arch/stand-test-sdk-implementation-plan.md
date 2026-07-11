@@ -1302,6 +1302,32 @@ testImplementation("ru.alfa.stand.test:stand-test-allure")
 - **Allure-адаптер потребляет reporting events**, а не захардкожен в core (см.
   [§8.5](#85-module-ownership-validator-runner-step-executor-spi-standclient)).
 
+### 17.1. Реализация (статус: сделано)
+
+- **Facade и binding.** Каждый модуль компилируется против `slf4j-api` (в каталоге `libs.slf4j.api`,
+  версия закреплена в `stand-test-bom`). SDK **не поставляет binding** — потребитель подключает свой
+  (Logback через Spring Boot и т.п.), поэтому конфликта multiple-bindings нет. В тестах используется
+  ровно один binding — `logback-classic` (test-scope), он же даёт рабочий `MDCAdapter` и `ListAppender`
+  для проверки строк логов.
+- **MDC.** `DefaultScenarioRunner` через `MdcScope` (snapshot/restore, безопасно при параллельных
+  прогонах) проставляет `scenarioId`/`testRunId`/`correlationId`/`environment` на весь прогон и
+  `stepId`/`stepType`/`stepIndex` на время каждого шага, так что любая строка лога (SDK, адаптеров и
+  клиентского кода на том же потоке) несёт корреляцию.
+- **Единый формат «какой шаг».** Лейбл `Step [index/total] 'id' (type)` используется одинаково в строках
+  логов и в тексте бросаемого исключения. Уровни: `INFO` — старт/итог сценария; `DEBUG` — старт/успех
+  шага (+ длительность) и per-adapter трейс запросов/ответов и попыток await; `WARN` — провал-ассерт
+  (FAILED/TIMEOUT) и best-effort сбои (close/reporting-publisher); `ERROR` — инфраструктурный/непредвиденный
+  провал шага (BROKEN, со стектрейсом причины). Три бывших TODO-«глушилки» (`closeQuietly`, `publish×2`)
+  подключены к `WARN`.
+- **Не логировать secrets — соблюдено.** Адаптерный `DEBUG` пишет только метаданные: REST — метод/путь/
+  статус/латентность (никаких тел/заголовков/`Authorization`); Kafka — топик/partition/`messagesSeen`
+  (никаких key/value/headers); DB — классифицированную операцию/логический алиас/row-count (никакого SQL,
+  bound-значений, JDBC URL); gRPC — full method/deadline/`Status` (без тел сообщений); await — описание/
+  номер попытки/elapsed и только КЛАСС последней ошибки (никогда `lastValue` и `TimeoutDiagnostics.summary()`
+  дословно). У каждого адаптера есть фокус-тест, проверяющий отсутствие утечки. `stand-test-example` играет
+  роль потребителя: его `logback-test.xml` (DEBUG для `ru.alfa.stand.test`) демонстрирует корреляцию в
+  выводе.
+
 ---
 
 ## 18. Definition of Done
