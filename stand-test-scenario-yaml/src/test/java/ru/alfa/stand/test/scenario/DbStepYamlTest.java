@@ -98,6 +98,24 @@ class DbStepYamlTest {
     }
 
     @Test
+    @DisplayName("db.seed maps taggedByTestRunId to the internal seed tag-column key (parallel isolation, plan §15)")
+    void seed_mapsTaggedByTestRunId() {
+        Scenario scenario = parser.parse("""
+                id: flow
+                env: ift
+                given:
+                  - db.seed:
+                      datasource: mainDb
+                      sql: INSERT INTO test_data.orders(id, test_run_id) VALUES (:id, :testRunId)
+                      params:
+                        id: order-1
+                      taggedByTestRunId: test_run_id
+                """);
+
+        assertThat(params(scenario, 0)).containsEntry("seedTestRunIdColumn", "test_run_id");
+    }
+
+    @Test
     @DisplayName("a floating-point duration is rejected rather than silently truncated")
     void floatDuration_isRejected() {
         assertThatThrownBy(() -> parser.parse("""

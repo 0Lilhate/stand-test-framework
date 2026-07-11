@@ -40,6 +40,7 @@ final class YamlStepKeys {
     static final String SQL_RESOURCE = StepParameterKeys.SQL_RESOURCE;
     static final String PARAMS = StepParameterKeys.PARAMS;
     static final String WHERE_TEST_RUN_ID_COLUMN = StepParameterKeys.WHERE_TEST_RUN_ID_COLUMN;
+    static final String SEED_TEST_RUN_ID_COLUMN = StepParameterKeys.SEED_TEST_RUN_ID_COLUMN;
     static final String POLL_INTERVAL_MILLIS = StepParameterKeys.POLL_INTERVAL_MILLIS;
 
     static final String TARGET = StepParameterKeys.TARGET;

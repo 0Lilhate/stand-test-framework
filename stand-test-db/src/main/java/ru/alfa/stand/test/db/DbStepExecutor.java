@@ -11,9 +11,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import ru.alfa.stand.test.await.AwaitPolicy;
 import ru.alfa.stand.test.await.AwaitResult;
 import ru.alfa.stand.test.await.Awaiter;
@@ -105,8 +107,12 @@ public final class DbStepExecutor implements StepExecutor {
         String datasourceAlias = DbStepParameters.requireString(parameters, DbStepParameters.DATASOURCE);
         DatasourceDefinition datasource = datasource(context, datasourceAlias);
         String finalSql = assembleSql(parameters);
+        if (operation == DbOperation.WRITE) {
+            return executeBusinessWrite(step, parameters, datasource, datasourceAlias, context, finalSql);
+        }
         boolean testRunIdPredicateDeclared = DbStepParameters.optionalString(parameters, DbStepParameters.WHERE_TEST_RUN_ID_COLUMN).isPresent();
-        DbWriteGuard.classifyAndEnforce(finalSql, operation, datasource, testRunIdPredicateDeclared);
+        String seedTestRunIdColumn = DbStepParameters.optionalString(parameters, DbStepParameters.SEED_TEST_RUN_ID_COLUMN).orElse(null);
+        DbWriteGuard.classifyAndEnforce(finalSql, operation, datasource, testRunIdPredicateDeclared, seedTestRunIdColumn);
         Map<String, Object> binds = binds(parameters, context);
         RunScopedConnection connection = connection(context, datasource, datasourceAlias);
         if (operation == DbOperation.QUERY) {
@@ -116,6 +122,60 @@ public final class DbStepExecutor implements StepExecutor {
             return executeExpect(step, parameters, finalSql, binds, datasourceAlias, connection);
         }
         return executeWrite(step, operation, finalSql, binds, datasourceAlias, connection);
+    }
+
+    /**
+     * Executes a {@code db.write} business INSERT and registers a primary-key-scoped
+     * {@link DbCompensator} into the run's undo-log, so the row is deleted after the run per the scenario's
+     * {@code CleanupPolicy}. The guard runs before any IO ({@code db.write} lane — no {@code testRunId}
+     * marker; row identity is the primary key). The MVP captures the primary-key value(s) from the bound
+     * {@code :<column>} params (a DB-generated identity key is not yet supported and fails closed here).
+     */
+    private StepResult executeBusinessWrite(
+            ScenarioStep step,
+            Map<String, Object> parameters,
+            DatasourceDefinition datasource,
+            String datasourceAlias,
+            StepExecutionContext context,
+            String finalSql) {
+        SqlClassification classification = DbWriteGuard.classifyAndEnforceBusinessWrite(finalSql, datasource);
+        List<String> pkColumns = DbStepParameters.identifiedBy(parameters);
+        if (pkColumns.isEmpty()) {
+            throw new StandTestException("db.write on '" + datasourceAlias + "' requires identifiedBy(...) so its INSERT can be undone by primary key");
+        }
+        Set<String> insertColumns = SqlStatementClassifier.insertColumns(finalSql);
+        Map<String, Object> binds = binds(parameters, context);
+        Map<String, Object> pkValues = new LinkedHashMap<>();
+        for (String column : pkColumns) {
+            // The primary-key column must actually be inserted (present in the INSERT column list) AND its
+            // value must be bound as :<column>, so the captured value is the one written into that column.
+            // This is the MVP's positional-capture safeguard; full VALUES-tuple parsing is staged.
+            if (!insertColumns.contains(column.toLowerCase(Locale.ROOT))) {
+                throw new StandTestException("db.write on '" + datasourceAlias + "' cannot capture its primary key: the identifiedBy column '" + column
+                        + "' is not in the INSERT column list " + insertColumns + " (it must be an explicitly inserted, :" + column + "-bound column)");
+            }
+            if (!binds.containsKey(column)) {
+                throw new StandTestException("db.write on '" + datasourceAlias + "' cannot capture its primary key: the identifiedBy column '" + column
+                        + "' must have its value bound as ':" + column + "' in the INSERT (for example VALUES(:" + column + ", ...)); DB-generated identity keys are not yet supported");
+            }
+            pkValues.put(column, binds.get(column));
+        }
+        RunScopedConnection connection = connection(context, datasource, datasourceAlias);
+        Instant startedAt = Instant.now();
+        int rowsAffected;
+        NamedParameterStatement statement = NamedParameterStatement.parse(finalSql);
+        try (PreparedStatement prepared = statement.create(connection.connection(), binds)) {
+            rowsAffected = prepared.executeUpdate();
+        } catch (SQLException failure) {
+            throw new StandTestException("db.write failed on datasource '" + datasourceAlias + "': " + failure.getMessage(), failure);
+        }
+        String qualifiedTable = classification.writeSchema() + "." + classification.writeTable();
+        // Register the undo only if the INSERT actually created a row: a 0-row write has nothing to
+        // compensate, and arming a DELETE by the bound PK could otherwise remove a pre-existing row.
+        if (rowsAffected > 0) {
+            context.undoLog().register(new DbCompensator(step.id(), datasourceAlias, connection, datasource, qualifiedTable, pkColumns, pkValues));
+        }
+        return businessWriteSuccess(step, startedAt, datasourceAlias, qualifiedTable, rowsAffected);
     }
 
     private StepResult executeQuery(
@@ -391,6 +451,16 @@ public final class DbStepExecutor implements StepExecutor {
         diagnostics.put("db.operation", operation == DbOperation.SEED ? "seed" : "cleanup");
         diagnostics.put("db.datasource", datasourceAlias);
         diagnostics.put("db.rowsAffected", rowsAffected);
+        return new StepResult(step.id(), step.type(), StepStatus.SUCCESS, startedAt, Instant.now(), null, diagnostics);
+    }
+
+    private static StepResult businessWriteSuccess(ScenarioStep step, Instant startedAt, String datasourceAlias, String qualifiedTable, int rowsAffected) {
+        Map<String, Object> diagnostics = new LinkedHashMap<>();
+        diagnostics.put("db.operation", "write");
+        diagnostics.put("db.datasource", datasourceAlias);
+        diagnostics.put("db.table", qualifiedTable);
+        diagnostics.put("db.rowsAffected", rowsAffected);
+        diagnostics.put("db.undoRegistered", true);
         return new StepResult(step.id(), step.type(), StepStatus.SUCCESS, startedAt, Instant.now(), null, diagnostics);
     }
 }

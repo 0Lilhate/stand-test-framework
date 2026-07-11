@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stand-test.alfa.ru/schema/service.schema.json",
+  "title": "stand-test knowledge base - servicesFile",
+  "description": "A KB services file: { services: [Service...] }. Thin pointer: the single source of truth is stand-test-knowledge-base.schema.json#/$defs/servicesFile.",
+  "$ref": "stand-test-knowledge-base.schema.json#/$defs/servicesFile"
+}

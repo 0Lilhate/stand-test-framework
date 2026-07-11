@@ -23,25 +23,28 @@ registry additions, build-file diffs.
 | # | Finding | How to detect | Severity |
 |---|---|---|---|
 | 1 | Arbitrary URL / direct host | grep `https?://`, `host:port` literals, absolute paths in `path`, `jdbc:`, comma-separated broker lists in scenario/test/fixture files. Exception: the starter registry's endpoint value twins (`base-url`/`url`/`target`/`bootstrap-servers`/`security-protocol`) — there verify the value is a `${ENV_VAR:...}` placeholder, not a resolved endpoint | BLOCK |
-| 2 | Real secrets / inline auth | grep `Authorization|Bearer |Basic |password|token|secret|api[-_]?key|cookie` in step headers, fixtures, Java literals; any `*-ref` field whose value looks like a value (whitespace, `://`, scheme prefix, or the SDK-internal `literal://` marker); secrets in a starter VALUE field (`user`/`password`/`token` twins do not exist — flag any attempt) | BLOCK |
-| 3 | Destructive SQL | any `DROP|TRUNCATE|ALTER|CREATE|MERGE|GRANT|REVOKE` in step SQL; `INSERT ... ON CONFLICT`/`ON DUPLICATE KEY`; multi-statement (`;` inside); `DELETE`/`UPDATE` outside `db.cleanup`/`db.seed`; cleanup SQL carrying its own `WHERE`; author-supplied `param("testRunId", ...)` | BLOCK |
+| 2 | Real secrets / inline auth | grep `Authorization|Bearer |Basic |password|token|secret|api[-_]?key|cookie` in step headers, fixtures, Java literals; any `*-ref` field whose value looks like a value (whitespace, `://`, scheme prefix, or the SDK-internal `literal://` marker); any CREDENTIAL value twin (`user`/`password`/`username`/`token`/`sasl-jaas-config`) in generated artifacts — the starter accepts them since the credential-twins feature, but kit policy keeps secrets as `*-ref` (a literal secret in a twin has no `requireReferenceShape` guard); on the STARTER surface also flag `${VAR}` placeholders inside `*-ref` fields (Spring resolves them into VALUES before the SDK sees the ref — starter refs must be bare env-var NAMES) | BLOCK |
+| 3 | Destructive SQL / unsafe DB write | any `DROP|TRUNCATE|ALTER|CREATE|MERGE|GRANT|REVOKE` in step SQL; `INSERT ... ON CONFLICT`/`ON DUPLICATE KEY`; multi-statement (`;` inside); `DELETE`/`UPDATE` outside `db.cleanup`/`db.seed`; cleanup SQL carrying its own `WHERE`; author-supplied `param("testRunId", ...)`; a `db.seed` INSERT WITHOUT `taggedByTestRunId(...)`, or whose declared tag column is absent from the INSERT column list or differs from the paired cleanup's `whereTestRunId` column (rows leak across concurrent runs — the write-guard fails closed at run time) | BLOCK |
 | 4 | Production environment | environment value not present in the test registry, or a registry addition that names a production stand | BLOCK |
 | 5 | Missing/unbounded timeout | async step (`kafka.expect`, `*.expectEventually`, `grpc.unary`) without explicit timeout in design; timeout > 1h; AI grammar violations (`24h`, `0s`, fractions) | BLOCK |
 | 6 | `Thread.sleep` / manual polling | grep `Thread.sleep|Awaitility|while.*retry|for.*poll` in Java; SQL sleep functions `pg_sleep|sleep|waitfor|benchmark|dbms_lock` | BLOCK |
 | 7 | Script/code execution in declarative docs | any `script`/expression/`$( )` construct; unknown fields (schema is `additionalProperties:false` — run the schema to find them) | BLOCK |
 | 8 | Direct broker/JDBC/gRPC client | imports of `org.apache.kafka.clients.*`, `java.sql.DriverManager`, `io.grpc.ManagedChannelBuilder`, `WebClient`/`RestTemplate`/`HttpClient` in test code | BLOCK |
 | 9 | Validator bypass | `new DefaultScenarioRunner(`/`new DefaultStandClient(` in consumer test code; a Spring `ScenarioValidator`/`ScenarioRunner`/`StandClient` bean override; use of one-arg `validate(Scenario)` as a gate; `stand.test.enabled=false` | BLOCK |
-| 10 | Fixed ids without testRunId | literal unique keys in seeds/fixtures/paths for entities the test creates (heuristic: hardcoded UUIDs/`"id": "o-1"`-style values not derived from `${testRunId}` or a capture) | HIGH |
+| 10 | Fixed ids without testRunId | literal unique keys in seeds/fixtures/paths for entities the test creates (heuristic: hardcoded UUIDs/`"id": "o-1"`-style values not derived from `${testRunId}` or a capture) — a fixed primary key also collides when two runs seed concurrently | HIGH |
 | 11 | Hardcoded correlation | a literal correlation value in a header/key/metadata instead of `injectCorrelationId`/`${correlationId}` | HIGH |
 | 12 | Caught SDK failures | `catch (StandTestAssertionError`/`StandTestException`/`AssertionError` around `stand.run` outside `assertThatThrownBy` | HIGH |
 | 13 | Secrets relying on Allure masking | secret-shaped values in bodies/diagnostics "because the sink masks them" — masking has documented holes (XML, nested objects, key=value lines) | HIGH |
 | 14 | PII / business data in fixtures | realistic personal/production data | HIGH |
 | 15 | Unsanctioned dependencies | consumer build diff adds anything beyond `allure-junit5`, JSON-Schema validator (+jackson), JDBC driver | HIGH |
+| 16 | Kafka expect without a per-run discriminator | a `kafka.expect` with neither `correlationIdFromContext()`/`correlation: {fromContext: true}` nor a `${...}`-derived `key` — a constant `.key(...)` alone (no `fromContext`) is refused at run time (two concurrent runs match each other's messages on a shared topic) | BLOCK |
+| 17 | Shared mutable state in the test class | `static` mutable fields, or reused mutable instance objects, holding run-varying data (counters, captured values, shared builders) instead of flowing through captures / `${testRunId}` — the runner and step executors are shared across parallel test threads, so this races | HIGH |
 
-Runtime backstop for 1–7 and 9 exists (`ForbiddenOperation`-keyed validator + adapter guards +
-JSON Schema), but the review must catch them **statically** — a violation that only explodes
-at run time is still a defective artifact. Items 8 and 10–15 have **no runtime enforcement**
-(a raw client never enters the SDK pipeline at all, so nothing can intercept it) — the review
+Runtime backstop for 1–7, 9 and 16 exists (`ForbiddenOperation`-keyed validator + adapter guards +
+JSON Schema; the DB write-guard and Kafka executor fail closed on an untagged seed / undiscriminated
+expect), but the review must catch them **statically** — a violation that only explodes at run time
+is still a defective artifact. Items 8, 10–15 and 17 have **no runtime enforcement** (a raw client or
+a shared static field never enters the SDK pipeline at all, so nothing can intercept it) — the review
 is the only net.
 
 ## Procedure
@@ -50,7 +53,9 @@ is the only net.
 2. If AI-format: run schema validation + `AiScenarioParser` parse (both must pass) — their
    failures are findings too.
 3. Check every alias in artifacts against the registry (or the approved additions table).
-4. Check every seed/cleanup pair and `:testRunId` scoping.
+4. Check every seed/cleanup pair (seed declares `taggedByTestRunId` naming the SAME column the
+   cleanup filters), all test data `:testRunId`-scoped, every `kafka.expect` discriminated, and no
+   shared static mutable state in the test class.
 5. Write the report per
    [`safety-review-template.md`](../stand-test-safety-review/safety-review-template.md):
    verdict `PASS` / `PASS-WITH-NOTES` / `BLOCK`, findings with file:line, exact fix per finding.

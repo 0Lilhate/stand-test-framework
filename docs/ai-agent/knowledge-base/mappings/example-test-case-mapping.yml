@@ -1,0 +1,44 @@
+# Example KB entry — Test case mapping. Schema: ../schema/test-case-mapping.schema.json
+# Traceability record: which KB entries a text case resolved to, what was missing, which
+# assumptions were recorded, and where the generated test lives. Written by the
+# stand-test-kb-lookup skill (matched/missing/assumptions) and updated by the authoring
+# and validation workflows (generatedTest/status). Status advances draft → generated →
+# validated → approved; only a human moves it to approved.
+# This entry is the REAL projection of the chain-validation run performed in this repo
+# (kb-lookup → kb-update conflict resolution → Java draft in stand-test-example).
+testCaseMappings:
+  - caseId: client-request-accepted-e2e
+    title: Created client request is accepted, published to Kafka, stored in the DB and confirmed over gRPC
+    source:
+      type: text
+      ref: chain-validation case (create request end-to-end)
+    environment: ift
+    matched:
+      services:
+        - client-service
+      endpoints:
+        - create-request
+      kafkaTopics:
+        - request-created-topic
+      datasources:
+        - client-db
+      dbProbes:
+        - request-status-by-request-id
+      grpcTargets:
+        - result-grpc-service
+      grpcMethods:
+        - check-result
+    missing: []
+    assumptions:
+      - Timeout not stated in the case; KB/SDK defaults recorded (30s kafka/db, 5s grpc deadline)
+      - Environment not named; matched entries allow {dev, ift}, ift chosen by the kb-lookup tie-break (integration over dev)
+      - clientId derived from testRunId and accepted by the stand (human answer to the former blocking missing item)
+      - amount sent as JSON number 100 (KB names the field without a type)
+    generatedTest:
+      module: stand-test-example
+      package: ru.alfa.stand.test.example
+      className: ClientRequestAcceptedE2eDraftTest
+      fixtures:
+        - fixtures/grpc/check-result.json
+    status: generated
+    updated: "2026-07-07"

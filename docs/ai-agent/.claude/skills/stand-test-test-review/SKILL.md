@@ -48,8 +48,9 @@ text case.
 - Every async check goes through `expectEventually`/`kafka.expect` with an explicit, realistic
   timeout (not 1h "to be safe"; not 1s "to be fast").
 - Kafka: the trigger and the `expect` are in the SAME scenario (prepare-phase arming);
-  selection uses `correlationIdFromContext` (a selection-free expect on a shared stand is a
-  flakiness bug); one expect per expected message.
+  selection uses a per-run-unique discriminator — `correlationIdFromContext` or a
+  `${testRunId}`-derived key (a selection-free expect, or a constant key alone, is refused at run
+  time and flakes on a shared stand); one expect per expected message.
 - DB polling SELECT is written to return at most one row (id predicate present).
 - Full checklist: [`flakiness-checklist.md`](../stand-test-test-review/flakiness-checklist.md).
 
@@ -66,9 +67,14 @@ text case.
   (a null capture fails the run).
 - No fixed system-generated ids where a capture should be.
 
-### 7. Cleanup & data hygiene
-- Every `db.seed` has a matching `db.cleanup` scoped by `whereTestRunId`; seeded rows carry
-  `test_run_id`.
+### 7. Cleanup, data hygiene & parallel isolation
+- Every `db.seed` has a matching `db.cleanup` scoped by `whereTestRunId`, and the seed declares
+  `taggedByTestRunId("<col>")` naming the SAME column; seeded rows carry `test_run_id`; every
+  run-varying id derives from `${testRunId}`/a capture (a fixed literal primary key collides across
+  concurrent runs).
+- Parallel-safe: no shared mutable static/instance state in the test class; NO `@StandParallelSafe`
+  on an ordinary test; `@StandIsolated`/`@ResourceLock` present only for a resource that cannot be
+  `testRunId`-isolated (fixed port, shared file, process-wide singleton).
 - Residual-data note present: cleanup does not run after an earlier failed step
   (short-circuit) — leftover rows must be identifiable and harmless.
 

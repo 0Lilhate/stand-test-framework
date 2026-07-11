@@ -45,12 +45,14 @@ public final class DbStep {
     private final String datasource;
     private final Map<String, Object> params = new LinkedHashMap<>();
     private final List<DbCapture> captures = new ArrayList<>();
+    private final List<String> identifiedBy = new ArrayList<>();
     private String id;
     private String sql;
     private String sqlResource;
     private Object expectedValue;
     private boolean expectedValueSet;
     private String whereTestRunIdColumn;
+    private String seedTestRunIdColumn;
     private Long timeoutMillis;
     private Long pollIntervalMillis;
 
@@ -100,6 +102,20 @@ public final class DbStep {
      */
     public static DbStep cleanup(String datasource) {
         return new DbStep(DbOperation.CLEANUP, datasource);
+    }
+
+    /**
+     * Starts a {@code db.write} step: a business {@code INSERT} whose effect is undone automatically after
+     * the run by a primary-key-scoped compensation registered into the run's undo-log. No {@code testRunId}
+     * marker column is required; the row is identified by its primary key ({@link #identifiedBy(String...)}).
+     * Compensation is applied per the scenario's {@code CleanupPolicy} (default: on failure). See
+     * {@code docs/arch/stand-test-db-rollback-design.md}.
+     *
+     * @param datasource the logical datasource alias
+     * @return a new builder
+     */
+    public static DbStep write(String datasource) {
+        return new DbStep(DbOperation.WRITE, datasource);
     }
 
     /**
@@ -194,6 +210,50 @@ public final class DbStep {
     }
 
     /**
+     * Declares the column a {@code db.seed} INSERT tags with the reserved {@code :testRunId} bind so its
+     * rows are reaped by the run's own {@code testRunId}-scoped {@code db.cleanup} — the parallel-isolation
+     * guarantee (plan §15). Required on {@code db.seed}: the SQL must list this column in its INSERT column
+     * list bound to {@code :testRunId} (for example {@code INSERT INTO test_data.orders(id, test_run_id)
+     * VALUES (:id, :testRunId)} with {@code taggedByTestRunId("test_run_id")}); the write-guard verifies the
+     * declared column is present, so a seed that references {@code :testRunId} in some other (non-reaped)
+     * column is refused rather than silently leaking rows across concurrent runs. Pass the SAME column the
+     * paired cleanup filters with {@link #whereTestRunId(String)}.
+     *
+     * @param column the tag column (a plain identifier)
+     * @return this builder
+     */
+    public DbStep taggedByTestRunId(String column) {
+        String identifier = requireNonBlank(column, "taggedByTestRunId column");
+        if (!SqlIdentifiers.isPlainIdentifier(identifier)) {
+            throw new IllegalArgumentException("taggedByTestRunId column must be a plain identifier, but was: '" + identifier + "'");
+        }
+        this.seedTestRunIdColumn = identifier;
+        return this;
+    }
+
+    /**
+     * Declares the primary-key column(s) that identify the row written by a {@code db.write} step, so the
+     * undo-log can compensate it with {@code DELETE FROM <table> WHERE <pk> = ...}. Each column's value must
+     * be supplied as a {@code :<column>} bind in the INSERT (for example {@code identifiedBy("id")} with
+     * {@code VALUES(:id, ...)}). Valid only on {@code db.write} and required there in the MVP (a write with
+     * no resolvable key is refused, so no un-undoable data reaches the stand).
+     *
+     * @param columns the primary-key column names (plain identifiers)
+     * @return this builder
+     */
+    public DbStep identifiedBy(String... columns) {
+        Objects.requireNonNull(columns, "columns must not be null");
+        for (String column : columns) {
+            String identifier = requireNonBlank(column, "identifiedBy column");
+            if (!SqlIdentifiers.isPlainIdentifier(identifier)) {
+                throw new IllegalArgumentException("identifiedBy column must be a plain identifier, but was: '" + identifier + "'");
+            }
+            this.identifiedBy.add(identifier);
+        }
+        return this;
+    }
+
+    /**
      * Sets the maximum time to wait for a match, in seconds ({@code db.expectEventually} only).
      *
      * @param seconds the timeout in seconds
@@ -263,11 +323,20 @@ public final class DbStep {
         if (this.operation == DbOperation.EXPECT_EVENTUALLY && !this.expectedValueSet) {
             throw new IllegalStateException("A db.expectEventually step requires expectValue(...)");
         }
-        if (!this.operation.isWrite() && this.whereTestRunIdColumn != null) {
-            throw new IllegalStateException("whereTestRunId(...) applies to db.seed/db.cleanup (a read needs no testRunId predicate), not " + this.operation.stepType());
+        if (this.operation != DbOperation.SEED && this.operation != DbOperation.CLEANUP && this.whereTestRunIdColumn != null) {
+            throw new IllegalStateException("whereTestRunId(...) applies to db.seed/db.cleanup (db.write is undone by primary key, not a testRunId predicate), not " + this.operation.stepType());
         }
         if (this.operation == DbOperation.CLEANUP && this.whereTestRunIdColumn == null) {
             throw new IllegalStateException("A db.cleanup step requires whereTestRunId(...) so it only deletes the run's own data");
+        }
+        if (this.operation != DbOperation.SEED && this.seedTestRunIdColumn != null) {
+            throw new IllegalStateException("taggedByTestRunId(...) applies to db.seed, not " + this.operation.stepType());
+        }
+        if (this.operation != DbOperation.WRITE && !this.identifiedBy.isEmpty()) {
+            throw new IllegalStateException("identifiedBy(...) applies to db.write, not " + this.operation.stepType());
+        }
+        if (this.operation == DbOperation.WRITE && this.identifiedBy.isEmpty()) {
+            throw new IllegalStateException("A db.write step requires identifiedBy(...) so its INSERT can be undone by primary key");
         }
     }
 
@@ -290,6 +359,12 @@ public final class DbStep {
         parameters.put(DbStepParameters.PARAMS, Map.copyOf(this.params));
         if (this.whereTestRunIdColumn != null) {
             parameters.put(DbStepParameters.WHERE_TEST_RUN_ID_COLUMN, this.whereTestRunIdColumn);
+        }
+        if (this.seedTestRunIdColumn != null) {
+            parameters.put(DbStepParameters.SEED_TEST_RUN_ID_COLUMN, this.seedTestRunIdColumn);
+        }
+        if (!this.identifiedBy.isEmpty()) {
+            parameters.put(DbStepParameters.IDENTIFIED_BY, List.copyOf(this.identifiedBy));
         }
         if (this.operation == DbOperation.QUERY) {
             parameters.put(DbStepParameters.CAPTURES, captureMaps());

@@ -55,6 +55,9 @@ From the exception message, `ScenarioResult`, or Allure test-case parameters:
 | gRPC `Server Reflection (grpc.reflection.v1) is not implemented by the target` | server lacks Reflection v1 (or exposes v1alpha only / reflection disabled) | not callable by the SDK today — flag |
 | gRPC `failed with status UNIMPLEMENTED` (no reflection hint) | the called method/service is not implemented on the target | check `package.Service/Method` spelling |
 | gRPC `DEADLINE_EXCEEDED` | deadline too small or stand slow | check SLA; deadline covers reflection + call |
+| `db.seed INSERT must declare its testRunId tag column` / `must tag its rows in the declared testRunId column` | seed missing `taggedByTestRunId(...)`, or tagging a column absent from the INSERT list — fails closed so rows are reapable and parallel runs stay isolated | add `taggedByTestRunId("<col>")` naming the SAME column the cleanup filters, present in the INSERT column list |
+| `kafka.expect ... has no per-run discriminator` / `uses a constant key ... not per-run-unique` | expect not discriminated per run — refused before arming so concurrent runs don't match each other's messages | add `correlationIdFromContext()` or a `${testRunId}`-derived `key(...)` |
+| duplicate/primary-key `SQLException` on a `db.seed`, or db `ambiguous (>1 row)` that appears only under parallel load | a fixed literal id / under-scoped predicate collides with a CONCURRENT run's rows (not just leftover data) | derive the seed PK from `${testRunId}`; scope reads by `${testRunId}` / a captured per-run id |
 | `must not carry its own WHERE` / `DESTRUCTIVE_SQL_WITHOUT_ALLOW` / `SECRET_IN_SOURCE` / `UNBOUNDED_TIMEOUT` | generated artifact violated a guardrail (authoring bug) | regenerate via the authoring skill |
 
 ## Step 4 — read the diagnostics payloads

@@ -1,0 +1,33 @@
+# Example KB entry — Service. Schema: ../schema/service.schema.json
+# A service groups the endpoints/topics/datasources/grpc targets a test may touch and carries
+# the per-service correlation and auth configuration (the EnvironmentRegistry model: correlation
+# header and auth identity are per SERVICE alias, never per endpoint or inline in a scenario).
+services:
+  - id: client-service
+    name: Client Service
+    description: Generic client-facing request service (example entry)
+    owner: team-client
+    domain: client
+    environments:
+      - dev
+      - ift
+    endpoints:
+      - create-request
+      - get-request-status
+    grpcTargets: []
+    kafkaTopics:
+      produces:
+        - request-created-topic
+      consumes: []
+    datasources:
+      - client-db
+    correlation:
+      source: HEADER
+      headerName: X-Correlation-Id
+    auth:
+      scheme: BASIC
+      usernameRef: CLIENT_SERVICE_USER
+      passwordRef: CLIENT_SERVICE_PASSWORD
+    tags:
+      - client
+      - request

@@ -24,10 +24,45 @@ class DbWriteGuardTest {
     }
 
     @Test
-    @DisplayName("a valid INSERT seed into a whitelisted schema is allowed when writeAllowed")
+    @DisplayName("a valid INSERT seed into a whitelisted schema is allowed when writeAllowed and it tags :testRunId")
     void seedAllowed() {
-        assertThatCode(() -> DbWriteGuard.classifyAndEnforce("INSERT INTO test_data.orders(id) VALUES (:id)", DbOperation.SEED, WRITABLE, false))
+        assertThatCode(() -> DbWriteGuard.classifyAndEnforce("INSERT INTO test_data.orders(id, test_run_id) VALUES (:id, :testRunId)", DbOperation.SEED, WRITABLE, false))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("an INSERT seed that does not tag :testRunId is forbidden (parallel isolation, plan §15)")
+    void untaggedSeedForbidden() {
+        assertThatThrownBy(() -> DbWriteGuard.classifyAndEnforce("INSERT INTO test_data.orders(id) VALUES (:id)", DbOperation.SEED, WRITABLE, false))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining(":testRunId");
+    }
+
+    @Test
+    @DisplayName("the executor path allows a seed INSERT whose declared tag column is in the INSERT column list")
+    void seedWithDeclaredTagColumnAllowed() {
+        assertThatCode(() -> DbWriteGuard.classifyAndEnforce(
+                "INSERT INTO test_data.orders(id, test_run_id) VALUES (:id, :testRunId)", DbOperation.SEED, WRITABLE, false, "test_run_id"))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("the executor path refuses a seed INSERT with NO declared tag column (must call taggedByTestRunId)")
+    void seedWithoutDeclaredTagColumnRefused() {
+        assertThatThrownBy(() -> DbWriteGuard.classifyAndEnforce(
+                "INSERT INTO test_data.orders(id, test_run_id) VALUES (:id, :testRunId)", DbOperation.SEED, WRITABLE, false, null))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("must declare its testRunId tag column");
+    }
+
+    @Test
+    @DisplayName("the executor path refuses a seed that references :testRunId in a column its cleanup does not filter (wrong-column leak closed)")
+    void seedTaggingWrongColumnRefused() {
+        // :testRunId is bound to `id`, but cleanup filters `test_run_id` (declared) — the row would leak.
+        assertThatThrownBy(() -> DbWriteGuard.classifyAndEnforce(
+                "INSERT INTO test_data.orders(id) VALUES (:testRunId)", DbOperation.SEED, WRITABLE, false, "test_run_id"))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("absent from the INSERT column list");
     }
 
     @Test
@@ -139,7 +174,7 @@ class DbWriteGuardTest {
     @Test
     @DisplayName("an upper-case unquoted schema target is folded to its whitelisted lower-case schema (PostgreSQL folds unquoted identifiers)")
     void upperCaseTargetSchemaIsFoldedToWhitelistedSchema() {
-        assertThatCode(() -> DbWriteGuard.classifyAndEnforce("INSERT INTO TEST_DATA.orders(id) VALUES (:id)", DbOperation.SEED, WRITABLE, false))
+        assertThatCode(() -> DbWriteGuard.classifyAndEnforce("INSERT INTO TEST_DATA.orders(id, test_run_id) VALUES (:id, :testRunId)", DbOperation.SEED, WRITABLE, false))
                 .doesNotThrowAnyException();
     }
 }

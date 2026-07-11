@@ -105,7 +105,10 @@ executor'ы. **Общие эргономичные преобразования:
   `timeout`→`TIMEOUT_MILLIS`, `pollInterval`→`POLL_INTERVAL_MILLIS`.
 - **`db.seed` / `db.cleanup`** (write, только при `writeAllowed`, §8.8): `datasource`→`DATASOURCE`,
   `sql`/`<resource>`→`SQL`/`SQL_RESOURCE`, `params`→`PARAMS`; для cleanup `whereTestRunId: <col>`→`WHERE_TEST_RUN_ID_COLUMN`
-  (иначе DELETE/UPDATE классифицируется destructive и отвергается — §8.8).
+  (иначе DELETE/UPDATE классифицируется destructive и отвергается — §8.8). Для seed `taggedByTestRunId: <col>`→
+  `SEED_TEST_RUN_ID_COLUMN` (§15): INSERT-seed обязан объявить reap-колонку, и write-guard структурно проверяет,
+  что она есть в списке колонок INSERT (иначе строки не подхватит testRunId-scoped cleanup → отвергается до IO);
+  seed-UPDATE/DELETE вместо этого объявляет `whereTestRunId`.
 
 > Замечание: surface-имена (`expectStatus`, `equals`, `assert`, `capture`, `timeout: 30s`) — из §11-draft;
 > internal-ключи — из отгруженных `RestStepParameters`/`DbStepParameters`/`KafkaStepParameters`. §11 остаётся

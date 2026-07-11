@@ -27,6 +27,9 @@ The agent authors CONSUMER tests. It never crosses into the SDK. Verify on every
       utility waits with a bounded `AwaitPolicy`.
 - [ ] Reporting: none — Allure attaches via SPI; the test writes zero reporting code and
       never asserts on report content.
+- [ ] No shared mutable static/instance state in the test class — the injected runner and each
+      step executor are shared across parallel test threads; run-varying values flow through
+      captures / `${testRunId}`, never a static field or a reused mutable object.
 
 ## Configuration stays configuration
 

@@ -16,9 +16,19 @@ dependencies {
     testImplementation(project(":stand-test-core"))
     testImplementation(libs.networknt.json.schema.validator)
     testImplementation(libs.jackson.databind)
+    // SnakeYAML exists ONLY to load the knowledge-base example/negative YAML files in tests
+    // (docs/ai-agent/knowledge-base contract); like networknt/jackson it never reaches main.
+    testImplementation(libs.snakeyaml)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
     testRuntimeOnly(libs.junit.platform.launcher)
+}
+
+// The KB validation test reads the contract from docs/ai-agent/knowledge-base (outside this
+// module), so declare it as a test input — editing the schemas or examples re-runs the tests
+// instead of hitting a stale FROM-CACHE result.
+tasks.test {
+    inputs.dir(rootDir.resolve("docs/ai-agent/knowledge-base")).withPropertyName("standTestKnowledgeBaseDir")
 }

@@ -32,6 +32,7 @@ class DbStepExecutorConnectionTest {
     private static ScenarioStep seed() {
         return DbStep.seed(DbTestSupport.DATASOURCE_ALIAS)
                 .sql("INSERT INTO test_data.orders(id, test_run_id) VALUES (:id, :testRunId)")
+                .taggedByTestRunId("test_run_id")
                 .param("id", "x")
                 .build();
     }

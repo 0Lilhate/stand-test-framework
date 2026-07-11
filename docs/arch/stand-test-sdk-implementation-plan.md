@@ -1251,6 +1251,31 @@ testImplementation("ru.alfa.stand.test:stand-test-allure")
 - **Static mutable state запрещён.**
 - `ThreadLocal` — только при строгой причине; по умолчанию избегать.
 
+### Реализовано (2026-07)
+
+- **Модель по умолчанию:** классы — `concurrent`, методы — `same_thread` (инвариант «один прогон = один
+  поток»), **только in-JVM** (`maxParallelForks=1`). Каноничный конфиг — `junit-platform.properties` в
+  `src/test/resources` потребителя; `stand-test-example` поставляет его как эталон.
+- **Fail-closed гардрейлы (enforce, не документация):**
+  - `db.seed` INSERT обязан тегировать строки `:testRunId` **и объявить tag-колонку** через
+    `DbStep.taggedByTestRunId("test_run_id")` (та же колонка, что фильтрует `db.cleanup`). `DbWriteGuard`
+    **структурно проверяет** (через `SqlStatementClassifier.insertColumns`), что объявленная колонка есть в
+    списке колонок INSERT — не просто что `:testRunId` встречается где-то в тексте; сид, тегирующий
+    не-reap-колонку (`INSERT INTO t(id) VALUES (:testRunId)`), отклоняется до IO (иначе строка не
+    подхватывается testRunId-scoped cleanup → утечка).
+  - `kafka.expect` обязан иметь per-run **уникальный** дискриминатор — `correlationIdFromContext()` или
+    `key(...)` c `${...}`-плейсхолдером (константный key отклоняется, т.к. два прогона матчили бы его на общем
+    топике). Проверка в `KafkaStep.build()` и в `KafkaStepExecutor` **в `prepare()` до арминга** консьюмера
+    (покрывает YAML/raw-params, fail-closed до IO как в DB).
+- **Опт-аут аннотации** в `stand-test-junit` (тонкие фасады над JUnit): `@StandParallelSafe`
+  (`@Execution(CONCURRENT)`), `@StandSerial` (`@Execution(SAME_THREAD)`), `@StandIsolated` (`@Isolated`);
+  для взаимного исключения по одному ресурсу — нативный `@ResourceLock("<alias>")`.
+- **Контракты:** `ReportingEventPublisher` и `StandTestExtension` javadoc фиксируют требование thread-safety
+  разделяемого раннера/паблишера; Allure-паблишер чистит per-thread step-stack на `ScenarioPhase.FINISHED`.
+- **Тесты:** `DefaultScenarioRunnerTest` (изоляция store + уникальность id на 64 потоках),
+  `DefaultAwaiterTest` (изоляция attempts/diagnostics), `ParallelFrameworkExecutionExampleTest` (24 прогона
+  через один `StandClient` против общей H2 — уникальные id, изоляция store/reporting, отсутствие утечек).
+
 ---
 
 ## 16. Testing strategy for SDK itself

@@ -1,0 +1,34 @@
+# Example KB entry — gRPC target. Schema: ../schema/grpc-target.schema.json
+# A target is a registry whitelist entry (alias + METADATA correlation key); its methods list
+# the unary operations a test may call. The address is an env-var REFERENCE per environment.
+# gRPC assertions are equals-only in the SDK; a bounded deadline is mandatory per method;
+# the server must expose Reflection v1 (the SDK resolves messages via DynamicMessage).
+grpcTargets:
+  - id: result-grpc-service
+    alias: result-grpc-service
+    description: Result checking gRPC service
+    serviceName: example.ResultService
+    correlation:
+      source: METADATA
+      metadataKey: x-correlation-id
+    methods:
+      - id: check-result
+        type: unary
+        fullMethodName: example.ResultService/CheckResult
+        description: Check operation result by request id
+        request:
+          fixtureTemplate: fixtures/grpc/check-result.json
+          requiredFields:
+            - requestId
+        response:
+          captures:
+            operationId: $.operationId
+          assertions:
+            - path: $.result
+              equals: OK
+        correlation:
+          inject: true
+        deadline: 5s
+    allowedEnvironments:
+      - dev
+      - ift

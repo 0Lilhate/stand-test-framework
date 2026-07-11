@@ -75,6 +75,10 @@ public final class StepParameterKeys {
     public static final String PARAMS = "params";
     /** Parameter key (cleanup / optional): the column the appended {@code testRunId} predicate binds. */
     public static final String WHERE_TEST_RUN_ID_COLUMN = "whereTestRunIdColumn";
+    /** Parameter key (seed): the column a seed INSERT must tag with {@code :testRunId} so its rows are reaped by the run's testRunId-scoped cleanup (plan §15). */
+    public static final String SEED_TEST_RUN_ID_COLUMN = "seedTestRunIdColumn";
+    /** Parameter key (db.write): the primary-key column(s) that identify the written row for undo-log compensation. */
+    public static final String IDENTIFIED_BY = "identifiedBy";
     /** Parameter key (expectEventually): the poll interval between probes, in milliseconds. */
     public static final String POLL_INTERVAL_MILLIS = "pollIntervalMillis";
 

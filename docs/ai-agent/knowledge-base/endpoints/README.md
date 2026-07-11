@@ -1,0 +1,7 @@
+# endpoints/
+
+One entry per HTTP operation: method, path, request fixture, captures, assertions (full REST matcher set). Auth and correlation header live on the owning service. Schema: [`../schema/endpoint.schema.json`](../schema/endpoint.schema.json); collection key `endpoints`. See [`example-endpoints.yml`](example-endpoints.yml).
+
+Matcher-key translation (KB → SDK surfaces): `equals`/`contains`/`matches`/`exists: true`/`notNull: true` map 1:1 to the Java DSL (`assertPath`, `assertPathContains`, `assertPathMatches`, `assertPathExists`, `assertPathNotNull`) and to the AI format. `absent: true` translates to DSL `assertPathAbsent` / AI-format `exists: false`; `isNull: true` to DSL `assertPathIsNull` / AI-format `notNull: false` — the KB keys `absent`/`isNull` do not exist verbatim on the other surfaces.
+
+Full-spec fields: `request.schemaRef`/`response.schemaRef` point at extracted JSON Schemas of the bodies (written by /stand-test-kb-update under the KB root, e.g. `knowledge-base/schemas/rest/...` - the ref is KB-root-relative; fixtures, unlike schemas, stay on the classpath in `src/test/resources` because the SDK reads them at run time); `requiredHeaders` lists non-secret custom header NAMES the operation requires (values are per-case data; secret-named headers are schema-rejected — auth lives on the service entry); `query.required`/`query.optional` list query parameter names (Java DSL: `.query(name, value)`).

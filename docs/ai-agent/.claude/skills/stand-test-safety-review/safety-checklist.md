@@ -16,16 +16,25 @@ blocks the workflow.
       value twins above) in the registry.
 - [ ] **No inline secrets** (`SECRET_IN_SOURCE`) — no header/metadata NAME matching
       `authorization|token|password|secret|api[-_]?key|cookie`; no VALUE shaped
-      `Bearer …`/`Basic …`; auth only via registry `auth:` refs.
+      `Bearer …`/`Basic …`; auth only via registry `auth:` refs. No CREDENTIAL value twins
+      (`user`/`password`/`username`/`token`/`sasl-jaas-config`) in generated artifacts — the
+      starter accepts them, kit policy keeps secrets `*-ref`-only; on the starter surface a
+      `${VAR}` placeholder inside a `*-ref` is also a finding (Spring resolves it into a VALUE
+      — starter refs are bare env-var NAMES).
 - [ ] **No non-whitelisted environment** (`NON_WHITELISTED_ENVIRONMENT`) — scenario
       environment is a registry key; production is never declared in a test registry.
 - [ ] **No non-whitelisted datasource** (`NON_WHITELISTED_DATASOURCE`) — db steps name
       declared datasources only.
-- [ ] **No destructive SQL** (`DESTRUCTIVE_SQL_WITHOUT_ALLOW`) — no
+- [ ] **No destructive SQL / unsafe write** (`DESTRUCTIVE_SQL_WITHOUT_ALLOW`) — no
       DDL/TRUNCATE/MERGE/GRANT/REVOKE/upserts/multi-statement; writes only in
       `db.seed`/`db.cleanup` on `write-allowed` datasources into `allowed-schemas`,
-      schema-qualified 2-part targets; cleanup SQL carries NO own WHERE;
-      `whereTestRunId(column)` declared where required.
+      schema-qualified 2-part targets; cleanup SQL carries NO own WHERE and declares
+      `whereTestRunId(column)`; every `db.seed` INSERT declares `taggedByTestRunId(column)` naming
+      the SAME column (present in the INSERT column list bound to `:testRunId`) — the write-guard
+      fails closed otherwise (rows would leak across concurrent runs).
+- [ ] **Kafka expect discriminated** — every `kafka.expect` selects by a per-run-unique
+      discriminator (`correlationIdFromContext`/`correlation: {fromContext: true}` or a
+      `${...}`-derived key); a constant key alone is refused at run time (parallel-unsafe).
 - [ ] **No sleeps** (`THREAD_SLEEP`) — no `Thread.sleep`/Awaitility/manual polling in Java;
       no `pg_sleep|sleep|waitfor|benchmark|dbms_lock` in SQL.
 - [ ] **No unbounded timeouts** (`UNBOUNDED_TIMEOUT`) — every
@@ -50,6 +59,10 @@ blocks the workflow.
       `validate(Scenario)` as a gate (it skips guardrails); no `stand.test.enabled=false`.
 - [ ] **SDK-owned identities** — `testRunId`/`correlationId` never invented or hardcoded;
       correlation only via `injectCorrelationId()`/`correlation: {inject|fromContext}`.
+- [ ] **Parallel-safe** — no shared mutable static/instance state in the test class (counters,
+      captured values, reused builders); run-varying values flow through captures / `${testRunId}`;
+      a class touching a non-`testRunId`-isolable resource (fixed port, shared file, global
+      singleton) carries `@StandIsolated`/`@ResourceLock` (never `@StandParallelSafe` by default).
 - [ ] **No caught SDK failures** — `StandTestAssertionError`/`StandTestException` are never
       caught to make a test pass; negative paths use `assertThatThrownBy` only.
 - [ ] **No secrets trusted to Allure masking** — masking is best-effort with documented

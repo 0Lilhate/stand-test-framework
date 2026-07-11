@@ -127,7 +127,12 @@ public final class KafkaStepExecutor implements StepExecutor {
         if (!KafkaOperation.EXPECT.stepType().equals(step.type())) {
             return;
         }
-        String topicAlias = KafkaStepParameters.requireString(parameters(step), KafkaStepParameters.TOPIC);
+        Map<String, Object> parameters = parameters(step);
+        String topicAlias = KafkaStepParameters.requireString(parameters, KafkaStepParameters.TOPIC);
+        // Fail-closed BEFORE any broker IO (plan §15): reject an undiscriminated or constant-key expect here,
+        // in prepare(), rather than after armConsumer() has opened a real consumer — mirroring the DB path,
+        // which enforces the write-guard before opening a connection.
+        requirePerRunDiscriminator(parameters, topicAlias);
         armConsumer(topicAlias, context);
     }
 
@@ -173,6 +178,10 @@ public final class KafkaStepExecutor implements StepExecutor {
         TopicDefinition topic = topic(environment, topicAlias, context);
         ArmedConsumer armed = armedConsumer(context, topicAlias);
         VariableResolver resolver = context.resolver();
+        // Defense-in-depth re-enforcement of the builder rule (plan §15) for surfaces that bypass KafkaStep
+        // (YAML/AI documents, raw GenericStep params, or a direct execute() without prepare()). prepare()
+        // already applied this before arming; repeating it keeps execute() safe in isolation.
+        requirePerRunDiscriminator(parameters, topicAlias);
         String expectedCorrelationId = expectedCorrelationId(parameters, topic, topicAlias, context);
         String correlationHeaderName = (expectedCorrelationId == null) ? null : topic.correlation().name();
         String keyDiscriminator = KafkaStepParameters.optionalString(parameters, KafkaStepParameters.KEY).map(resolver::resolve).orElse(null);
@@ -278,6 +287,24 @@ public final class KafkaStepExecutor implements StepExecutor {
             throw new StandTestException("Correlation id injection was requested for topic '" + topicAlias + "', but only the HEADER carrier is implemented (KEY/PAYLOAD_FIELD are a later sub-iteration)");
         }
         headers.put(correlation.name(), context.scenarioContext().correlationId().value());
+    }
+
+    private static void requirePerRunDiscriminator(Map<String, Object> parameters, String topicAlias) {
+        if (KafkaStepParameters.flag(parameters, KafkaStepParameters.CORRELATION_FROM_CONTEXT)) {
+            // The SDK-owned per-run correlationId is the discriminator; a key (if any) only narrows further.
+            return;
+        }
+        String rawKey = KafkaStepParameters.optionalString(parameters, KafkaStepParameters.KEY).orElse(null);
+        if (rawKey == null) {
+            throw new StandTestException("A kafka.expect on topic '" + topicAlias
+                    + "' has no per-run discriminator (correlationIdFromContext / key) and would match any message on a shared topic — refused as parallel-unsafe (plan §15)");
+        }
+        // The RAW (pre-resolution) key must carry a ${...} placeholder to be per-run-derived; a constant key
+        // is not per-run-unique, so concurrent runs would match each other's messages.
+        if (!rawKey.contains("${")) {
+            throw new StandTestException("A kafka.expect on topic '" + topicAlias + "' uses a constant key '" + rawKey
+                    + "' as its sole discriminator, which is not per-run-unique — concurrent runs would match each other's messages. Use a ${testRunId}-derived key or correlationIdFromContext() (plan §15)");
+        }
     }
 
     private static String expectedCorrelationId(Map<String, Object> parameters, TopicDefinition topic, String topicAlias, StepExecutionContext context) {

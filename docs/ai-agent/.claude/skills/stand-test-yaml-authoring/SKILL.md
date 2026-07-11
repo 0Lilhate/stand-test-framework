@@ -66,9 +66,9 @@ not in the schema fails validation.**
 
 // kafka.expect                   required: id, type, topic, timeout, assert
 { "id": "await-order-event", "type": "kafka.expect", "topic": "order-events",
-  "correlation": {"fromContext": true}, "timeout": "30s",
-  "assert": [{"path": "$.status", "equals": "CREATED"}],   // equals ONLY
-  "capture": {"eventId": "$.eventId"} }
+  "correlation": {"fromContext": true}, "timeout": "30s",   // per-run discriminator REQUIRED: fromContext,
+  "assert": [{"path": "$.status", "equals": "CREATED"}],     //  or a "key": "${testRunId}..." — a constant
+  "capture": {"eventId": "$.eventId"} }                       //  key is refused at run time (parallel-unsafe)
 
 // db.expectEventually            required: id, type, datasource, timeout, query, expect
 { "id": "verify-projection", "type": "db.expectEventually", "datasource": "orders-db",
@@ -109,6 +109,11 @@ not in the schema fails validation.**
 10. Step ids unique across the document (schema does NOT check this — runtime does).
 11. Fixture paths: relative, no leading `/`, no `..`. Emit every referenced fixture file
     (delegate content to `stand-test-fixture-authoring`).
+12. `kafka.expect` MUST carry a per-run discriminator — `"correlation": {"fromContext": true}` or a
+    `"key"` derived from `${testRunId}`/`${correlationId}`. A constant key with no `fromContext` is
+    refused at run time (two concurrent runs would match each other's messages on a shared topic).
+    This keeps the document parallel-safe; AI documents have no `db.seed`, so seed tagging is a
+    Java-track concern (rule 1).
 
 ## Mandatory validation gate (in this order)
 

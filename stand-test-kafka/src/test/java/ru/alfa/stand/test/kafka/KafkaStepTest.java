@@ -62,8 +62,38 @@ class KafkaStepTest {
     @Test
     @DisplayName("an explicit id overrides the derived one")
     void explicitId() {
-        ScenarioStep step = KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).id("wait-for-response").build();
+        ScenarioStep step = KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).correlationIdFromContext().id("wait-for-response").build();
         assertThat(step.id()).isEqualTo("wait-for-response");
+    }
+
+    @Test
+    @DisplayName("an expect without a per-run discriminator is rejected at build time (parallel-safety, plan §15)")
+    void expectWithoutDiscriminatorRejected() {
+        assertThatThrownBy(() -> KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).assertPath("$.status", "SUCCESS").build())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("per-run discriminator");
+    }
+
+    @Test
+    @DisplayName("a per-run-derived key (with a ${...} placeholder) alone satisfies the discriminator requirement")
+    void expectWithPerRunKeyBuilds() {
+        ScenarioStep step = KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).key("${testRunId}").build();
+        assertThat(step.type()).isEqualTo("kafka.expect");
+    }
+
+    @Test
+    @DisplayName("an expect whose sole discriminator is a CONSTANT key is rejected (not per-run-unique, plan §15)")
+    void expectWithConstantKeyRejected() {
+        assertThatThrownBy(() -> KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).key("constant").build())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("per-run-derived");
+    }
+
+    @Test
+    @DisplayName("a constant key is allowed when correlationIdFromContext already isolates per run")
+    void expectWithConstantKeyAllowedAlongsideCorrelation() {
+        ScenarioStep step = KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).correlationIdFromContext().key("constant").build();
+        assertThat(step.type()).isEqualTo("kafka.expect");
     }
 
     @Test

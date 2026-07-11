@@ -6,6 +6,11 @@
 //
 // Style (checkstyle-enforced in SDK-style repos): AssertJ only (JUnit Assertions import is
 // banned), no System.out, one statement per line, blank line between members, Java-17 sources.
+//
+// Parallel-safe by construction: all test data is scoped by ${testRunId} and there is no static or
+// shared mutable state — the class needs NO @StandParallelSafe; the consumer's junit-platform.properties
+// runs classes concurrently. Add @StandIsolated / @ResourceLock("<alias>") only for a class touching a
+// resource that cannot be testRunId-isolated (a fixed port, a shared file, a process-wide singleton).
 
 package replace.with.consumer.pkg;
 
@@ -35,10 +40,13 @@ class ReplaceScenarioNameTest {
         Scenario scenario = Scenario.builder("replace-scenario-id")
                 .environment("replace-env-alias")
                 .tag("integration")
-                // Optional precondition (Java track only) — rows tagged with the reserved :testRunId bind:
+                // Optional precondition (Java track only) — rows tagged with the reserved :testRunId
+                // bind; taggedByTestRunId names the SAME column the cleanup filters (REQUIRED, verified
+                // at run time), and the PK derives from ${testRunId} so concurrent seeds never collide:
                 .step(DbStep.seed("replace-datasource-alias")
                         .id("seed-entity")
                         .sql("INSERT INTO test_data.entities(id, status, test_run_id) VALUES (:id, 'NEW', :testRunId)")
+                        .taggedByTestRunId("test_run_id")
                         .param("id", "entity-${testRunId}")
                         .build())
                 // Trigger — alias only, correlation injected, id captured:

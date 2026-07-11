@@ -125,6 +125,63 @@ the same validated model. Guardrails (whitelisted environments only, no raw URLs
 no destructive SQL, bounded timeouts) derive from the single `ForbiddenOperation` source of truth and
 are re-enforced at runtime by the validator.
 
+## Parallel execution
+
+The SDK is built to run scenarios **concurrently in one JVM** without flakiness: every run gets a unique
+`testRunId` and `correlationId`, its own `VariableStore`, and a unique Kafka consumer group; the single
+`DefaultScenarioRunner` keeps all per-run state thread-confined, so one cached `StandClient` is safely shared
+across test threads (plan §15).
+
+**Enable it** by placing a `junit-platform.properties` at your `src/test/resources` root:
+
+```properties
+junit.jupiter.execution.parallel.enabled=true
+junit.jupiter.execution.parallel.mode.classes.default=concurrent   # classes run concurrently
+junit.jupiter.execution.parallel.mode.default=same_thread          # methods within a class stay serial
+junit.jupiter.execution.parallel.config.strategy=dynamic
+junit.jupiter.execution.parallel.config.dynamic.factor=0.5
+```
+
+This is the recommended model: **classes parallel, methods serial** — matching the SDK invariant *one
+scenario run = one thread* (parallelise scenarios/classes, never the steps of one scenario). It is **in-JVM
+only**: keep Gradle `maxParallelForks=1`, since separate JVMs would race any fixed ports and shared external
+state. `stand-test-example` ships exactly this configuration as the reference.
+
+**What is parallel-safe** — a scenario is safe by construction when it relies on per-run isolation:
+- **DB:** a `db.seed` INSERT must tag its rows with the reserved `:testRunId` bind **and declare the tag
+  column** with `taggedByTestRunId("test_run_id")` — the same column its `db.cleanup` filters via
+  `whereTestRunId("test_run_id")`. The write-guard **verifies the declared column actually appears in the
+  INSERT column list** (not merely that `:testRunId` is mentioned somewhere), so a seed that tags a
+  non-reaped column is refused before any IO; derive any fixed primary key from a per-run value
+  (`id = "order-${testRunId}"`). `db.cleanup` must scope its DELETE with `whereTestRunId(...)`.
+- **Kafka:** a `kafka.expect` must select by a per-run **unique** discriminator — `correlationIdFromContext()`
+  (the SDK-owned unique id) or a `key(...)` that is per-run-derived (**contains a `${...}` placeholder** such
+  as `${testRunId}`). Enforced fail-closed at build time and at runtime (before arming a consumer): an
+  undiscriminated expect, or a **constant** key that two concurrent runs would both match on a shared topic,
+  is rejected. A constant key is allowed only alongside `correlationIdFromContext()`, where it merely narrows
+  among the run's own correlated messages.
+- **REST/gRPC:** the SDK injects the per-run `correlationId` per call; scope any server-side entity you create
+  with `${testRunId}`/`${correlationId}` in the request body/fixture.
+
+**Marking tests serial** — for the rare test that cannot be isolated by `testRunId` (a fixed port, a shared
+file, a process-wide singleton), opt out with the meta-annotations in `stand-test-junit` — thin facades over
+JUnit's own:
+
+| Annotation | Maps to | Use for |
+|---|---|---|
+| `@StandParallelSafe` | `@Execution(CONCURRENT)` | explicit "safe to run concurrently" marker |
+| `@StandSerial` | `@Execution(SAME_THREAD)` | serialise the methods of one class |
+| `@StandIsolated` | `@Isolated` | run this class alone (nothing else concurrent) |
+
+For mutual exclusion between only the tests that share one named resource (e.g. two classes binding the same
+port), use JUnit's native `@ResourceLock("<alias>")` directly.
+
+**Risks against real DEV/IFT stands** — a shared stand is contended by definition. Data isolation depends on
+every write/read being `testRunId`-scoped and every Kafka expect being correlation-filtered (the guardrails
+above enforce the write/expect side; scope your reads too). Recommended pilot: start with unit/example and
+in-memory tests, then opt in adapter tests, then a small parallel factor against a stand, watching for
+timeout diagnostics before widening `dynamic.factor`.
+
 ## Build
 
 ```bash

@@ -57,11 +57,11 @@ Run gate: `ORDER_SERVICE_URL`.
 
 ### Step table (happy path)
 
-| # | Step id | Type | Alias | Timeout | Assertions | Captures |
-|---|---|---|---|---|---|---|
-| 1 | `create-order` | rest.post | `order-service` | — | status 200; `$.status`→`ACCEPTED`→EQUALS; `$.orderId`→`ord-[0-9]+`→MATCHES | `orderId` ← `$.orderId` |
-| 2 | `await-order-event` | kafka.expect | `order-events` | 30s | `$.status`→`CREATED`→EQUALS | — |
-| 3 | `verify-projection` | db.expectEventually | `orders-db` | 30s | singleValue `DONE` | — |
+| # | Step id | Type | Alias | Timeout | Assertions | Captures | Source |
+|---|---|---|---|---|---|---|---|
+| 1 | `create-order` | rest.post | `order-service` | — | status 200; `$.status`→`ACCEPTED`→EQUALS; `$.orderId`→`ord-[0-9]+`→MATCHES | `orderId` ← `$.orderId` | case (path/fields stated verbatim) |
+| 2 | `await-order-event` | kafka.expect | `order-events` | 30s | `$.status`→`CREATED`→EQUALS | — | case; timeout: assumption (SDK default) |
+| 3 | `verify-projection` | db.expectEventually | `orders-db` | 30s | singleValue `DONE` | — | case (table/column named); timeout: assumption |
 
 ### Variables
 

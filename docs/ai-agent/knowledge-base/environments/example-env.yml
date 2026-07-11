@@ -1,0 +1,57 @@
+# Example KB entries — Environments. Schema: ../schema/environment.schema.json
+# An environment binds KB entities to env-var REFERENCES (names, never values) and to the
+# real per-environment topic names. This file is the input for /stand-test-generate-env,
+# which renders it into stand-test-environments.yml (plain JUnit, refs-only) or
+# application.yml stand.test.environments.* (Spring starter). Secrets are external:
+# only the env-var NAMES appear here; production-looking environment ids are schema-rejected.
+environments:
+  - id: dev
+    description: Shared DEV stand
+    services:
+      - serviceId: client-service
+        baseUrlRef: CLIENT_SERVICE_BASE_URL
+    grpcTargets:
+      - targetId: result-grpc-service
+        targetRef: RESULT_GRPC_TARGET
+    kafka:
+      bootstrapServersRef: KAFKA_BOOTSTRAP_SERVERS
+      topics:
+        - topicId: request-created-topic
+          actualName: dev.client.request-created.v1
+    datasources:
+      - datasourceId: client-db
+        urlRef: CLIENT_DB_URL
+        userRef: CLIENT_DB_USER
+        passwordRef: CLIENT_DB_PASSWORD
+    secrets:
+      mode: external
+      allowedRefPrefixes:
+        - CLIENT_
+        - KAFKA_
+        - RESULT_
+
+  - id: ift
+    description: Integration test environment
+    services:
+      - serviceId: client-service
+        baseUrlRef: CLIENT_SERVICE_BASE_URL
+    grpcTargets:
+      - targetId: result-grpc-service
+        targetRef: RESULT_GRPC_TARGET
+    kafka:
+      bootstrapServersRef: KAFKA_BOOTSTRAP_SERVERS
+      securityProtocolRef: KAFKA_SECURITY_PROTOCOL
+      topics:
+        - topicId: request-created-topic
+          actualName: ift.client.request-created.v1
+    datasources:
+      - datasourceId: client-db
+        urlRef: CLIENT_DB_URL
+        userRef: CLIENT_DB_USER
+        passwordRef: CLIENT_DB_PASSWORD
+    secrets:
+      mode: external
+      allowedRefPrefixes:
+        - CLIENT_
+        - KAFKA_
+        - RESULT_

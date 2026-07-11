@@ -292,4 +292,22 @@ class SqlStatementClassifierTest {
         // A batch separator (GO) separated only by bare CRs is still detected.
         assertThat(SqlStatementClassifier.classify("SELECT 1\rGO\rSELECT 2").kind()).isEqualTo(SqlStatementKind.REJECTED);
     }
+
+    @Test
+    @DisplayName("insertColumns parses the explicit INSERT column list, ignoring case, quotes-in-strings and comments")
+    void insertColumnsParsesColumnList() {
+        assertThat(SqlStatementClassifier.insertColumns("INSERT INTO test_data.orders(id, status, test_run_id) VALUES (:id, 'NEW', :testRunId)"))
+                .containsExactlyInAnyOrder("id", "status", "test_run_id");
+        // Case-folded; a comment inside the column list is stripped and adds no phantom column.
+        assertThat(SqlStatementClassifier.insertColumns("INSERT INTO test_data.orders(ID, /* note */ TEST_RUN_ID) VALUES (:id, :testRunId)"))
+                .containsExactlyInAnyOrder("id", "test_run_id");
+    }
+
+    @Test
+    @DisplayName("insertColumns returns empty for a non-INSERT or an INSERT with no explicit column list")
+    void insertColumnsEmptyWhenAbsent() {
+        assertThat(SqlStatementClassifier.insertColumns("INSERT INTO test_data.orders VALUES (:id, :testRunId)")).isEmpty();
+        assertThat(SqlStatementClassifier.insertColumns("UPDATE test_data.orders SET status = 'X' WHERE test_run_id = :testRunId")).isEmpty();
+        assertThat(SqlStatementClassifier.insertColumns(null)).isEmpty();
+    }
 }

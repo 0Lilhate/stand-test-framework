@@ -71,8 +71,14 @@ public final class AllureReportingEventPublisher implements ReportingEventPublis
         try {
             if (event.phase() == ScenarioPhase.STARTED) {
                 lifecycle.updateTestCase(metadataMapper.scenarioLabels(event), metadataMapper.scenarioParameters(event));
+            } else if (event.phase() == ScenarioPhase.FINISHED) {
+                // Bind per-thread cleanup to the run boundary (plan §15). The runner always emits
+                // ScenarioPhase.FINISHED (in a finally), so the per-thread step stack is reset between runs
+                // even if a mid-run lifecycle call threw and left an orphaned uuid — a reused pool thread
+                // under JUnit parallel execution never inherits a stale entry. Closing the Allure test case
+                // itself stays with the JUnit/Allure integration.
+                stepUuids.remove();
             }
-            // ScenarioPhase.FINISHED is a no-op: the JUnit/Allure integration owns closing the test case.
         } catch (RuntimeException reportingFailure) {
             // Reporting is a best-effort side-channel (plan §17): a rendering error must never change the
             // test outcome. Swallowed; becomes a WARN log once SLF4J is wired.
@@ -95,8 +101,11 @@ public final class AllureReportingEventPublisher implements ReportingEventPublis
 
     private void startStep(StepEvent event) {
         String uuid = UUID.randomUUID().toString();
-        stepUuids.get().push(uuid);
         lifecycle.startStep(uuid, stepMapper.stepName(event));
+        // Push only after the lifecycle accepted the step, so a thrown startStep (swallowed by the publish()
+        // guard) leaves the per-thread stack balanced: the paired FINISHED then synthesises its own step
+        // rather than closing a step Allure never opened.
+        stepUuids.get().push(uuid);
     }
 
     private void finishStep(StepEvent event) {

@@ -1,0 +1,11 @@
+# INVALID by design: an endpoint path must be a single-slash-rooted path, never a URL.
+endpoints:
+  - id: create-request
+    serviceId: client-service
+    method: POST
+    path: https://payments.example.com/api/requests
+    response:
+      status:
+        success: 200
+    allowedEnvironments:
+      - ift

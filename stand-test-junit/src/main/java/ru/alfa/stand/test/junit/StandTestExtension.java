@@ -53,6 +53,20 @@ import ru.alfa.stand.test.core.validation.DefaultScenarioValidator;
  * <p>SDK failures need no translation here: {@code StandTestAssertionError} extends
  * {@link AssertionError} and {@code StandTestException} extends {@link RuntimeException}, so a failure
  * thrown by the runner inside {@code stand.run(...)} surfaces as a native JUnit test failure/error.
+ *
+ * <p><strong>Parallel execution (plan §15).</strong> The single {@link StandClient} is cached at the
+ * <em>engine-root</em> store, so under JUnit parallel execution ({@code junit.jupiter.execution.parallel.enabled=true})
+ * <em>the same</em> client instance — and therefore the one {@link DefaultScenarioRunner} and the one instance
+ * of each SPI-discovered {@link StepExecutor}/{@link ReportingEventPublisher} it wraps — is invoked
+ * concurrently by every test thread. This is safe because the runner keeps all per-run state
+ * ({@code ScenarioContext}, {@code VariableStore}, {@code ResourceScope}) thread-confined to a single
+ * {@code run(...)} call; it is <strong>conditional</strong> on every registered {@link StepExecutor} and the
+ * {@link ReportingEventPublisher} being safe for concurrent {@code execute(...)}/{@code prepare(...)}/{@code publish(...)}
+ * — the SPIs mandate exactly that (an executor must hold no run-scoped mutable state in its fields; run-scoped
+ * resources belong in the per-run {@code ResourceScope}). A scenario run is driven on one thread, so parallelise
+ * at the scenario/class level (concurrent classes, serial methods), never the steps of one scenario. Mark a
+ * class that cannot be {@code testRunId}-isolated with {@link StandIsolated}/{@link StandSerial} or
+ * {@link org.junit.jupiter.api.parallel.ResourceLock @ResourceLock}.
  */
 public final class StandTestExtension implements ParameterResolver {
 

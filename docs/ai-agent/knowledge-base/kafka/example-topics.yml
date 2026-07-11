@@ -1,0 +1,29 @@
+# Example KB entries — Kafka topics. Schema: ../schema/kafka-topic.schema.json
+# 'direction: produced' = the system under test publishes here, so tests consume via kafka.expect.
+# Correlation is HEADER-only (the SDK rejects KEY/PAYLOAD_FIELD carriers at run time).
+# The REAL topic name is NOT here — it is per-environment (environments/*.yml, kafka.topics[].actualName)
+# and lands only in the registry's literal 'name:' field, never in a scenario.
+# Kafka assertions are equals-only in the SDK; timeout is mandatory and bounded.
+kafkaTopics:
+  - id: request-created-topic
+    alias: request-created
+    direction: produced
+    description: Request created event, published after a request is accepted
+    correlation:
+      source: HEADER
+      headerName: X-Correlation-Id
+    key:
+      strategy: variable
+      variable: requestId
+    payload:
+      schemaRef: schemas/kafka/request-created.schema.json
+      requiredFields:
+        - requestId
+        - status
+    assertions:
+      - path: $.status
+        equals: ACCEPTED
+    timeout: 30s
+    allowedEnvironments:
+      - dev
+      - ift

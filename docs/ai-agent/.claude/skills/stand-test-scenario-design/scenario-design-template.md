@@ -27,13 +27,17 @@
 
 ## Step table (execution order)
 
-| # | Step id | Type | Alias | Purpose | Timeout | Assertions (path → value → matcher) | Captures (var ← path/column) |
-|---|---|---|---|---|---|---|---|
-| 1 | `seed-...` | db.seed | `<ds>` | | n/a | n/a | n/a |
-| 2 | `create-...` | rest.post | `<svc>` | trigger; injectCorrelationId | n/a | status 200; `$.status` → ACCEPTED → EQUALS | `orderId` ← `$.orderId` |
-| 3 | `await-...` | kafka.expect | `<topic>` | | 30s | `$.status` → CREATED → EQUALS (equals-only!) | |
-| 4 | `verify-...` | db.expectEventually | `<ds>` | | 10s | singleValue → DONE | |
-| 5 | `cleanup-...` | db.cleanup | `<ds>` | whereTestRunId(`test_run_id`) | n/a | n/a | n/a |
+| # | Step id | Type | Alias | Purpose | Timeout | Assertions (path → value → matcher) | Captures (var ← path/column) | Source (KB id / case / assumption) |
+|---|---|---|---|---|---|---|---|---|
+| 1 | `seed-...` | db.seed | `<ds>` | taggedByTestRunId(`test_run_id`) | n/a | n/a | n/a | KB `<probe/datasource id>` |
+| 2 | `create-...` | rest.post | `<svc>` | trigger; injectCorrelationId | n/a | status 200; `$.status` → ACCEPTED → EQUALS | `orderId` ← `$.orderId` | KB `<endpoint id>` |
+| 3 | `await-...` | kafka.expect | `<topic>` | | 30s | `$.status` → CREATED → EQUALS (equals-only!) | | KB `<topic id>`; timeout: assumption |
+| 4 | `verify-...` | db.expectEventually | `<ds>` | | 10s | singleValue → DONE | | KB `<probe id>` |
+| 5 | `cleanup-...` | db.cleanup | `<ds>` | whereTestRunId(`test_run_id`) | n/a | n/a | n/a | case (seed pairing rule) |
+
+Every path/field/table/SQL/gRPC-method in the table cites its source: a KB entry id (projects
+with a knowledge base), a case-text value, or a recorded assumption. `case` alone is only valid
+when the case text literally states the detail.
 
 ## Variables
 
@@ -50,15 +54,26 @@
 
 ## Test data strategy
 
-- Unique keys derive from `${testRunId}`; system-generated ids only via capture.
-- Seeds: `INSERT` into `<schema>.<table>` (whitelisted, `write-allowed: true`),
-  `test_run_id` column bound to reserved `:testRunId`.
+- Unique keys derive from `${testRunId}`; system-generated ids only via capture (a fixed literal
+  primary key collides when two runs seed at once).
+- Seeds: `INSERT` into `<schema>.<table>` (whitelisted, `write-allowed: true`), `test_run_id` column
+  bound to reserved `:testRunId` and DECLARED with `taggedByTestRunId("test_run_id")` (the same
+  column the cleanup filters).
 
 ## Cleanup strategy
 
-- <one line per seeded table>: `DELETE FROM <schema>.<table>` (no WHERE) + `whereTestRunId("<column>")`.
+- <one line per seeded table>: `DELETE FROM <schema>.<table>` (no WHERE) + `whereTestRunId("<column>")`
+  — the same `<column>` the paired seed tagged with `taggedByTestRunId`.
 - Residual-data note: cleanup skipped if an earlier step fails (runner short-circuits);
   leftover rows are identifiable by `test_run_id` and harmless because <reason>.
+
+## Parallel isolation
+
+- Parallel-safe by construction: all test data scoped by `${testRunId}`, Kafka expects
+  discriminated, no shared static/instance state → NO parallel annotation (the class runs
+  concurrently under the consumer's `junit-platform.properties`).
+- Non-isolable resource (fixed port / shared file / process-wide singleton), if any:
+  `@StandIsolated` | `@ResourceLock("<alias>")` — reason: <why testRunId scoping is impossible here>.
 
 ## Negative paths (Java track)
 

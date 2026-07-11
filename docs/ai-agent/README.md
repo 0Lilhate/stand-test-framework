@@ -10,9 +10,17 @@ assets.
 ```
 docs/ai-agent/
   README.md          ← this guide (stays in the SDK repo; not part of the bundle)
+  usage-guide.md     ← worked walkthrough (RU): OpenAPI spec → KB → env → Java test
+  knowledge-base/    ← THE KB CONTRACT — schemas + worked examples (consumers copy the layout
+                       to knowledge-base/ and replace examples with real entries)
+    README.md, schema/*.schema.json,
+    services/ endpoints/ kafka/ db/ grpc/ environments/ mappings/   (example-*.yml + README each)
   .claude/           ← THE BUNDLE — copy its contents into the consumer repo's .claude/
-    skills/          ← 9 self-contained skills, each with its templates/checklists/examples
+    skills/          ← 12 self-contained skills, each with its templates/checklists/examples
       stand-test-case-analysis/        SKILL.md + test-case-analysis-template.md + example-text-case.md
+      stand-test-kb-lookup/            SKILL.md + kb-lookup-result-template.yml + example-kb-lookup-result.yml
+      stand-test-kb-update/            SKILL.md + kb-update-report-template.md + kb-entry-review-checklist.md
+      stand-test-env-generation/       SKILL.md + env-generation-report-template.md + application-yml-generation-checklist.md
       stand-test-scenario-design/      SKILL.md + scenario-design-template.md + before-generating-checklist.md + example-scenario-design.md
       stand-test-yaml-authoring/       SKILL.md + yaml-scenario-template.yaml + example-generated.yaml
       stand-test-java-dsl-authoring/   SKILL.md + java-test-template.java + sdk-boundary-checklist.md + example-generated.java
@@ -22,11 +30,15 @@ docs/ai-agent/
       stand-test-test-review/          SKILL.md + review-checklist.md + flakiness-checklist.md
                                        + generated-test-review-template.md + before-committing-checklist.md + example-review.md
       stand-test-debugging/            SKILL.md + debugging-report-template.md
-    commands/        ← 5 workflows as slash commands
-      stand-test-design.md      /stand-test-design   — text case → scenario design
+    commands/        ← 9 workflows as slash commands
+      stand-test-generate-java-test.md /stand-test-generate-java-test — TEXT CASE → VALIDATED TEST (umbrella, start here)
+      stand-test-design.md      /stand-test-design   — text case → KB lookup → scenario design
       stand-test-yaml.md        /stand-test-yaml     — design → AI-format scenario (+ gates)
       stand-test-java.md        /stand-test-java     — design → Java DSL test (+ gates)
       stand-test-validate.md    /stand-test-validate — final readiness gate before commit
+      stand-test-review-generated-test.md /stand-test-review-generated-test — existing test → KB-alignment + review
+      stand-test-kb-update.md   /stand-test-kb-update — spec (OpenAPI/proto/SQL/...) → KB entries
+      stand-test-generate-env.md /stand-test-generate-env — KB → registry config (yml/application.yml)
       stand-test-debug.md       /stand-test-debug    — failed test → debugging report
     rules/
       stand-test-guardrails.md  ← non-negotiable constraints (mirrors ForbiddenOperation)
@@ -52,14 +64,30 @@ as thin wrappers pointing into the bundle — the bundle stays the single source
 
 ## How a text case becomes an autotest
 
+`/stand-test-generate-java-test` runs the whole chain below as one umbrella workflow; the phase
+commands remain individually invocable:
+
 ```
 Text case
-  → /stand-test-design      (skills: case-analysis → environment-mapping → scenario-design)
+  → /stand-test-design      (skills: case-analysis → kb-lookup → environment-mapping → scenario-design)
   → /stand-test-java  OR  /stand-test-yaml   (+ fixture-authoring, safety-review)
   → /stand-test-validate    (schema/compile/run-skip-gate/safety/quality → readiness report)
   → human approval → commit
   → on failure: /stand-test-debug
 ```
+
+## Knowledge base: the anti-invention layer
+
+The agent never invents endpoints, topics, DB queries, gRPC methods or environment config.
+Contract details resolve through the **schema-validated knowledge base**
+([`knowledge-base/README.md`](knowledge-base/README.md)): a consumer project keeps YAML entries
+at `knowledge-base/` (same layout as the shipped examples), validated by
+[`knowledge-base/schema/stand-test-knowledge-base.schema.json`](knowledge-base/schema/stand-test-knowledge-base.schema.json)
+and pinned by the KB validation tests in `stand-test-ai-schema`. `stand-test-kb-lookup` resolves a
+case against it (unknowns become `missing`, never guesses); `/stand-test-kb-update` feeds it from
+OpenAPI/AsyncAPI/proto/SQL specs (dry-run first, human-approved); `/stand-test-generate-env`
+renders its environment entries into the registry formats below. The KB stores aliases, contracts
+and env-var reference NAMES only — secrets, URLs and production environments are schema-rejected.
 
 ## Preferred authoring track
 
@@ -108,7 +136,12 @@ The hard rules live in the bundle: [`.claude/rules/stand-test-guardrails.md`](.c
 in [`.claude/skills/stand-test-safety-review/safety-checklist.md`](.claude/skills/stand-test-safety-review/safety-checklist.md).
 Summary: aliases only, no secrets, no sleeps, bounded timeouts, no destructive SQL,
 SDK-owned `testRunId`/`correlationId`, no pipeline/validator bypass, no production envs,
-no SDK modifications, human approves every merge.
+no SDK modifications, human approves every merge. Parallel-safe by construction (the SDK runs
+tests in-JVM concurrently — classes concurrent, methods same_thread): all test data scoped by
+`${testRunId}`; every `db.seed` declares `taggedByTestRunId("<col>")` = its cleanup's
+`whereTestRunId("<col>")` column; every `kafka.expect` has a per-run discriminator
+(`correlationIdFromContext` or a `${testRunId}`-derived key); no shared static state;
+`@StandIsolated`/`@ResourceLock` only for a resource that cannot be `testRunId`-isolated.
 
 ## How to run validation
 

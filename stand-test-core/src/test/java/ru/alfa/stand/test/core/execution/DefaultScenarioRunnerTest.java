@@ -10,6 +10,9 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.DisplayName;
@@ -633,5 +636,25 @@ class DefaultScenarioRunnerTest {
 
         assertThatCode(() -> IntStream.range(0, 64).parallel().forEach(index ->
                 runner.run(scenario(GenericStep.of("s1", "fake.iso"))))).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("concurrent runs of one runner each get a unique testRunId and correlationId")
+    void run_concurrentRuns_haveUniqueIdentifiers() {
+        Queue<String> testRunIds = new ConcurrentLinkedQueue<>();
+        Queue<String> correlationIds = new ConcurrentLinkedQueue<>();
+        FakeStepExecutor recording = new FakeStepExecutor("fake.rec", (step, context) -> {
+            testRunIds.add(context.scenarioContext().testRunId().value());
+            correlationIds.add(context.scenarioContext().correlationId().value());
+            return StepResult.success(step.id(), step.type(), Instant.now(), Instant.now());
+        });
+        DefaultScenarioRunner runner = runner(recording);
+
+        int runs = 64;
+        IntStream.range(0, runs).parallel().forEach(index -> runner.run(scenario(GenericStep.of("s1", "fake.rec"))));
+
+        assertThat(testRunIds).hasSize(runs);
+        assertThat(Set.copyOf(testRunIds)).as("every run's testRunId is unique").hasSize(runs);
+        assertThat(Set.copyOf(correlationIds)).as("every run's correlationId is unique").hasSize(runs);
     }
 }

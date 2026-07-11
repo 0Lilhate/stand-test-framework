@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stand-test.alfa.ru/schema/kafka-topic.schema.json",
+  "title": "stand-test knowledge base - kafkaTopicsFile",
+  "description": "A KB Kafka topics file: { kafkaTopics: [KafkaTopic...] }. Thin pointer: the single source of truth is stand-test-knowledge-base.schema.json#/$defs/kafkaTopicsFile.",
+  "$ref": "stand-test-knowledge-base.schema.json#/$defs/kafkaTopicsFile"
+}

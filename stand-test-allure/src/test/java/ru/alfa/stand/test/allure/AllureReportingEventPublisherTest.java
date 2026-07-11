@@ -4,13 +4,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import ru.alfa.stand.test.allure.lifecycle.AllureLabel;
+import ru.alfa.stand.test.allure.lifecycle.AllureLifecycleFacade;
 import ru.alfa.stand.test.allure.lifecycle.AllureStatus;
 import ru.alfa.stand.test.allure.lifecycle.FakeAllureLifecycleFacade;
 import ru.alfa.stand.test.allure.lifecycle.FakeAllureLifecycleFacade.RecordedAttachment;
@@ -154,12 +162,71 @@ class AllureReportingEventPublisherTest {
     }
 
     @Test
-    @DisplayName("the scenario FINISHED event is a no-op (the JUnit/Allure integration closes the test)")
-    void scenarioFinished_isNoOp() {
+    @DisplayName("the scenario FINISHED event resets the per-thread step stack but does not touch the test case (the JUnit/Allure integration closes the test)")
+    void scenarioFinished_resetsStepStackWithoutTouchingTestCase() {
         publisher.publish(new ScenarioEvent(
                 SCENARIO_ID, TEST_RUN_ID, CORRELATION_ID, "ift", Set.of(), ScenarioPhase.FINISHED, NOW));
 
         assertThat(lifecycle.testCaseUpdates()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a scenario FINISHED clears an orphaned step so a reused thread starts with a clean stack (parallel-safety, plan §15)")
+    void scenarioFinished_clearsOrphanedStepForNextRun() {
+        // Run 1 leaves an unbalanced stack: a step is STARTED but the run ends (scenario FINISHED) before its
+        // FINISHED — what a mid-run failure or a swallowed lifecycle call can leave on a pooled thread.
+        publisher.publish(stepStarted("s1", "rest.post"));
+        publisher.publish(new ScenarioEvent(SCENARIO_ID, TEST_RUN_ID, CORRELATION_ID, "ift", Set.of(), ScenarioPhase.FINISHED, NOW));
+
+        // Run 2 on the SAME thread/publisher: its FINISHED must synthesise a fresh step (the stack was reset),
+        // not close run 1's orphan under run 2's data.
+        publisher.publish(stepFinished("s2", "kafka.expect", StepStatus.SUCCESS, null, Map.of(), List.of()));
+
+        // Run 1 started s1 (never stopped); run 2 synthesised its own step -> a SECOND startStep, and the stop
+        // targets that fresh uuid, never s1's. Without the reset, run 2 would reuse s1's uuid (one startStep).
+        assertThat(lifecycle.startedSteps()).hasSize(2);
+        String synthesised = lifecycle.startedSteps().get(1).uuid();
+        assertThat(lifecycle.stoppedSteps()).containsExactly(synthesised);
+    }
+
+    @Test
+    @DisplayName("one shared publisher keeps its per-thread step stack isolated across concurrent (and reused) threads")
+    void concurrentRuns_keepStepStacksThreadLocal() throws Exception {
+        ThreadRecordingFacade facade = new ThreadRecordingFacade();
+        AllureReportingEventPublisher shared = new AllureReportingEventPublisher(facade);
+        int tasks = 16;
+        ExecutorService pool = Executors.newFixedThreadPool(Math.min(tasks, Math.max(4, Runtime.getRuntime().availableProcessors())));
+        try {
+            List<Future<?>> futures = new ArrayList<>();
+            for (int i = 0; i < tasks; i++) {
+                futures.add(pool.submit(() -> {
+                    shared.publish(stepStarted("s", "rest.post"));
+                    shared.publish(stepFinished("s", "rest.post", StepStatus.SUCCESS, null, Map.of(), List.of()));
+                }));
+            }
+            for (Future<?> future : futures) {
+                future.get(30, TimeUnit.SECONDS);
+            }
+
+            // Group each thread's events in its own order. Every start must be immediately followed by a stop
+            // on the SAME uuid: a shared (non-ThreadLocal) stack would let one thread stop another's uuid.
+            Map<String, List<String>> byThread = new LinkedHashMap<>();
+            for (String event : facade.events()) {
+                String[] parts = event.split(":", 3);
+                byThread.computeIfAbsent(parts[1], key -> new ArrayList<>()).add(parts[0] + ":" + parts[2]);
+            }
+            assertThat(byThread).isNotEmpty();
+            for (List<String> sequence : byThread.values()) {
+                assertThat(sequence.size() % 2).as("each run contributes a start and a stop").isZero();
+                for (int index = 0; index < sequence.size(); index += 2) {
+                    String startedUuid = sequence.get(index).substring("start:".length());
+                    assertThat(sequence.get(index + 1)).isEqualTo("stop:" + startedUuid);
+                }
+            }
+            assertThat(facade.events()).hasSize(tasks * 2);
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     @Test
@@ -292,5 +359,40 @@ class AllureReportingEventPublisherTest {
         return new StepEvent(
                 SCENARIO_ID, TEST_RUN_ID, CORRELATION_ID, stepId, stepType, StepPhase.FINISHED,
                 status, NOW, message, diagnostics, attachments);
+    }
+
+    /**
+     * A thread-safe {@link AllureLifecycleFacade} that records step start/stop with the calling thread, so a
+     * concurrent test can assert the publisher's per-thread step stack never crosses threads.
+     */
+    private static final class ThreadRecordingFacade implements AllureLifecycleFacade {
+
+        private final Queue<String> events = new ConcurrentLinkedQueue<>();
+
+        @Override
+        public void startStep(String uuid, String name) {
+            this.events.add("start:" + Thread.currentThread().getName() + ":" + uuid);
+        }
+
+        @Override
+        public void updateStep(String uuid, AllureStatus status, String statusMessage, String statusTrace, Map<String, String> parameters) {
+        }
+
+        @Override
+        public void addAttachment(String name, String type, String fileExtension, String content) {
+        }
+
+        @Override
+        public void stopStep(String uuid) {
+            this.events.add("stop:" + Thread.currentThread().getName() + ":" + uuid);
+        }
+
+        @Override
+        public void updateTestCase(List<AllureLabel> labels, Map<String, String> parameters) {
+        }
+
+        List<String> events() {
+            return List.copyOf(this.events);
+        }
     }
 }

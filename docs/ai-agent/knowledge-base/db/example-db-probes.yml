@@ -1,0 +1,18 @@
+# Example KB entries — DB probes. Schema: ../schema/db-probe.schema.json
+# A probe is the ONLY sanctioned shape of a DB check an agent may put into a scenario:
+# a single-statement lowercase 'select' returning a single value, with named :params.
+# Probes map 1:1 onto DbStep.expectEventually(...).sql(...).param(...).expectValue(...).
+# Scope by :testRunId (or a captured unique id) so parallel runs never observe each other.
+dbProbes:
+  - id: request-status-by-request-id
+    datasourceId: client-db
+    description: Check request status by captured requestId (system-created row; the captured id is already run-unique)
+    sql: |
+      select status
+      from client.request
+      where request_id = :requestId
+    params:
+      - requestId
+    expect:
+      singleValue: ACCEPTED
+    timeout: 30s

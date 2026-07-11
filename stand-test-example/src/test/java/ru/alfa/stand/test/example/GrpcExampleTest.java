@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.Objects;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import ru.alfa.stand.test.core.StandClient;
 import ru.alfa.stand.test.core.result.ScenarioResult;
 import ru.alfa.stand.test.core.scenario.Scenario;
@@ -16,7 +17,13 @@ import ru.alfa.stand.test.grpc.GrpcStep;
  * alias through the {@code GRPC_TARGET} env-ref (pinned by the build), calls {@code Health/Check} via the
  * default reflection-based invoker, and asserts the JSON response — proving the declarative → runner →
  * GrpcStepExecutor → real server path offline.
+ *
+ * <p>Binds the fixed {@code GRPC_TARGET} loopback port, which {@link FullStandTestFrameworkExampleTest} also
+ * binds. Under the module's class-level parallel execution the two would race that port, so both declare the
+ * same {@link ResourceLock} to run mutually exclusively (the narrow, resource-scoped alternative to isolating
+ * either class from the whole suite).
  */
+@ResourceLock("stand-example-grpc-target")
 class GrpcExampleTest {
 
     @Test

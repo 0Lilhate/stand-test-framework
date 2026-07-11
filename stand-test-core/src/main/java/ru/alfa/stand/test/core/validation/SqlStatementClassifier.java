@@ -1,5 +1,10 @@
 package ru.alfa.stand.test.core.validation;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -87,6 +92,157 @@ public final class SqlStatementClassifier {
             case "INSERT", "UPDATE", "DELETE" -> classifyWrite(trimmed, upper, referencesTestRunId, hasWhere);
             default -> destructive(upper);
         };
+    }
+
+    /**
+     * Returns the lower-cased plain column identifiers of an {@code INSERT}'s explicit column list (the
+     * {@code (a, b, c)} that precedes {@code VALUES}), or an empty set when the statement is not an
+     * {@code INSERT} or carries no explicit column list. The column list is read from the same stripped
+     * skeleton {@link #classify} uses, so commas/parens inside comments or string literals are ignored;
+     * a quoted identifier is blanked by that pass and so is reported absent (fail-closed — a caller
+     * checking column membership should require a plain identifier).
+     *
+     * <p>The DB write-guard uses this to verify that a {@code db.seed} INSERT actually tags the reserved
+     * {@code testRunId} column that its paired {@code db.cleanup} filters on (plan §15) — a textual
+     * {@code :testRunId} reference alone does not prove the row is reapable by the run's own cleanup.
+     *
+     * @param sql the raw SQL text
+     * @return the immutable set of lower-cased column identifiers in the INSERT column list (never null)
+     */
+    public static Set<String> insertColumns(String sql) {
+        if (sql == null) {
+            return Set.of();
+        }
+        String skeleton = strip(sql);
+        Matcher matcher = INSERT_TARGET.matcher(skeleton);
+        if (!matcher.find()) {
+            return Set.of();
+        }
+        int cursor = matcher.end();
+        while (cursor < skeleton.length() && Character.isWhitespace(skeleton.charAt(cursor))) {
+            cursor++;
+        }
+        if (cursor >= skeleton.length() || skeleton.charAt(cursor) != '(') {
+            return Set.of();
+        }
+        int depth = 0;
+        int close = -1;
+        for (int index = cursor; index < skeleton.length(); index++) {
+            char current = skeleton.charAt(index);
+            if (current == '(') {
+                depth++;
+            } else if (current == ')') {
+                depth--;
+                if (depth == 0) {
+                    close = index;
+                    break;
+                }
+            }
+        }
+        if (close < 0) {
+            return Set.of();
+        }
+        Set<String> columns = new LinkedHashSet<>();
+        for (String token : splitTopLevel(skeleton.substring(cursor + 1, close))) {
+            String column = token.strip().replace("\"", "").toLowerCase(Locale.ROOT);
+            if (!column.isEmpty()) {
+                columns.add(column);
+            }
+        }
+        return columns;
+    }
+
+    /**
+     * Returns the number of top-level {@code VALUES} row tuples of an {@code INSERT}: {@code 1} for a
+     * single-row {@code INSERT ... VALUES (...)}, {@code N > 1} for a multi-row
+     * {@code INSERT ... VALUES (...),(...)}, and {@code 0} when the statement is not a {@code VALUES}
+     * INSERT at all ({@code INSERT ... SELECT}, {@code INSERT ... DEFAULT VALUES}, the {@code SET} form,
+     * or not an INSERT). Read from the same stripped skeleton {@link #classify} uses, so parens/commas
+     * inside comments or literals are ignored.
+     *
+     * <p>The undo-log guard uses this to fail closed on any {@code db.write} INSERT whose written row set
+     * cannot be fully captured for compensation: only a single-row {@code VALUES} INSERT yields exactly one
+     * primary key to delete. A {@code 0} return (no {@code VALUES}) and an {@code N > 1} return are both
+     * un-undoable in the MVP and must be rejected.
+     *
+     * @param sql the raw SQL text
+     * @return the top-level {@code VALUES} tuple count, or {@code 0} when there is no top-level VALUES list
+     */
+    public static int insertValuesRowArity(String sql) {
+        if (sql == null) {
+            return 0;
+        }
+        String skeleton = strip(sql);
+        Matcher insert = INSERT_TARGET.matcher(skeleton);
+        if (!insert.find()) {
+            return 0;
+        }
+        int valuesStart = topLevelKeyword(skeleton, "VALUES", insert.end());
+        if (valuesStart < 0) {
+            return 0;
+        }
+        int rows = 0;
+        int depth = 0;
+        for (int index = valuesStart + "VALUES".length(); index < skeleton.length(); index++) {
+            char current = skeleton.charAt(index);
+            if (current == '(') {
+                if (depth == 0) {
+                    rows++;
+                }
+                depth++;
+            } else if (current == ')') {
+                depth--;
+            }
+        }
+        return rows;
+    }
+
+    private static int topLevelKeyword(String skeleton, String keyword, int from) {
+        int depth = 0;
+        for (int index = from; index < skeleton.length(); index++) {
+            char current = skeleton.charAt(index);
+            if (current == '(') {
+                depth++;
+            } else if (current == ')') {
+                depth--;
+            } else if (depth == 0 && isKeywordAt(skeleton, index, keyword)) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private static boolean isKeywordAt(String skeleton, int index, String keyword) {
+        int length = keyword.length();
+        if (index + length > skeleton.length() || !skeleton.regionMatches(true, index, keyword, 0, length)) {
+            return false;
+        }
+        char before = (index == 0) ? ' ' : skeleton.charAt(index - 1);
+        char after = (index + length < skeleton.length()) ? skeleton.charAt(index + length) : ' ';
+        return !isWordChar(before) && !isWordChar(after);
+    }
+
+    private static boolean isWordChar(char character) {
+        return Character.isLetterOrDigit(character) || character == '_';
+    }
+
+    private static List<String> splitTopLevel(String content) {
+        List<String> parts = new ArrayList<>();
+        int depth = 0;
+        int last = 0;
+        for (int index = 0; index < content.length(); index++) {
+            char current = content.charAt(index);
+            if (current == '(') {
+                depth++;
+            } else if (current == ')') {
+                depth--;
+            } else if (current == ',' && depth == 0) {
+                parts.add(content.substring(last, index));
+                last = index + 1;
+            }
+        }
+        parts.add(content.substring(last));
+        return parts;
     }
 
     private static SqlClassification classifySelect(String skeleton, String keyword, boolean testRunId, boolean hasWhere) {

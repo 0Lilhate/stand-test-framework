@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import ru.alfa.stand.test.allure.AllureReportingEventPublisher;
 import ru.alfa.stand.test.allure.lifecycle.AllureStatus;
 import ru.alfa.stand.test.await.AwaitPolicy;
@@ -34,7 +35,11 @@ import ru.alfa.stand.test.rest.RestStep;
  *
  * <p>Not a business test: the endpoints are in-process doubles whitelisted through the example registry,
  * and the flow (create → await stored state → unary call → verify variables) is generic.
+ *
+ * <p>Binds the fixed {@code GRPC_TARGET} loopback port shared with {@link GrpcExampleTest}; both declare the
+ * same {@link ResourceLock} so the module's class-level parallel execution never races that port.
  */
+@ResourceLock("stand-example-grpc-target")
 class FullStandTestFrameworkExampleTest {
 
     @BeforeAll
@@ -70,6 +75,7 @@ class FullStandTestFrameworkExampleTest {
                     .step(DbStep.seed(ExampleStand.DATASOURCE)
                             .id("seed-order")
                             .sql("INSERT INTO test_data.orders(id, status, test_run_id) VALUES (:id, 'ACCEPTED', :testRunId)")
+                            .taggedByTestRunId("test_run_id")
                             .param("id", "${requestId}")
                             .build())
                     .step(DbStep.expectEventually(ExampleStand.DATASOURCE)

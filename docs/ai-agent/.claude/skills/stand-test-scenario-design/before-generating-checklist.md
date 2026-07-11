@@ -33,8 +33,12 @@ generate "to see how it looks".
       `≤99999ms / ≤999s / ≤60m`).
 - [ ] Every `${var}` consumed is produced earlier or is a built-in
       (`scenarioId|testRunId|correlationId|environment`).
-- [ ] Kafka trigger and `kafka.expect` are in the SAME scenario.
-- [ ] Every seed has a `whereTestRunId`-scoped cleanup; seeded rows carry `test_run_id`.
+- [ ] Kafka trigger and `kafka.expect` are in the SAME scenario; every `kafka.expect` has a
+      per-run discriminator (`correlationIdFromContext` or a `${testRunId}`-derived key).
+- [ ] Every seed has a `whereTestRunId`-scoped cleanup and declares `taggedByTestRunId("<col>")`
+      naming the SAME column; seeded rows carry `test_run_id`.
+- [ ] Parallel-safe: test data scoped by `${testRunId}`, no shared static/instance state;
+      `@StandIsolated`/`@ResourceLock` only for a resource that cannot be `testRunId`-isolated.
 
 ## Workspace sane
 

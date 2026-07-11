@@ -38,6 +38,10 @@ public final class DbStepParameters {
     public static final String EXPECTED_VALUE = StepParameterKeys.EXPECTED_VALUE;
     /** Parameter key (cleanup / optional): the column the appended {@code testRunId} predicate binds. */
     public static final String WHERE_TEST_RUN_ID_COLUMN = StepParameterKeys.WHERE_TEST_RUN_ID_COLUMN;
+    /** Parameter key (seed): the column a seed INSERT must tag with {@code :testRunId} so its rows are reaped by cleanup. */
+    public static final String SEED_TEST_RUN_ID_COLUMN = StepParameterKeys.SEED_TEST_RUN_ID_COLUMN;
+    /** Parameter key (db.write): the primary-key column(s) identifying the written row for undo-log compensation. */
+    public static final String IDENTIFIED_BY = StepParameterKeys.IDENTIFIED_BY;
     /** Parameter key (expectEventually): maximum time to wait for a match, in milliseconds. */
     public static final String TIMEOUT_MILLIS = StepParameterKeys.TIMEOUT_MILLIS;
     /** Parameter key (expectEventually): the poll interval between probes, in milliseconds. */
@@ -121,6 +125,30 @@ public final class DbStepParameters {
             result.put(String.valueOf(entry.getKey()), entry.getValue());
         }
         return result;
+    }
+
+    static List<String> identifiedBy(Map<String, Object> parameters) {
+        Object value = parameters.get(IDENTIFIED_BY);
+        if (value == null) {
+            return List.of();
+        }
+        if (!(value instanceof List<?> list)) {
+            throw new StandTestException("DB step parameter '" + IDENTIFIED_BY + "' must be a list of column names");
+        }
+        List<String> result = new ArrayList<>();
+        for (Object item : list) {
+            if (!(item instanceof String column) || column.isBlank()) {
+                throw new StandTestException("DB step parameter '" + IDENTIFIED_BY + "' entries must be non-blank column names");
+            }
+            // Re-validate at the runtime read path (not only in the Java builder): the parameter map is a
+            // wire contract a YAML/raw producer can target, and each column is spliced verbatim into the
+            // SDK-generated compensation DELETE, so a non-identifier value must be refused fail-closed.
+            if (!SqlIdentifiers.isPlainIdentifier(column)) {
+                throw new StandTestException("DB step parameter '" + IDENTIFIED_BY + "' entry '" + column + "' must be a plain identifier");
+            }
+            result.add(column);
+        }
+        return List.copyOf(result);
     }
 
     static List<DbCapture> captures(Map<String, Object> parameters) {

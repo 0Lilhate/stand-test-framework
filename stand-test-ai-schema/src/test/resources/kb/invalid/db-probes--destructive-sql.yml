@@ -1,0 +1,8 @@
+# INVALID by design: probes are single-statement selects; DML/DDL is unrepresentable.
+dbProbes:
+  - id: purge-requests
+    datasourceId: client-db
+    sql: delete from client.request where test_run_id = :testRunId
+    expect:
+      singleValue: 0
+    timeout: 30s

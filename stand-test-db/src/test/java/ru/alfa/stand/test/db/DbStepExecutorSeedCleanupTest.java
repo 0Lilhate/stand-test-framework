@@ -72,6 +72,7 @@ class DbStepExecutorSeedCleanupTest {
     void seedTagsWithTestRunId() throws SQLException {
         ScenarioStep seed = DbStep.seed(DbTestSupport.DATASOURCE_ALIAS)
                 .sql("INSERT INTO test_data.orders(id, status, test_run_id) VALUES (:id, 'NEW', :testRunId)")
+                .taggedByTestRunId("test_run_id")
                 .param("id", "o-1")
                 .build();
 
@@ -87,6 +88,7 @@ class DbStepExecutorSeedCleanupTest {
     void seedFromResource() throws SQLException {
         ScenarioStep seed = DbStep.seed(DbTestSupport.DATASOURCE_ALIAS)
                 .sqlFromResource("fixtures/seed-order.sql")
+                .taggedByTestRunId("test_run_id")
                 .param("id", "o-res")
                 .build();
 
@@ -100,6 +102,7 @@ class DbStepExecutorSeedCleanupTest {
     void cleanupDeletesOnlyRunRows() throws SQLException {
         ScenarioStep seed = DbStep.seed(DbTestSupport.DATASOURCE_ALIAS)
                 .sql("INSERT INTO test_data.orders(id, status, test_run_id) VALUES (:id, 'NEW', :testRunId)")
+                .taggedByTestRunId("test_run_id")
                 .param("id", "mine")
                 .build();
         this.executor.execute(seed, this.context);
@@ -231,6 +234,7 @@ class DbStepExecutorSeedCleanupTest {
     void reservedTestRunIdBindCannotBeSpoofed() throws SQLException {
         ScenarioStep seed = DbStep.seed(DbTestSupport.DATASOURCE_ALIAS)
                 .sql("INSERT INTO test_data.orders(id, status, test_run_id) VALUES (:id, 'NEW', :testRunId)")
+                .taggedByTestRunId("test_run_id")
                 .param("id", "mine")
                 .build();
         this.executor.execute(seed, this.context);
@@ -254,6 +258,7 @@ class DbStepExecutorSeedCleanupTest {
     void trailingLineCommentStaysScoped() throws SQLException {
         ScenarioStep seed = DbStep.seed(DbTestSupport.DATASOURCE_ALIAS)
                 .sql("INSERT INTO test_data.orders(id, status, test_run_id) VALUES (:id, 'NEW', :testRunId)")
+                .taggedByTestRunId("test_run_id")
                 .param("id", "mine")
                 .build();
         this.executor.execute(seed, this.context);

@@ -22,7 +22,7 @@
 |---|---|---|---|
 | 1 | No arbitrary URLs / direct hosts / JDBC / brokers | PASS/FAIL | grep output summary |
 | 2 | No secrets / inline auth headers / value-shaped refs | PASS/FAIL | |
-| 3 | No destructive SQL; writes only seed/cleanup; cleanup has no own WHERE; no `param("testRunId", ...)` | PASS/FAIL | |
+| 3 | No destructive SQL; writes only seed/cleanup; cleanup has no own WHERE + `whereTestRunId`; every seed declares `taggedByTestRunId` = the cleanup's column; no `param("testRunId", ...)` | PASS/FAIL | |
 | 4 | No production environment | PASS/FAIL | registry evidence |
 | 5 | Every async wait has bounded timeout (≤1h; AI grammar respected) | PASS/FAIL | |
 | 6 | No Thread.sleep / manual polling / SQL sleep functions | PASS/FAIL | |
@@ -35,6 +35,8 @@
 | 13 | No reliance on Allure masking for secrets | PASS/FAIL | |
 | 14 | No PII / production data in fixtures | PASS/FAIL | |
 | 15 | No unsanctioned dependencies | PASS/FAIL | build diff |
+| 16 | Every `kafka.expect` has a per-run discriminator (`fromContext` or `${...}`-key; no constant-key-only) | PASS/FAIL | |
+| 17 | No shared mutable static/instance state in the test class (parallel-safe) | PASS/FAIL | |
 
 ## Findings
 

@@ -22,7 +22,14 @@ public enum DbOperation {
     SEED("db.seed"),
 
     /** Constrained delete-by-{@code testRunId} that removes a run's test data. */
-    CLEANUP("db.cleanup");
+    CLEANUP("db.cleanup"),
+
+    /**
+     * Business write ({@code INSERT}) whose effect is undone automatically by a primary-key-scoped
+     * compensation registered into the run's undo-log (no {@code testRunId} marker column required). See
+     * {@code docs/arch/stand-test-db-rollback-design.md}.
+     */
+    WRITE("db.write");
 
     private final String stepType;
 
@@ -40,12 +47,12 @@ public enum DbOperation {
     }
 
     /**
-     * Returns whether this operation is permitted to write (seed or cleanup).
+     * Returns whether this operation is permitted to write (seed, cleanup or an undo-captured write).
      *
-     * @return true for {@link #SEED} and {@link #CLEANUP}
+     * @return true for {@link #SEED}, {@link #CLEANUP} and {@link #WRITE}
      */
     public boolean isWrite() {
-        return this == SEED || this == CLEANUP;
+        return this == SEED || this == CLEANUP || this == WRITE;
     }
 
     /**

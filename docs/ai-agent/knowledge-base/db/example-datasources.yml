@@ -1,0 +1,18 @@
+# Example KB entry — Datasource. Schema: ../schema/datasource.schema.json
+# A datasource is a registry whitelist entry: alias, access mode and schema whitelist.
+# Connection details are env-var REFERENCES declared per environment (environments/*.yml).
+# The allowed probe queries are separate first-class entries (example-db-probes.yml) that
+# reference this datasource by id — one direction of reference, no duplication.
+# Destructive SQL is globally forbidden by the SDK's ForbiddenOperation; the KB never
+# re-declares that list (single source of truth stays in stand-test-core).
+datasources:
+  - id: client-db
+    alias: client-db
+    description: Client database used for read-only projection probes
+    access:
+      mode: readonly
+    allowedSchemas:
+      - client
+    allowedEnvironments:
+      - dev
+      - ift

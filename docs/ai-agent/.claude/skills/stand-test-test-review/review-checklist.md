@@ -11,6 +11,9 @@ Applied by `stand-test-test-review` and by the human approver. Complements — n
       documented (assumptions + NOT-AUTOMATABLE list), not silently gone.
 - [ ] For regression ports: step ↔ manual-case-step mapping recorded (javadoc or step
       `description`).
+- [ ] KB alignment (projects with a knowledge base): every alias, path, topic, SQL statement
+      and gRPC method in the test resolves to a KB entry or a recorded assumption — an
+      unsourced contract detail is an "invented contract" HIGH finding.
 
 ## Structure
 
@@ -35,6 +38,9 @@ Applied by `stand-test-test-review` and by the human approver. Complements — n
 
 - [ ] Every `${var}` produced before use (capture or built-in); no dead captures.
 - [ ] No fixed system-generated ids; uniqueness via `${testRunId}`.
+- [ ] No stale static values: fields marked `run-unique` in KB `valueHints` (or unique by
+      semantics) derive from `${testRunId}`/captures; date fields are computed in Java, never
+      hardcoded calendar literals — a value that repeats or expires across runs is a finding.
 - [ ] Fixtures exist for every reference, valid JSON, placeholder-correct.
 
 ## Robustness

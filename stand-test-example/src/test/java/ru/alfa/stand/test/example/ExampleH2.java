@@ -10,13 +10,18 @@ import java.sql.Statement;
  * so the example creates its table directly via JDBC before any scenario runs. Idempotent, so every
  * example test class can call it; the in-memory database lives for the JVM via {@code DB_CLOSE_DELAY=-1},
  * and the connection values mirror the env refs the SDK resolves at run time.
+ *
+ * <p>{@code synchronized} because under the module's class-level parallel execution several classes call
+ * this from {@code @BeforeAll} at once, and concurrent {@code CREATE SCHEMA/TABLE IF NOT EXISTS} on H2 is
+ * not race-safe (it throws {@code JdbcSQLNonTransientException}). Serialising the idempotent bootstrap in
+ * this in-JVM helper is enough — the SDK itself never issues DDL.
  */
 final class ExampleH2 {
 
     private ExampleH2() {
     }
 
-    static void createOrdersTable() {
+    static synchronized void createOrdersTable() {
         String url = System.getenv("MAIN_DB_URL");
         String user = System.getenv("MAIN_DB_USER");
         String password = System.getenv("MAIN_DB_PASSWORD");

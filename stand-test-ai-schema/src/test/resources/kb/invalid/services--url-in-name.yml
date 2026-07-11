@@ -1,0 +1,6 @@
+# INVALID by design: identity/label fields reject URL shapes - an endpoint cannot hide in a name.
+services:
+  - id: client-service
+    name: "Client Service https://client.example.com"
+    environments:
+      - ift

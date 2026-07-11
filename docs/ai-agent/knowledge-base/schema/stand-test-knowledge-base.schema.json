@@ -1,0 +1,738 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stand-test.alfa.ru/schema/stand-test-knowledge-base.schema.json",
+  "title": "stand-test knowledge base",
+  "description": "Single contract for every stand-test knowledge-base file. A KB file is a YAML document with exactly ONE collection key (services / endpoints / kafkaTopics / datasources / dbProbes / grpcTargets / environments / testCaseMappings). The KB stores aliases, contracts and env-var REFERENCES only - never secret values, never URLs/hosts/ports/JDBC strings, never production configuration. Field names are camelCase; ids and aliases are kebab-case; SQL is canonical lowercase. On any conflict with the runtime, the SDK (EnvironmentRegistry, ForbiddenOperation, DefaultScenarioValidator) wins.",
+  "oneOf": [
+    { "$ref": "#/$defs/servicesFile" },
+    { "$ref": "#/$defs/endpointsFile" },
+    { "$ref": "#/$defs/kafkaTopicsFile" },
+    { "$ref": "#/$defs/datasourcesFile" },
+    { "$ref": "#/$defs/dbProbesFile" },
+    { "$ref": "#/$defs/grpcTargetsFile" },
+    { "$ref": "#/$defs/environmentsFile" },
+    { "$ref": "#/$defs/testCaseMappingsFile" }
+  ],
+  "$defs": {
+    "kebabId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "minLength": 2,
+      "maxLength": 64
+    },
+    "envId": {
+      "description": "A TEST environment id. Production-looking names are rejected wherever an environment is referenced, not only where it is declared.",
+      "allOf": [
+        { "$ref": "#/$defs/kebabId" },
+        { "not": { "pattern": "(prod|prd|live)" } }
+      ]
+    },
+    "envIdArray": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/envId" },
+      "uniqueItems": true
+    },
+    "envVarRef": {
+      "description": "The NAME of an environment variable (never its value). Matches the SDK's fail-closed *-ref shape: no whitespace, no '://', no 'Bearer '/'Basic ' prefixes are even expressible.",
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]{2,63}$"
+    },
+    "boundedTimeout": {
+      "description": "Bounded duration, aligned with the AI-format grammar: 1-99999ms, 1-999s or 1-60m. The runtime caps every wait at 1 hour.",
+      "type": "string",
+      "pattern": "^([1-9][0-9]{0,4}ms|[1-9][0-9]{0,2}s|([1-9]|[1-5][0-9]|60)m)$"
+    },
+    "jsonPath": {
+      "type": "string",
+      "pattern": "^\\$\\.[^ \\t]+$",
+      "maxLength": 200
+    },
+    "httpPath": {
+      "description": "Absolute path with a single leading slash. Never a URL - '://' is rejected anywhere in the value, including query strings.",
+      "type": "string",
+      "pattern": "^/([^/ \\t][^ \\t]*)?$",
+      "maxLength": 300,
+      "not": { "pattern": "(://|[jJ][dD][bB][cC]:)" }
+    },
+    "headerName": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9-]{0,98}$"
+    },
+    "metadataKey": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,98}$"
+    },
+    "variableName": {
+      "type": "string",
+      "pattern": "^[a-z][A-Za-z0-9]{0,63}$"
+    },
+    "fieldName": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$"
+    },
+    "schemaName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+    },
+    "freeText": {
+      "description": "Human-readable text. URLs and JDBC strings are rejected even here so a 'description' can never smuggle an endpoint.",
+      "type": "string",
+      "maxLength": 500,
+      "not": { "pattern": "(://|[jJ][dD][bB][cC]:)" }
+    },
+    "noUrl": {
+      "description": "Reusable guard for identity/label fields: no URLs, no JDBC strings.",
+      "not": { "pattern": "(://|[jJ][dD][bB][cC]:)" }
+    },
+    "relativeResourcePath": {
+      "description": "Relative path, no leading slash, no '..' traversal. Base differs by field: fixtureTemplate is a CLASSPATH path (src/test/resources - the SDK reads fixtures at run time); schemaRef is relative to the KB ROOT (knowledge-base/ - read by the agent only).",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*\\.(json|txt)$",
+      "maxLength": 200,
+      "not": { "pattern": "\\.\\." }
+    },
+    "scalarValue": {
+      "type": ["string", "number", "boolean"]
+    },
+    "valueHints": {
+      "description": "Per-field value semantics for generated test data. run-unique: derive from ${testRunId} or a capture, never a literal; current-date/future-date/past-date: compute in plain Java before the builder (Java track only - the AI format cannot express computed values); constant: a fixed business value from the case/KB verbatim; captured: comes from an earlier step's capture.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/fieldName" },
+      "additionalProperties": {
+        "enum": ["constant", "run-unique", "current-date", "future-date", "past-date", "captured"]
+      },
+      "maxProperties": 50
+    },
+    "idArray": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/kebabId" },
+      "uniqueItems": true
+    },
+    "correlationInject": {
+      "description": "Whether the step built from this entry injects the SDK-owned correlationId outbound. The carrier (header/metadata name) comes from the owning service/target, mirroring the EnvironmentRegistry model.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inject"],
+      "properties": {
+        "inject": { "type": "boolean" }
+      }
+    },
+    "restAssertion": {
+      "description": "One JSONPath assertion with exactly one matcher key. REST supports the full matcher set of the SDK.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "path": { "$ref": "#/$defs/jsonPath" },
+        "equals": { "$ref": "#/$defs/scalarValue" },
+        "contains": { "type": "string", "maxLength": 200 },
+        "matches": { "type": "string", "maxLength": 200 },
+        "exists": { "const": true },
+        "absent": { "const": true },
+        "notNull": { "const": true },
+        "isNull": { "const": true }
+      },
+      "oneOf": [
+        { "required": ["equals"] },
+        { "required": ["contains"] },
+        { "required": ["matches"] },
+        { "required": ["exists"] },
+        { "required": ["absent"] },
+        { "required": ["notNull"] },
+        { "required": ["isNull"] }
+      ],
+      "maxProperties": 2
+    },
+    "equalsOnlyAssertion": {
+      "description": "Kafka and gRPC adapters are equals-only in the SDK; the KB mirrors that so a lookup can never promise an inexpressible check.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "equals"],
+      "properties": {
+        "path": { "$ref": "#/$defs/jsonPath" },
+        "equals": { "$ref": "#/$defs/scalarValue" }
+      }
+    },
+    "captures": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/variableName" },
+      "additionalProperties": { "$ref": "#/$defs/jsonPath" },
+      "maxProperties": 20
+    },
+    "serviceAuth": {
+      "description": "Per-service auth identity as env-var REFERENCES (registry 'auth:' block). Two identities against one service require two service entries - the registry model.",
+      "type": "object",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "required": ["scheme", "usernameRef", "passwordRef"],
+          "properties": {
+            "scheme": { "const": "BASIC" },
+            "usernameRef": { "$ref": "#/$defs/envVarRef" },
+            "passwordRef": { "$ref": "#/$defs/envVarRef" }
+          }
+        },
+        {
+          "additionalProperties": false,
+          "required": ["scheme", "tokenRef"],
+          "properties": {
+            "scheme": { "const": "BEARER" },
+            "tokenRef": { "$ref": "#/$defs/envVarRef" }
+          }
+        }
+      ]
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "environments"],
+      "properties": {
+        "id": { "$ref": "#/$defs/kebabId" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120, "allOf": [{ "$ref": "#/$defs/noUrl" }] },
+        "description": { "$ref": "#/$defs/freeText" },
+        "owner": { "type": "string", "maxLength": 120, "allOf": [{ "$ref": "#/$defs/noUrl" }] },
+        "domain": { "$ref": "#/$defs/kebabId" },
+        "environments": { "$ref": "#/$defs/envIdArray" },
+        "endpoints": { "$ref": "#/$defs/idArray" },
+        "grpcTargets": { "$ref": "#/$defs/idArray" },
+        "kafkaTopics": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "produces": { "$ref": "#/$defs/idArray" },
+            "consumes": { "$ref": "#/$defs/idArray" }
+          }
+        },
+        "datasources": { "$ref": "#/$defs/idArray" },
+        "correlation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "headerName"],
+          "properties": {
+            "source": { "const": "HEADER" },
+            "headerName": { "$ref": "#/$defs/headerName" }
+          }
+        },
+        "auth": { "$ref": "#/$defs/serviceAuth" },
+        "tags": { "$ref": "#/$defs/idArray" }
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "serviceId", "method", "path", "response", "allowedEnvironments"],
+      "properties": {
+        "id": { "$ref": "#/$defs/kebabId" },
+        "alias": { "$ref": "#/$defs/kebabId" },
+        "serviceId": { "$ref": "#/$defs/kebabId" },
+        "method": { "enum": ["GET", "POST", "PUT", "DELETE"] },
+        "path": { "$ref": "#/$defs/httpPath" },
+        "description": { "$ref": "#/$defs/freeText" },
+        "correlation": { "$ref": "#/$defs/correlationInject" },
+        "requiresAuth": { "type": "boolean" },
+        "requiredHeaders": {
+          "description": "Non-secret custom headers the operation requires (names only; values are per-case data). Secret-named headers are unrepresentable - auth lives on the service entry.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "allOf": [
+              { "$ref": "#/$defs/headerName" },
+              { "not": { "pattern": "^([Aa]uthorization|[Cc]ookie|[Ss]et-[Cc]ookie|[Pp]roxy-[Aa]uthorization)$|[Tt]oken|[Ss]ecret|[Aa]pi-?[Kk]ey|[Pp]assword" } }
+            ]
+          }
+        },
+        "query": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "required": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/fieldName" },
+              "uniqueItems": true
+            },
+            "optional": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/fieldName" },
+              "uniqueItems": true
+            }
+          }
+        },
+        "request": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "contentType": { "const": "application/json" },
+            "schemaRef": { "$ref": "#/$defs/relativeResourcePath" },
+            "fixtureTemplate": { "$ref": "#/$defs/relativeResourcePath" },
+            "requiredFields": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/fieldName" },
+              "uniqueItems": true
+            },
+            "valueHints": { "$ref": "#/$defs/valueHints" }
+          }
+        },
+        "response": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {
+            "status": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["success"],
+              "properties": {
+                "success": { "type": "integer", "minimum": 100, "maximum": 599 }
+              }
+            },
+            "schemaRef": { "$ref": "#/$defs/relativeResourcePath" },
+            "captures": { "$ref": "#/$defs/captures" },
+            "assertions": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/restAssertion" },
+              "maxItems": 30
+            }
+          }
+        },
+        "allowedEnvironments": {
+          "allOf": [{ "$ref": "#/$defs/envIdArray" }],
+          "minItems": 1
+        }
+      }
+    },
+    "kafkaTopic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "alias", "direction", "correlation", "timeout", "allowedEnvironments"],
+      "properties": {
+        "id": { "$ref": "#/$defs/kebabId" },
+        "alias": { "$ref": "#/$defs/kebabId" },
+        "direction": {
+          "description": "'produced' = the system under test publishes here (tests use kafka.expect); 'consumed' = the system under test consumes from here (tests may kafka.send).",
+          "enum": ["produced", "consumed"]
+        },
+        "description": { "$ref": "#/$defs/freeText" },
+        "cluster": { "$ref": "#/$defs/kebabId" },
+        "correlation": {
+          "description": "Kafka correlation is HEADER-only in the SDK (KEY/PAYLOAD_FIELD carriers throw at run time).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "headerName"],
+          "properties": {
+            "source": { "const": "HEADER" },
+            "headerName": { "$ref": "#/$defs/headerName" }
+          }
+        },
+        "key": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "enum": ["none", "variable"] },
+            "variable": { "$ref": "#/$defs/variableName" }
+          },
+          "oneOf": [
+            {
+              "properties": { "strategy": { "const": "none" } },
+              "not": { "required": ["variable"] }
+            },
+            {
+              "properties": { "strategy": { "const": "variable" } },
+              "required": ["variable"]
+            }
+          ]
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "fixtureTemplate": { "$ref": "#/$defs/relativeResourcePath" },
+            "schemaRef": { "$ref": "#/$defs/relativeResourcePath" },
+            "requiredFields": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/fieldName" },
+              "uniqueItems": true
+            },
+            "valueHints": { "$ref": "#/$defs/valueHints" }
+          }
+        },
+        "assertions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/equalsOnlyAssertion" },
+          "maxItems": 30
+        },
+        "timeout": { "$ref": "#/$defs/boundedTimeout" },
+        "allowedEnvironments": {
+          "allOf": [{ "$ref": "#/$defs/envIdArray" }],
+          "minItems": 1
+        }
+      }
+    },
+    "datasource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "alias", "access", "allowedSchemas", "allowedEnvironments"],
+      "properties": {
+        "id": { "$ref": "#/$defs/kebabId" },
+        "alias": { "$ref": "#/$defs/kebabId" },
+        "description": { "$ref": "#/$defs/freeText" },
+        "access": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": {
+              "description": "'readonly' = probes only; 'write-allowed' = db.seed/db.cleanup permitted (registry write-allowed: true). Destructive SQL is globally forbidden by ForbiddenOperation regardless of mode - the KB never re-declares that list.",
+              "enum": ["readonly", "write-allowed"]
+            }
+          }
+        },
+        "allowedSchemas": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/schemaName" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "allowedEnvironments": {
+          "allOf": [{ "$ref": "#/$defs/envIdArray" }],
+          "minItems": 1
+        }
+      }
+    },
+    "dbProbe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "datasourceId", "sql", "expect", "timeout"],
+      "properties": {
+        "id": { "$ref": "#/$defs/kebabId" },
+        "datasourceId": { "$ref": "#/$defs/kebabId" },
+        "description": { "$ref": "#/$defs/freeText" },
+        "sql": {
+          "description": "Canonical single-statement select (lowercase keywords) returning a single value; named :params only. Multi-statement (';'), comments, DML/DDL/sleep keywords in lower or UPPER case are rejected by pattern; mixed-case spellings are caught by the runtime SqlStatementClassifier - the schema is defense-in-depth, not the enforcement point.",
+          "type": "string",
+          "maxLength": 1000,
+          "pattern": "^select[ \\t\\n]",
+          "not": { "pattern": "(;|--|/\\*|\\b(drop|truncate|delete|insert|update|merge|alter|grant|revoke|create|call|execute|into|sleep|pg_sleep|waitfor|dbms_lock|benchmark)\\b|\\b(DROP|TRUNCATE|DELETE|INSERT|UPDATE|MERGE|ALTER|GRANT|REVOKE|CREATE|CALL|EXECUTE|INTO|SLEEP|PG_SLEEP|WAITFOR|DBMS_LOCK|BENCHMARK)\\b)" }
+        },
+        "params": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/variableName" },
+          "uniqueItems": true
+        },
+        "expect": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["singleValue"],
+          "properties": {
+            "singleValue": { "$ref": "#/$defs/scalarValue" }
+          }
+        },
+        "timeout": { "$ref": "#/$defs/boundedTimeout" }
+      }
+    },
+    "grpcTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "alias", "serviceName", "correlation", "methods", "allowedEnvironments"],
+      "properties": {
+        "id": { "$ref": "#/$defs/kebabId" },
+        "alias": { "$ref": "#/$defs/kebabId" },
+        "description": { "$ref": "#/$defs/freeText" },
+        "serviceName": {
+          "type": "string",
+          "pattern": "^[a-z][A-Za-z0-9_.]*\\.[A-Z][A-Za-z0-9_]*$",
+          "maxLength": 200
+        },
+        "correlation": {
+          "description": "gRPC correlation is METADATA-only in the SDK; the key lives here (per target), mirroring the registry.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "metadataKey"],
+          "properties": {
+            "source": { "const": "METADATA" },
+            "metadataKey": { "$ref": "#/$defs/metadataKey" }
+          }
+        },
+        "methods": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/grpcMethod" }
+        },
+        "allowedEnvironments": {
+          "allOf": [{ "$ref": "#/$defs/envIdArray" }],
+          "minItems": 1
+        }
+      }
+    },
+    "grpcMethod": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "fullMethodName", "deadline"],
+      "properties": {
+        "id": { "$ref": "#/$defs/kebabId" },
+        "type": { "const": "unary" },
+        "fullMethodName": {
+          "type": "string",
+          "pattern": "^[a-z][A-Za-z0-9_.]*\\.[A-Z][A-Za-z0-9_]*/[A-Z][A-Za-z0-9_]*$",
+          "maxLength": 300
+        },
+        "description": { "$ref": "#/$defs/freeText" },
+        "request": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "fixtureTemplate": { "$ref": "#/$defs/relativeResourcePath" },
+            "requiredFields": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/fieldName" },
+              "uniqueItems": true
+            }
+          }
+        },
+        "response": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "captures": { "$ref": "#/$defs/captures" },
+            "assertions": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/equalsOnlyAssertion" },
+              "maxItems": 30
+            }
+          }
+        },
+        "correlation": { "$ref": "#/$defs/correlationInject" },
+        "deadline": { "$ref": "#/$defs/boundedTimeout" }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/envId" },
+        "description": { "$ref": "#/$defs/freeText" },
+        "services": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["serviceId", "baseUrlRef"],
+            "properties": {
+              "serviceId": { "$ref": "#/$defs/kebabId" },
+              "baseUrlRef": { "$ref": "#/$defs/envVarRef" }
+            }
+          }
+        },
+        "grpcTargets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["targetId", "targetRef"],
+            "properties": {
+              "targetId": { "$ref": "#/$defs/kebabId" },
+              "targetRef": { "$ref": "#/$defs/envVarRef" }
+            }
+          }
+        },
+        "kafka": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "bootstrapServersRef": { "$ref": "#/$defs/envVarRef" },
+            "securityProtocolRef": { "$ref": "#/$defs/envVarRef" },
+            "saslJaasConfigRef": { "$ref": "#/$defs/envVarRef" },
+            "clusters": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "bootstrapServersRef"],
+                "properties": {
+                  "name": { "$ref": "#/$defs/kebabId" },
+                  "bootstrapServersRef": { "$ref": "#/$defs/envVarRef" },
+                  "securityProtocolRef": { "$ref": "#/$defs/envVarRef" },
+                  "saslJaasConfigRef": { "$ref": "#/$defs/envVarRef" }
+                }
+              }
+            },
+            "topics": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["topicId", "actualName"],
+                "properties": {
+                  "topicId": { "$ref": "#/$defs/kebabId" },
+                  "actualName": {
+                    "description": "The REAL topic name on this environment. Topic names are not secrets; they land in the registry's literal 'name:' field and never in scenarios.",
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._-]{1,249}$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "datasources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["datasourceId", "urlRef", "userRef", "passwordRef"],
+            "properties": {
+              "datasourceId": { "$ref": "#/$defs/kebabId" },
+              "urlRef": { "$ref": "#/$defs/envVarRef" },
+              "userRef": { "$ref": "#/$defs/envVarRef" },
+              "passwordRef": { "$ref": "#/$defs/envVarRef" }
+            }
+          }
+        },
+        "secrets": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": { "const": "external" },
+            "allowedRefPrefixes": {
+              "type": "array",
+              "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*_$" },
+              "uniqueItems": true
+            }
+          }
+        }
+      }
+    },
+    "testCaseMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["caseId", "environment", "matched", "status"],
+      "properties": {
+        "caseId": { "$ref": "#/$defs/kebabId" },
+        "title": { "type": "string", "maxLength": 300, "allOf": [{ "$ref": "#/$defs/noUrl" }] },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "ref"],
+          "properties": {
+            "type": { "enum": ["ticket", "file", "text"] },
+            "ref": { "type": "string", "maxLength": 300, "allOf": [{ "$ref": "#/$defs/noUrl" }] }
+          }
+        },
+        "environment": { "$ref": "#/$defs/envId" },
+        "matched": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "services": { "$ref": "#/$defs/idArray" },
+            "endpoints": { "$ref": "#/$defs/idArray" },
+            "kafkaTopics": { "$ref": "#/$defs/idArray" },
+            "datasources": { "$ref": "#/$defs/idArray" },
+            "dbProbes": { "$ref": "#/$defs/idArray" },
+            "grpcTargets": { "$ref": "#/$defs/idArray" },
+            "grpcMethods": { "$ref": "#/$defs/idArray" }
+          }
+        },
+        "missing": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["field", "reason"],
+            "properties": {
+              "field": { "type": "string", "maxLength": 120 },
+              "reason": { "$ref": "#/$defs/freeText" }
+            }
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/freeText" }
+        },
+        "generatedTest": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["module", "package", "className"],
+          "properties": {
+            "module": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,120}$" },
+            "package": { "type": "string", "pattern": "^[a-z][a-z0-9_.]{0,200}$" },
+            "className": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]*Test$" },
+            "fixtures": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/relativeResourcePath" },
+              "uniqueItems": true
+            }
+          }
+        },
+        "status": { "enum": ["draft", "generated", "validated", "approved"] },
+        "updated": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+      }
+    },
+    "servicesFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["services"],
+      "properties": {
+        "services": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/service" } }
+      }
+    },
+    "endpointsFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endpoints"],
+      "properties": {
+        "endpoints": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/endpoint" } }
+      }
+    },
+    "kafkaTopicsFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kafkaTopics"],
+      "properties": {
+        "kafkaTopics": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/kafkaTopic" } }
+      }
+    },
+    "datasourcesFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["datasources"],
+      "properties": {
+        "datasources": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/datasource" } }
+      }
+    },
+    "dbProbesFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dbProbes"],
+      "properties": {
+        "dbProbes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/dbProbe" } }
+      }
+    },
+    "grpcTargetsFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["grpcTargets"],
+      "properties": {
+        "grpcTargets": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/grpcTarget" } }
+      }
+    },
+    "environmentsFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["environments"],
+      "properties": {
+        "environments": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/environment" } }
+      }
+    },
+    "testCaseMappingsFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["testCaseMappings"],
+      "properties": {
+        "testCaseMappings": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/testCaseMapping" } }
+      }
+    }
+  }
+}

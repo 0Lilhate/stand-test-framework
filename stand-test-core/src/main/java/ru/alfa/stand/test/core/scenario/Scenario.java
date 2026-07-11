@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import ru.alfa.stand.test.core.compensation.CleanupPolicy;
 import ru.alfa.stand.test.core.identifier.ScenarioId;
 
 /**
@@ -25,6 +26,7 @@ public final class Scenario {
     private final Set<String> tags;
     private final String title;
     private final String description;
+    private final CleanupPolicy cleanupPolicy;
 
     private Scenario(Builder builder) {
         this.id = Objects.requireNonNull(builder.id, "scenario id must not be null");
@@ -35,6 +37,7 @@ public final class Scenario {
         this.tags = Set.copyOf(builder.tags);
         this.title = builder.title;
         this.description = builder.description;
+        this.cleanupPolicy = builder.cleanupPolicy;
     }
 
     /**
@@ -81,6 +84,14 @@ public final class Scenario {
         return Optional.ofNullable(description);
     }
 
+    /**
+     * @return the test-data compensation policy applied by the runner after this scenario finishes
+     *     (default {@link CleanupPolicy#ON_FAILURE})
+     */
+    public CleanupPolicy cleanupPolicy() {
+        return cleanupPolicy;
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (this == obj) {
@@ -94,17 +105,18 @@ public final class Scenario {
                 && steps.equals(other.steps)
                 && tags.equals(other.tags)
                 && Objects.equals(title, other.title)
-                && Objects.equals(description, other.description);
+                && Objects.equals(description, other.description)
+                && cleanupPolicy == other.cleanupPolicy;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, environment, steps, tags, title, description);
+        return Objects.hash(id, environment, steps, tags, title, description, cleanupPolicy);
     }
 
     @Override
     public String toString() {
-        return "Scenario{id=" + id + ", environment=" + environment + ", steps=" + steps.size() + ", tags=" + tags + "}";
+        return "Scenario{id=" + id + ", environment=" + environment + ", steps=" + steps.size() + ", tags=" + tags + ", cleanupPolicy=" + cleanupPolicy + "}";
     }
 
     /**
@@ -118,6 +130,7 @@ public final class Scenario {
         private String environment;
         private String title;
         private String description;
+        private CleanupPolicy cleanupPolicy = CleanupPolicy.ON_FAILURE;
 
         private Builder(ScenarioId id) {
             this.id = Objects.requireNonNull(id, "scenario id must not be null");
@@ -187,6 +200,17 @@ public final class Scenario {
          */
         public Builder description(String description) {
             this.description = description;
+            return this;
+        }
+
+        /**
+         * Sets the test-data compensation policy (default {@link CleanupPolicy#ON_FAILURE}).
+         *
+         * @param cleanupPolicy the policy
+         * @return this builder
+         */
+        public Builder cleanupPolicy(CleanupPolicy cleanupPolicy) {
+            this.cleanupPolicy = Objects.requireNonNull(cleanupPolicy, "cleanupPolicy must not be null");
             return this;
         }
 

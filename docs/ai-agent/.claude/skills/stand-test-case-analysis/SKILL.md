@@ -60,6 +60,10 @@ Escalate to `Missing information` (blocking) only when the answer changes the te
 4. How the async effect is correlated to the trigger when the alias has no `correlation:` config.
 5. Authentication identity, when the case implies a specific user (auth is per-service in the
    registry; two users against one service need two aliases — a registry change).
+6. **Operation contract unknown** — the case does not state the HTTP method/path, response
+   field, message schema, table/column or gRPC method, AND the knowledge base has no entry for
+   it (`stand-test-kb-lookup` reports it under `missing`). Contract details are never derived
+   from plausibility.
 
 ## Feasibility flags (mark, do not silently drop)
 
@@ -76,7 +80,9 @@ Mark a check `NOT-AUTOMATABLE (current SDK)` when the case needs:
 ## Forbidden in this skill
 
 - Generating scenario/test/fixture content.
-- Inventing aliases, URLs, credentials, topic names.
+- Inventing aliases, URLs, credentials, topic names — and equally paths, JSON field names,
+  table/column names, SQL statements and gRPC method names (contract details come from the case
+  text or the knowledge base, or become blocking missing information).
 - Dropping an inexpressible check silently — it must appear as a flag or missing-info item.
 
 ## Checklist before handing off

@@ -164,4 +164,27 @@ class DbStepTest {
         GenericStep generic = (GenericStep) step;
         assertThat(generic.parameters()).containsEntry(DbStepParameters.WHERE_TEST_RUN_ID_COLUMN, "test_run_id");
     }
+
+    @Test
+    @DisplayName("taggedByTestRunId records the seed tag column and rejects a non-identifier")
+    void taggedByTestRunIdOnSeed() {
+        ScenarioStep step = DbStep.seed("mainDb")
+                .sql("INSERT INTO test_data.orders(id, test_run_id) VALUES (:id, :testRunId)")
+                .taggedByTestRunId("test_run_id")
+                .param("id", "1")
+                .build();
+
+        assertThat(((GenericStep) step).parameters()).containsEntry(DbStepParameters.SEED_TEST_RUN_ID_COLUMN, "test_run_id");
+        assertThatThrownBy(() -> DbStep.seed("mainDb").sql("INSERT INTO test_data.orders(id) VALUES (:id)").taggedByTestRunId("a; DROP TABLE x"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("plain identifier");
+    }
+
+    @Test
+    @DisplayName("taggedByTestRunId is rejected on a non-seed step")
+    void taggedByTestRunIdRejectedOnNonSeed() {
+        assertThatThrownBy(() -> DbStep.query("mainDb").sql("SELECT 1 FROM test_data.orders").taggedByTestRunId("test_run_id").build())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("applies to db.seed");
+    }
 }

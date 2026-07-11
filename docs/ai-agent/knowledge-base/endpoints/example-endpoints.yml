@@ -1,0 +1,56 @@
+# Example KB entries — Endpoints. Schema: ../schema/endpoint.schema.json
+# An endpoint describes ONE HTTP operation contract: method, path, request/response shape hints,
+# captures and assertions a generated test may use. The service alias (registry whitelist entry)
+# is the OWNING service's id; auth and the correlation header name live on the service entry.
+# Paths are literal contracts — '://', hosts and ports are unrepresentable by schema.
+endpoints:
+  - id: create-request
+    alias: client-create-request
+    serviceId: client-service
+    method: POST
+    path: /api/requests
+    description: Create a client request (trigger operation)
+    correlation:
+      inject: true
+    requiresAuth: true
+    request:
+      contentType: application/json
+      schemaRef: schemas/rest/create-request.request.schema.json
+      fixtureTemplate: fixtures/client/create-request.json
+      requiredFields:
+        - clientId
+        - amount
+      valueHints:
+        clientId: run-unique      # derive from ${testRunId}; a literal here is a review finding
+        amount: constant          # fixed business value from the case
+    response:
+      status:
+        success: 200
+      schemaRef: schemas/rest/create-request.response.schema.json
+      captures:
+        requestId: $.requestId
+      assertions:
+        - path: $.status
+          equals: ACCEPTED
+    allowedEnvironments:
+      - dev
+      - ift
+
+  - id: get-request-status
+    alias: client-get-request-status
+    serviceId: client-service
+    method: GET
+    path: /api/requests/${requestId}
+    description: Read a request back by captured id (used by rest.expectEventually polls)
+    correlation:
+      inject: false
+    requiresAuth: true
+    response:
+      status:
+        success: 200
+      assertions:
+        - path: $.status
+          equals: PROCESSED
+    allowedEnvironments:
+      - dev
+      - ift

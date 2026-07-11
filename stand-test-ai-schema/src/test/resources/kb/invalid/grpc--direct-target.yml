@@ -1,0 +1,16 @@
+# INVALID by design: a gRPC method cannot carry a direct host:port; addresses are env refs per environment.
+grpcTargets:
+  - id: result-grpc-service
+    alias: result-grpc-service
+    serviceName: example.ResultService
+    correlation:
+      source: METADATA
+      metadataKey: x-correlation-id
+    methods:
+      - id: check-result
+        type: unary
+        fullMethodName: example.ResultService/CheckResult
+        target: "10.0.0.5:8443"
+        deadline: 5s
+    allowedEnvironments:
+      - ift

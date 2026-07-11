@@ -47,6 +47,22 @@ class ExampleFlowTest {
 The adapters (`rest`/`kafka`/`db`) register their `StepExecutor` via `META-INF/services`, so adding a
 dependency on an adapter makes its step types runnable — no wiring code in the test.
 
+## Parallel execution
+
+The cached `StandClient` lives at the JUnit **engine-root** store, so under
+`junit.jupiter.execution.parallel.enabled=true` the same runner/executors serve every test thread. That is
+safe because the runner keeps per-run state thread-confined (unique `testRunId`/`correlationId`, per-run
+`VariableStore`); parallelise at the scenario/class level, never the steps of one scenario (see the root
+README's *Parallel execution* and plan §15). This module ships three thin opt-out facades over JUnit's own
+annotations for tests that cannot be `testRunId`-isolated:
+
+- `@StandParallelSafe` → `@Execution(CONCURRENT)` — explicit "safe to run concurrently".
+- `@StandSerial` → `@Execution(SAME_THREAD)` — serialise one class's methods.
+- `@StandIsolated` → `@Isolated` — run this class alone.
+
+For mutual exclusion between only the tests sharing one named resource, use JUnit's `@ResourceLock("<alias>")`
+directly (a meta-annotation cannot forward its key, so no `@StandResourceLock` wrapper is provided).
+
 ## Not here
 
 No transport, no business assertions, no reporting — only the JUnit ↔ SDK bridge. Spring-based

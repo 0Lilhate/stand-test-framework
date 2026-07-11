@@ -19,6 +19,7 @@ import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.execution.StepExecutionContext;
 import ru.alfa.stand.test.core.result.StepResult;
 import ru.alfa.stand.test.core.result.StepStatus;
+import ru.alfa.stand.test.core.scenario.GenericStep;
 import ru.alfa.stand.test.core.scenario.ScenarioStep;
 import ru.alfa.stand.test.core.variable.VariableStore;
 
@@ -87,6 +88,31 @@ class KafkaStepExecutorExpectTest {
         addResponse(1L, "B", "{\"who\":\"b\"}", correlationId());
 
         assertThat(executor.execute(step, this.context).status()).isEqualTo(StepStatus.SUCCESS);
+    }
+
+    @Test
+    @DisplayName("runtime re-enforcement: a raw kafka.expect without a discriminator (bypassing the builder) is refused in prepare(), before arming a consumer")
+    void expectWithoutDiscriminatorRefusedBeforeArming() {
+        KafkaStepExecutor executor = executor(Awaiter.create());
+        ScenarioStep step = new GenericStep("raw-expect", "kafka.expect", "raw expect",
+                Map.of(KafkaStepParameters.TOPIC, KafkaTestSupport.RESPONSE_ALIAS, KafkaStepParameters.CORRELATION_FROM_CONTEXT, false));
+
+        assertThatThrownBy(() -> executor.prepare(step, this.context))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("no per-run discriminator");
+    }
+
+    @Test
+    @DisplayName("runtime re-enforcement: a raw kafka.expect with a CONSTANT key is refused in prepare() as not per-run-unique")
+    void expectWithConstantKeyRefusedBeforeArming() {
+        KafkaStepExecutor executor = executor(Awaiter.create());
+        ScenarioStep step = new GenericStep("raw-expect-key", "kafka.expect", "raw expect",
+                Map.of(KafkaStepParameters.TOPIC, KafkaTestSupport.RESPONSE_ALIAS,
+                        KafkaStepParameters.CORRELATION_FROM_CONTEXT, false, KafkaStepParameters.KEY, "constant"));
+
+        assertThatThrownBy(() -> executor.prepare(step, this.context))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("constant key");
     }
 
     @Test

@@ -4,6 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.DisplayName;
@@ -31,6 +38,56 @@ class DefaultAwaiterTest {
         assertThat(result.attempts()).isEqualTo(1);
         assertThat(result.elapsed()).isEqualTo(Duration.ZERO);
         assertThat(time.sleepCalls()).isZero();
+    }
+
+    @Test
+    @DisplayName("concurrent awaits on one shared awaiter keep attempts and diagnostics isolated")
+    void concurrentAwaits_areIsolated() throws Exception {
+        // The system-backed awaiter is stateless: one instance drives many concurrent awaits, each with its
+        // own probe/counter, so per-await attempts and timeout diagnostics must never mix (plan §15). A
+        // shared FakeTimeSource is NOT used here because it is a mutable per-run double, not thread-safe.
+        Awaiter shared = Awaiter.create();
+        int tasks = 16;
+        ExecutorService pool = Executors.newFixedThreadPool(Math.min(tasks, Math.max(4, Runtime.getRuntime().availableProcessors())));
+        try {
+            List<Future<AwaitResult<String>>> futures = new ArrayList<>();
+            for (int i = 0; i < tasks; i++) {
+                int id = i;
+                futures.add(pool.submit(() -> {
+                    if (id % 2 == 0) {
+                        AtomicInteger attempts = new AtomicInteger();
+                        String token = "ok-" + id;
+                        AwaitPolicy satisfying = AwaitPolicy.builder("await-" + id)
+                                .timeout(Duration.ofSeconds(10)).pollInterval(Duration.ofMillis(1)).build();
+                        return shared.await(satisfying, () -> attempts.incrementAndGet() >= 3 ? token : null, Objects::nonNull);
+                    }
+                    String last = "pending-" + id;
+                    AwaitPolicy timing = AwaitPolicy.builder("await-" + id)
+                            .timeout(Duration.ofMillis(40)).pollInterval(Duration.ofMillis(3)).build();
+                    return shared.await(timing, () -> last, value -> false);
+                }));
+            }
+
+            List<AwaitResult<String>> results = new ArrayList<>();
+            for (Future<AwaitResult<String>> future : futures) {
+                results.add(future.get(30, TimeUnit.SECONDS));
+            }
+
+            for (int i = 0; i < tasks; i++) {
+                AwaitResult<String> result = results.get(i);
+                if (i % 2 == 0) {
+                    assertThat(result.satisfied()).isTrue();
+                    assertThat(result.value()).isEqualTo("ok-" + i);
+                    assertThat(result.attempts()).isEqualTo(3);
+                } else {
+                    assertThat(result.satisfied()).isFalse();
+                    assertThat(result.timeoutDiagnostics().description()).isEqualTo("await-" + i);
+                    assertThat(result.timeoutDiagnostics().lastValue()).isEqualTo("pending-" + i);
+                }
+            }
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     @Test
