@@ -1,0 +1,210 @@
+documentId: fs-pk-pakt-lgoty-2025-04-17
+unresolved:
+  - id: rest-http-method
+    type: missing-http-method
+    question: "Какой HTTP-метод у внутреннего REST-сервиса обработки ЛТР/ИТР (POST предполагается, но не указано)?"
+    context: "ФС описывает статусы 200/400/404/500 и тело запроса, но не задаёт HTTP-метод."
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 40
+      section: "4.2.1.2"
+      heading: "REST-сервис обработки запроса по ЛТР/ИТР"
+      quote: "Сервис получает в запросе текст ЛТР/ИТР и отвечает только HTTP-кодами."
+    blockingFor: [endpoint, test-scenario]
+    suggestedResolution: "Уточнить у команды ПК контракт сервиса (OpenAPI) — метод и путь."
+    proposedProjection: testCaseMapping.missing
+    confidence: high
+  - id: rest-url-path
+    type: missing-endpoint-path
+    question: "Какой URL path у внутреннего REST-сервиса обработки ЛТР/ИТР?"
+    context: "Путь сервиса не приведён; сервис внутренний, наружу не выставлен."
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 40
+      section: "4.2.1.2"
+      heading: "REST-сервис обработки запроса по ЛТР/ИТР"
+      quote: "В ПК необходимо реализовать REST-сервис Обработка запроса по ЛТР/ИТР (без указания path)."
+    blockingFor: [endpoint, test-scenario]
+    suggestedResolution: "Получить OpenAPI/контракт внутреннего сервиса ПК."
+    proposedProjection: testCaseMapping.missing
+    confidence: high
+  - id: kafka-topic-name
+    type: missing-topic-name
+    question: "Точное имя топика внутренней Kafka Таксы для уведомления МУП о привязке ИТ?"
+    context: "Формат внутренних сервисов и сообщений задан в §4.2.1.1 (вложение image11.emf, не извлекается текстом; §3.2.7 L617 ссылается туда за форматом Kafka). Само имя топика в тексте ФС не приведено. image12.emf — это входящая структура запроса ЛТР/ИТР, другое сообщение."
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 16
+      section: "3.2.7 / 4.2.1.1"
+      heading: "Уведомление МУП; Форматы внутренних сервисов и сообщений"
+      quote: "Уведомление МУ о привязках выполняется через внутреннюю Kafka Таксы в формате JSON, описан в файле п. 4.2.1.1."
+    blockingFor: [kafka-topic, test-scenario]
+    suggestedResolution: "Извлечь имя топика из §4.2.1.1 (image11.emf) или AsyncAPI/конфигурации Таксы; в тексте ФС имя топика отсутствует."
+    proposedProjection: testCaseMapping.missing
+    confidence: high
+  - id: kafka-payload-schema
+    type: unparseable-source
+    question: "Полная JSON-схема пакетного сообщения привязок ИТ->индекс для МУП?"
+    context: "Схема сообщения содержится в §4.2.1.1 (бинарное вложение image11.emf), недоступном для текстового извлечения. image12.emf — это входящая структура запроса ЛТР/ИТР (МУП->ПК), другое сообщение."
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 23
+      section: "4.2.1.1"
+      heading: "Форматы внутренних сервисов и сообщений для взаимодействия МУП и ПК"
+      quote: "Описание внутренних сервисов и форматов обмена приведено в файле image11.emf."
+    blockingFor: [kafka-topic, test-scenario]
+    suggestedResolution: "Запросить исходный файл описания форматов (EMF/Visio) или AsyncAPI-контракт."
+    proposedProjection: testCaseMapping.missing
+    confidence: high
+  - id: db-schema-qualifier
+    type: missing-table-name
+    question: "В какой схеме БД (schema-qualifier) создаются таблицы PACTPREFLog и PACTPREFMessage?"
+    context: "ФС даёт имена таблиц и колонки, но не указывает имя схемы/каталога БД."
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 43
+      section: "4.3"
+      heading: "Требования к БД"
+      quote: "Создать таблицу PACTPREFLog и таблицу PACTPREFMessage (без указания схемы БД)."
+    blockingFor: [datasource, db-probe, db-table]
+    suggestedResolution: "Уточнить схему БД ПК и allowed-schemas в реестре окружения."
+    proposedProjection: testCaseMapping.missing
+    confidence: medium
+  - id: db-testrunid-tag-column
+    type: missing-column
+    question: "Есть ли колонка-дискриминатор testRunId для изоляции тестовых записей (db.seed/parallel)?"
+    context: "PACTPREFLog не содержит колонки для тег-изоляции по testRunId; HeaderLog изолирует по сообщению, но генерируется системой."
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 43
+      section: "4.3.1"
+      heading: "PACTPREFLog"
+      quote: "Перечень колонок PACTPREFLog не содержит поля для изоляции тестовых прогонов."
+    blockingFor: [db-table, test-scenario]
+    suggestedResolution: "Для parallel-safe тестов использовать уникальный DecisionLabel per run и захват HeaderLog; seed не применять."
+    proposedProjection: testCaseMapping.assumptions
+    confidence: medium
+  - id: environment-aliases
+    type: missing-env
+    question: "Какие логические алиасы окружения (стенд DEV/IFT) и endpoint-refs для ПК/МУП/Kafka/БД?"
+    context: "ФС упоминает тестовый и промышленный стенды, но не задаёт алиасы окружения/refs."
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 10
+      section: "2.4"
+      heading: "Характеристика объекта автоматизации"
+      quote: "ТР загружается в МУП Таксы на тестовый стенд; после тестирования — перенос на промышленный стенд."
+    blockingFor: [service, endpoint, kafka-topic, datasource]
+    suggestedResolution: "Задать stand-test-environments.yml с алиасами и env-var refs для стенда."
+    proposedProjection: testCaseMapping.missing
+    confidence: high
+  - id: rest-auth
+    type: other
+    question: "Как аутентифицируется вызов внутреннего REST-сервиса ПК (внутренний сервис — какой auth)?"
+    context: "Сервис внутренний, не выставлен наружу; способ аутентификации/авторизации вызова не описан."
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 40
+      section: "4.2.1.2"
+      heading: "REST-сервис обработки запроса по ЛТР/ИТР"
+      quote: "Сервис не должен быть выставлен наружу из Таксы, чтобы внешние системы не могли вызвать его напрямую."
+    blockingFor: [endpoint, test-scenario]
+    suggestedResolution: "Уточнить схему auth внутреннего сервиса; в тесте — auth через registry *-ref."
+    proposedProjection: testCaseMapping.missing
+    confidence: medium
+  - id: correlation-strategy
+    type: other
+    question: "Как коррелировать запрос REST и Kafka-уведомление в тесте (correlationId)?"
+    context: "Есть ID сообщения (HeaderLog) и Номер решения (DecisionLabel), но SDK-correlation стратегия для тестов не задана."
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 17
+      section: "3.9.2"
+      heading: "Журнал ТР ПАКТ.Льготы"
+      quote: "ID сообщения — уникальный ID головной записи сообщения, прописывается во все дочерние строки."
+    blockingFor: [test-scenario]
+    suggestedResolution: "Определить correlation: уникальный DecisionLabel per run + захват HeaderLog; сверить с contract Kafka."
+    proposedProjection: testCaseMapping.assumptions
+    confidence: medium
+  - id: cleanup-strategy
+    type: other
+    question: "Какая стратегия очистки тестовых данных (журнал/ИТ/Тарифы) после теста?"
+    context: "ФС не описывает откат/очистку созданных объектов тарификации и записей журнала."
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 45
+      section: "6"
+      heading: "Требования к миграции данных"
+      quote: "Миграция данных или скрипты с предварительными настройками не требуются (об очистке тестовых данных не сказано)."
+    blockingFor: [test-scenario]
+    suggestedResolution: "Согласовать read-only проверки без seed, либо предусмотреть cleanup по DecisionLabel/HeaderLog."
+    proposedProjection: testCaseMapping.assumptions
+    confidence: medium
+  - id: dwh-view-contract
+    type: no-curated-collection
+    question: "Каков контракт view/select для чтения настроек тарификации модулями DWH?"
+    context: "Требования к view для DWH формируются на Этапе 2 — в данной ФС не определены."
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 16
+      section: "3.2.8 / 3.9.3"
+      heading: "view для чтения настроек тарификации модулями DWH"
+      quote: "Требования формируются на Этапе 2."
+    blockingFor: [db-probe, test-scenario]
+    suggestedResolution: "Отложить до Этапа 2; получить определение view."
+    proposedProjection: testCaseMapping.missing
+    confidence: high
+  - id: commission-calc-contract
+    type: other
+    question: "Каков контракт вызова расчёта комиссии в ТК (для сценариев USD/EUR/JPY)?"
+    context: "Поведение fallback описано, но интерфейс вызова расчёта (REST/gRPC, поля) в этой ФС не приведён."
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 13
+      section: "3.1"
+      heading: "Требования к пользовательским сценариям"
+      quote: "При расчёте комиссии по операции в USD/EUR/JPY применяется подбор ИТ и fallback (контракт вызова не описан)."
+    blockingFor: [test-scenario]
+    suggestedResolution: "Взять контракт расчёта из ФС ПАКТ.ЕСУТ / ТК; здесь не задан."
+    proposedProjection: testCaseMapping.missing
+    confidence: medium
+  - id: expected-status-values
+    type: unclear-business-rule
+    question: "Точное значение статуса ИТ 'Создан' и полный маппинг статусов обработки в терминальные ожидания теста?"
+    context: "PACTPREFLog.Status задан (ERROR/INFO/EDIT/AUTO/CANCEL), но статус самого ИТ ('Создан'/'Утверждён') и его хранение не смоделированы в таблицах ФС."
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 44
+      section: "4.3.1"
+      heading: "PACTPREFLog.Status"
+      quote: "Status: ERROR, INFO, EDIT (ручная обработка), AUTO (завершено), CANCEL."
+    blockingFor: [test-scenario]
+    suggestedResolution: "Проверять обработку через PACTPREFLog.Status (AUTO/EDIT); статус ИТ — через отдельный контракт (не в этой ФС)."
+    proposedProjection: testCaseMapping.assumptions
+    confidence: medium

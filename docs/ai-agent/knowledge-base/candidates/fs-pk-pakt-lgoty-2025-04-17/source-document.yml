@@ -1,0 +1,14 @@
+document:
+  documentId: fs-pk-pakt-lgoty-2025-04-17
+  documentName: "ФС: Интеграция МУП (Такса) с Продуктовым каталогом (Такса) в рамках интеграции Таксы с ПАКТ.Льготы"
+  documentType: docx
+  documentVersion: "1.0.4"
+  documentDate: "2025-04-17"
+  sourcePath: candidates/fs-pk-pakt-lgoty-2025-04-17/_source/raw/ФС ПК ПАКТ.Льготы.2025.04.17.docx
+  sourceHash: "sha256:489bf9b55e957df3fcc54837d1ba667c8860a2365990c98449693e52eea253b8"
+  domain: taksa
+  systems: [pakt-lgoty, mup, pk, tk, dwh, eq, pakt-esut]
+  relatedDocuments: [fs-pakt-esut-etap-1-2-2024-12-02, fs-yul-p2p-perevody-karta-na-kartu]
+  ingestedAt: "2026-07-13"
+  ingestedBy: stand-test-spec-ingestion
+  status: candidates_created

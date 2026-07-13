@@ -1,0 +1,236 @@
+documentId: fs-pk-pakt-lgoty-2025-04-17
+businessFlows:
+  - id: tr-transit-mup-to-pk
+    title: "Транзитная передача ЛТР/ИТР из МУП в ПК"
+    actors: ["ПАКТ.Льготы", "МУП", "ПК"]
+    systems: [pakt-lgoty, mup, pk]
+    trigger: "ЛТР/ИТР передано из ПАКТ.Льготы в МУП; МУП автоматически передаёт его в ПК через внутренний REST-сервис."
+    preconditions: ["ЛТР/ИТР сохранено в МУП"]
+    steps:
+      - order: 1
+        actor: "МУП"
+        action: "Вызвать внутренний REST-сервис ПК, передав JSON-текст ЛТР/ИТР без изменений"
+        target: "pk-process-tr-request"
+        expectedEffect: "HTTP 200 — сообщение распарсено, обработка начата"
+      - order: 2
+        actor: "ПК"
+        action: "Вызвать внутреннюю операцию обработки ЛТР/ИТР"
+        target: "pk-product-catalog"
+        expectedEffect: "Создана головная строка журнала PACTPREFLog (Type=DECISION); текст сохранён в PACTPREFMessage"
+    expectedResult: "REST вернул только HTTP-код; обработка запущена; журнал и текст запроса сохранены."
+    failureBehavior: "400 при ошибке парсинга; 404 при отсутствии метода/сервиса; 500 если сервер не стартован."
+    parallelism: "Одновременно может быть передано несколько разных ТР; они обрабатываются независимо."
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 10
+      section: "2.4 / 4.2.1.2"
+      heading: "Характеристика объекта автоматизации; REST-сервис"
+      quote: "Загруженное ЛТР/ИТР в МУП автоматически с помощью внутреннего REST-сервиса передается в модуль ПК; сервис отвечает только HTTP-кодами."
+    confidence: high
+    relatedArtifacts:
+      endpoints: [pk-process-tr-request]
+      kafkaTopics: []
+      dbTables: []
+      grpcMethods: []
+  - id: ltr-automatic-processing
+    title: "Автоматическая обработка ЛТР и создание объектов тарификации"
+    actors: ["ПК"]
+    systems: [pk]
+    trigger: "Операция обработки получила JSON ЛТР (индексы ЛТР)."
+    preconditions: ["В ЛТР передан код ТП/ПУ", "Версии индексов ЛТР совпадают с ТП/ПУ"]
+    steps:
+      - order: 1
+        actor: "ПК"
+        action: "Разобрать все индексы и зафиксировать их в журнале PACTPREFLog"
+        target: "pactpreflog-table"
+        expectedEffect: "Строки Type=PACKAGE/BRANCH/INDEX по всем индексам"
+      - order: 2
+        actor: "ПК"
+        action: "Найти ТП/ПУ по коду пакета (mapping ПАКТ.ЕСУТ) и Услугу по индексу"
+        target: "pk-product-catalog"
+        expectedEffect: "ТП/ПУ и Услуга определены"
+      - order: 3
+        actor: "ПК"
+        action: "Для каждого Индекса тарификации искать подходящий ИТ и Тариф; при отсутствии — создать новые"
+        target: "pk-product-catalog"
+        expectedEffect: "ИТ/ТУ/Тариф подобраны или созданы; строки INDEX получают Status=AUTO"
+      - order: 4
+        actor: "ПК"
+        action: "Автоматически утвердить созданные ИТ и Тарифы; заполнить Версии индексов из ТР"
+        target: "pk-product-catalog"
+        expectedEffect: "Объекты тарификации утверждены автоматически"
+      - order: 5
+        actor: "ПК"
+        action: "В конце обработки отправить пакетное уведомление в МУП"
+        target: "it-index-binding-notification"
+        expectedEffect: "Kafka-сообщение с привязками ИТ->индекс"
+    expectedResult: "Для ЛТР автоматически созданы и утверждены ИТ/ТУ/Тарифы; журнал Status=AUTO; МУП уведомлён."
+    failureBehavior: "Ошибка по строке индекса -> Status=ERROR; не влияет на другие ТР."
+    parallelism: "Разные ТР обрабатываются параллельно и независимо."
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 15
+      section: "3.2.4"
+      heading: "Требования к операции обработки ЛТР/ИТР"
+      quote: "По индексам ЛТР выполняется обработка с поиском/созданием объектов тарификации; все новые ИТ и Тарифы автоматически утверждаются; создание объектов по ЛТР полностью в автоматическом режиме."
+    confidence: high
+    relatedArtifacts:
+      endpoints: [pk-process-tr-request]
+      kafkaTopics: [it-index-binding-notification]
+      dbTables: [pactpreflog-table]
+      grpcMethods: []
+  - id: itr-manual-processing
+    title: "Ручная обработка ИТР"
+    actors: ["ПК", "Пользователь Таксы"]
+    systems: [pk]
+    trigger: "Операция обработки получила индексы ИТР (или код Individual_No_Standart / UNIVERSAL)."
+    preconditions: ["ТР классифицирован как ИТР"]
+    steps:
+      - order: 1
+        actor: "ПК"
+        action: "Разобрать индексы ИТР и зафиксировать их в журнале, но НЕ обрабатывать автоматически"
+        target: "pactpreflog-table"
+        expectedEffect: "Строки INDEX со Status=EDIT (требуют ручной обработки)"
+      - order: 2
+        actor: "Пользователь Таксы"
+        action: "Вручную создать и настроить ИТ/ТУ/Тарифы, затем утвердить"
+        target: "pk-product-catalog"
+        expectedEffect: "Объекты тарификации созданы и утверждены вручную"
+      - order: 3
+        actor: "Пользователь Таксы"
+        action: "Привязать созданный ИТ к льготируемому индексу ИТР (операция в UI ПК)"
+        target: "it-index-binding-notification"
+        expectedEffect: "Отправлено единичное Kafka-уведомление о привязке в МУП"
+    expectedResult: "Объекты для ИТР созданы вручную; журнал Status=EDIT; привязка ИТ отправлена в МУП."
+    failureBehavior: "Ручной режим; ошибки правятся пользователем."
+    parallelism: "Не влияет на обработку других ТР."
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 15
+      section: "3.2.4 / 2.6.9"
+      heading: "Обработка ЛТР/ИТР; Общие правила для ИТР"
+      quote: "Индексы ИТР не подлежат автоматической обработке; объекты тарификации для ИТР создаются в ПК вручную. Код Individual_No_Standart и UNIVERSAL интерпретируются как ИТР."
+    confidence: high
+    relatedArtifacts:
+      endpoints: [pk-process-tr-request]
+      kafkaTopics: [it-index-binding-notification]
+      dbTables: [pactpreflog-table]
+      grpcMethods: []
+  - id: tr-reprocessing
+    title: "Повторная обработка ранее загруженного ЛТР/ИТР"
+    actors: ["Пользователь Таксы", "ПК"]
+    systems: [pk]
+    trigger: "Пользователь запускает операцию повторной обработки по строке журнала (пиктограмма в UI)."
+    preconditions: ["Существует строка журнала с сохранённым текстом запроса в PACTPREFMessage"]
+    steps:
+      - order: 1
+        actor: "ПК"
+        action: "По строке журнала найти текст запроса ЛТР/ИТР (PACTPREFMessage) и передать в операцию обработки"
+        target: "pactprefmessage-table"
+        expectedEffect: "Текст запроса извлечён и повторно обработан"
+      - order: 2
+        actor: "ПК"
+        action: "Пропустить строки журнала, обработанные ранее"
+        target: "pactpreflog-table"
+        expectedEffect: "Ранее обработанные строки не обрабатываются повторно"
+      - order: 3
+        actor: "ПК"
+        action: "В конце пере-отправить в МУП ранее направленные привязки"
+        target: "it-index-binding-notification"
+        expectedEffect: "Пакетное Kafka-уведомление отправлено повторно"
+    expectedResult: "ЛТР/ИТР обработан повторно; уже обработанные строки пропущены; привязки пере-отправлены в МУП."
+    failureBehavior: "Аналогично первичной обработке; ошибки по строкам изолированы."
+    parallelism: "Не описано отдельно."
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 15
+      section: "3.2.5"
+      heading: "Требования к операции повторной обработки"
+      quote: "Операция по строке журнала находит текст запроса ЛТР/ИТР и передаёт его на обработку; строки журнала, обработанные ранее, должны пропускаться при повторной обработке."
+    confidence: high
+    relatedArtifacts:
+      endpoints: []
+      kafkaTopics: [it-index-binding-notification]
+      dbTables: [pactpreflog-table, pactprefmessage-table]
+      grpcMethods: []
+  - id: complex-index-truncated-tariffs
+    title: "Создание усечённых Тарифов для Сложного индекса (USD/EUR)"
+    actors: ["ПК", "ТК"]
+    systems: [pk, tk]
+    trigger: "ЛТР льготирует отдельные дочерние Индексы тарификации Сложного индекса (например 2.2.2.1.2 USD, 2.2.2.1.3 EUR)."
+    preconditions: ["Сложный индекс с несколькими дочерними индексами тарификации"]
+    steps:
+      - order: 1
+        actor: "ПК"
+        action: "Создать отдельный ИТ на Услугу сложного индекса для каждого льготируемого дочернего индекса"
+        target: "pk-product-catalog"
+        expectedEffect: "Два ИТ с одной Услугой, разными кодами"
+      - order: 2
+        actor: "ПК"
+        action: "Создать усечённый Тариф из одной строки под каждый индекс, сохранив условия применения (Валюта = USD/EUR) и цену из ЛТР"
+        target: "pk-product-catalog"
+        expectedEffect: "По одному неполному Тарифу на каждый ИТ"
+      - order: 3
+        actor: "ТК"
+        action: "При расчёте комиссии, если строка Тарифа не найдена, перейти на следующий по приоритету ИТ/ПУ/ТП (Неполный тариф)"
+        target: "tk-tariff-calculator"
+        expectedEffect: "Корректный расчёт: USD -> ИТ USD; JPY -> fallback на ТП/ПУ"
+    expectedResult: "Созданы усечённые Тарифы; расчёт комиссии в USD/EUR по своим ИТ, в JPY — fallback на стандартный Тариф ТП/ПУ."
+    failureBehavior: "Без доработки 'Неполный тариф' расчёт вернул бы ошибку 021."
+    parallelism: "Не описано."
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 12
+      section: "3.1 / 2.6.8.4"
+      heading: "Требования к пользовательским сценариям"
+      quote: "При обработке ЛТР создаются усечённые Тарифы — отдельный Тариф под каждый дочерний Индекс тарификации; при расчёте, если строка не найдена, расчёт переходит на следующий по приоритету ИТ/ПУ/ТП."
+    confidence: medium
+    relatedArtifacts:
+      endpoints: []
+      kafkaTopics: []
+      dbTables: []
+      grpcMethods: []
+  - id: parallel-tr-processing
+    title: "Параллельная обработка нескольких разных ТР"
+    actors: ["ПК"]
+    systems: [pk]
+    trigger: "В Таксу одновременно переданы несколько разных ЛТР/ИТР."
+    preconditions: ["Несколько ТР загружены одновременно"]
+    steps:
+      - order: 1
+        actor: "ПК"
+        action: "Обрабатывать каждый ТР независимо, не блокируя и не завися от обработки других ТР"
+        target: "pk-product-catalog"
+        expectedEffect: "Обработка ТР не мешает друг другу"
+      - order: 2
+        actor: "ПК"
+        action: "Изолировать ошибки: ошибка в строках одного ТР не влияет на другие ТР"
+        target: "pactpreflog-table"
+        expectedEffect: "Ошибка одного ТР (Status=ERROR) не останавливает обработку другого"
+    expectedResult: "Несколько ТР обрабатываются параллельно и независимо; ошибки изолированы."
+    failureBehavior: "Ошибка одного ТР локальна для его строк журнала."
+    parallelism: "Ключевое требование: обработка ЛТР/ИТР должна быть parallel-safe между разными ТР."
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 10
+      section: "2.6.3"
+      heading: "Допущения и ограничения"
+      quote: "В Таксу одновременно может быть передано несколько разных ЛТР/ИТР, которые могут обрабатываться параллельно; несколько ТР не должны препятствовать обработке друг друга; ошибки в обработке строк одного ТР никогда не должны влиять на другие ТР."
+    confidence: high
+    relatedArtifacts:
+      endpoints: [pk-process-tr-request]
+      kafkaTopics: []
+      dbTables: [pactpreflog-table]
+      grpcMethods: []

@@ -1,0 +1,48 @@
+# review-decisions.yml — human review decisions for DIGEST candidate families.
+#
+# WHY THIS FILE: business-flows / business-rules / test-scenarios are SEMANTIC digest content.
+# Their candidate schemas (business-rule.schema.json etc.) intentionally have NO status/review field
+# and are additionalProperties:false, so an approval cannot be stamped inside the *.candidates.yml.
+# Approvals for digest families are recorded HERE (a review artifact, not a schema-validated candidate).
+#
+# DISPOSITION: these are NOT promoted into the strict 8-collection curated KB — there is no
+# `businessRules` collection by design (a category enters the curated KB only if it is a runtime
+# contract the SDK resolves). "Approved digest" means: trusted to feed stand-test-scenario-design /
+# stand-test-case-analysis, and to project into testCaseMapping.assumptions/missing when a concrete
+# test is authored. Nothing is written to services/endpoints/kafka/db/... by this decision.
+documentId: fs-pk-pakt-lgoty-2025-04-17
+reviewedOn: "2026-07-13"
+reviewedBy: "maintainer (per instruction)"
+basisNote: "All 10 verified faithful in the adversarial re-review (0 inventions; quotes located in source). The one earlier finding on limit-index-manual-it (over-derived journal Status=EDIT) was already softened to a risk-noted caveat."
+
+businessRules:
+  disposition: approved-digest        # feeds scenario-design; NOT written to curated KB
+  approved:                           # confidence: high, source quote confirmed against _source/normalized.md
+    - id: ltr-processed-automatically
+      basis: "high; §2.6.8.1 (L330) — ЛТР создаётся/утверждается автоматически"
+    - id: itr-processed-manually
+      basis: "high; §3.2.4.2 / §2.6.9.1 (L559/L356) — ИТР вручную"
+    - id: limit-index-manual-it
+      basis: "high; §2.6.8.9 / §3.2.4.4 (L346/L569) — лимитный ИТ «Создан», не авто (Status-caveat уже смягчён)"
+    - id: archive-start-date-shift
+      basis: "high; §2.6.4 (L316) — архивная дата -> текущая + сдвижка"
+    - id: universal-treated-as-itr
+      basis: "high; §2.6.7.2 / §2.6.9.3 (L326) — UNIVERSAL как ИТР"
+    - id: individual-no-standart-is-itr
+      basis: "high; §2.6.9.2 (L358) — Individual_No_Standart = ИТР"
+    - id: index-version-mismatch-becomes-itr
+      basis: "high; §2.6.8.10 (L348) — несовпадение версий -> ИТР"
+    - id: reprocess-skips-processed-rows
+      basis: "high; §3.2.5 (L601) — повторная обработка пропускает обработанные строки"
+    - id: parallel-tr-isolation
+      basis: "high; §2.6.3 (L314) — параллельные ТР изолированы, ошибки не влияют"
+    - id: rest-returns-status-only-internal
+      basis: "high; §4.2.1.2 (L2986/L2990) — REST только HTTP-статус, внутренний"
+  held:                               # confidence: medium -> remain needs-review, NOT approved
+    - id: complex-index-truncated-tariff
+      reason: "medium — синтез worked example §3.1 (усечённые Тарифы)"
+    - id: incomplete-tariff-fallback
+      reason: "medium — cross-ref базовой доработки US P2P ЮЛ (Неполный тариф)"
+
+# business-flows / test-scenarios: not part of this decision (still needs-review as digest).
+# Contract families (services/endpoints/kafka/db): NOT approved — blocked by open unresolved items.

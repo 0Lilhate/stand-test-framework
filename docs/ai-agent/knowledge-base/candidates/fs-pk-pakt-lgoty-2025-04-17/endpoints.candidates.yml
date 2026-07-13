@@ -1,0 +1,29 @@
+documentId: fs-pk-pakt-lgoty-2025-04-17
+candidates:
+  - candidateId: pk-process-tr-request
+    candidateType: endpoint
+    status: needs-review
+    confidence: medium
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 40
+      section: "4.2.1.2"
+      heading: "Реализовать внутренний REST-сервис обработки запроса по ЛТР/ИТР"
+      quote: "Сервис получает в запросе текст ЛТР/ИТР и передает его в операцию обработки. Сервис не должен возвращать результаты обработки, а должен отвечать только HTTP-кодами: 200 Success (сообщение распарсено и начата обработка), 400 Bad Request (ошибки парсинга), 404 Not Found (отсутствует метод/сервис), 500 Server (сервер не стартован). Сервис внутренний, не выставлен наружу."
+      extractionNotes: "Success = 200. HTTP-метод и URL path НЕ указаны в ФС -> см. unresolved rest-method / rest-path (не выдумываем). Тело ответа отсутствует (только статус)."
+    normalized:
+      id: pk-process-tr-request
+      alias: pk-process-tr-request
+      title: "Внутренний REST-сервис ПК: обработка запроса по ЛТР/ИТР"
+      description: "МУП -> ПК. Принимает JSON-текст ЛТР/ИТР (BenefitsScheme), запускает операцию обработки. Возвращает только HTTP-статус, без тела. Внутренний, наружу не выставлен."
+    extracted:
+      successStatus: 200
+      serviceAlias: pk-product-catalog
+      requiredFields: [BenefitsScheme]
+    naturalKey:
+      serviceAlias: pk-product-catalog
+      alias: pk-process-tr-request
+    raw:
+      text: "REST-сервис обработки ЛТР/ИТР. Consumer=МУП, provider=ПК. Request=JSON BenefitsScheme[]. Response=HTTP status only. 200/400/404/500. Method/path не указаны."

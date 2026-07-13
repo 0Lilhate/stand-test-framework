@@ -1,0 +1,27 @@
+documentId: fs-pk-pakt-lgoty-2025-04-17
+candidates:
+  - candidateId: it-index-binding-notification
+    candidateType: kafka-topic
+    status: needs-review
+    confidence: medium
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 16
+      section: "3.2.7"
+      heading: "Требования к автоматическому уведомлению МУП о привязке ИТ к льготируемым индексам в ПК"
+      quote: "Уведомление МУП о привязке ИТ к льготируемым индексам выполняется через внутреннюю Kafka Таксы в формате JSON. При первичной обработке ТР через REST-сервис отправляется одно пакетное сообщение с привязками ИТ по всем индексам, для которых удалось подобрать или создать ИТ; формирование и отправка - в самом конце работы REST-сервиса. При повторной обработке ранее направленные привязки пере-отправляются. В операции привязки ИТ к индексу отправляется единственная привязка."
+      extractionNotes: "Producer=ПК, consumer=МУП, direction=produced (система под тестом эмитит). Триггеры: конец REST-обработки / конец повторной обработки / операция привязки в UI. Формат JSON-сообщения описан в §4.2.1.1 (вложение image11.emf, §3.2.7 L617 ссылается туда за форматом Kafka); имя топика в тексте ФС не приведено вовсе. NB: image12.emf — это входящая структура запроса ЛТР/ИТР (другое сообщение). -> см. unresolved kafka-topic-name / kafka-payload-schema. Алиас логический."
+    normalized:
+      id: it-index-binding-notification
+      alias: it-index-binding-notification
+      title: "Уведомление МУП о привязке ИТ к льготируемым индексам"
+      description: "ПК -> МУП, внутренняя Kafka Таксы, JSON. Пакетное сообщение с привязками ИТ->индекс по всем подобранным/созданным ИТ; в конце обработки. Реальное имя топика и схема - unresolved."
+    extracted:
+      direction: produced
+      serviceAlias: pk-product-catalog
+    naturalKey:
+      alias: it-index-binding-notification
+    raw:
+      text: "Внутренняя Kafka Таксы, JSON, пакетное сообщение привязок ИТ->льготируемый индекс. Producer=ПК, consumer=МУП. Формат сообщения — §4.2.1.1 / image11.emf (недоступно текстом); имя топика в ФС не указано."

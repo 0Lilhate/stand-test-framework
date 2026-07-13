@@ -1,0 +1,350 @@
+documentId: fs-pk-pakt-lgoty-2025-04-17
+testScenarios:
+  - id: ltr-happy-path-auto
+    title: "Happy path: автоматическая обработка ЛТР"
+    goal: "Проверить, что валидный ЛТР обрабатывается автоматически: создаются/утверждаются ИТ/ТУ/Тариф, журнал Status=AUTO, МУП уведомлён."
+    preconditions: ["Передан ЛТР с кодом ТП/ПУ и совпадающими версиями индексов"]
+    testData: ["JSON BenefitsScheme с ЛТР по простому индексу", "codeTariffsPack реального ТП/ПУ"]
+    action: "МУП вызывает внутренний REST-сервис ПК с текстом ЛТР"
+    expected:
+      rest: ["HTTP 200 без тела"]
+      kafka: ["Пакетное уведомление в МУП с привязками ИТ->индекс в конце обработки"]
+      db: ["PACTPREFLog: головная строка Type=DECISION; строки INDEX Status=AUTO"]
+      grpc: []
+    assertions: ["response status == 200", "PACTPREFLog.Status == 'AUTO' для индексных строк ЛТР", "получено Kafka-уведомление привязки ИТ"]
+    cleanup: ["Стратегия очистки не задана в ФС -> unresolved"]
+    risks: ["Нет testRunId-колонки для изоляции", "Точное имя топика/схема Kafka неизвестны", "method/path REST неизвестны"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 15
+      section: "3.2.4 / 2.6.8.1"
+      heading: "Обработка ЛТР/ИТР"
+      quote: "Создание объектов тарификации по ЛТР полностью в автоматическом режиме, все объекты утверждаются автоматически."
+    confidence: medium
+    kbDependencies:
+      endpoints: [pk-process-tr-request]
+      kafkaTopics: [it-index-binding-notification]
+      datasources: [pk-taksa-db]
+      dbProbes: [journal-index-status-probe, journal-head-by-decision-probe]
+      grpcTargets: []
+  - id: itr-manual-mode
+    title: "ИТР: ручной режим, авто-объекты не создаются"
+    goal: "Проверить, что ИТР не обрабатывается автоматически (Status=EDIT), объекты создаются вручную."
+    preconditions: ["Передан ИТР"]
+    testData: ["JSON BenefitsScheme с ИТР"]
+    action: "МУП вызывает REST-сервис ПК с текстом ИТР"
+    expected:
+      rest: ["HTTP 200"]
+      kafka: []
+      db: ["PACTPREFLog: строки INDEX Status=EDIT; авто-ИТ не создаются"]
+      grpc: []
+    assertions: ["response status == 200", "PACTPREFLog.Status == 'EDIT' для индексных строк ИТР"]
+    cleanup: ["unresolved"]
+    risks: ["Проверка отсутствия авто-объектов требует уточнения ожидаемого состояния", "Kafka по ИТР: уведомление МУП следует из правил (индексы ИТР не входят в конец-REST пакет; единичная привязка — на UI-операции L609-615), но документ не даёт этого явным ожиданием для ИТР-флоу -> инференс, не hard-assert"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 15
+      section: "3.2.4.2"
+      heading: "Обработка ЛТР/ИТР"
+      quote: "Индексы ИТР не подлежат автоматической обработке; объекты создаются вручную."
+    confidence: medium
+    kbDependencies:
+      endpoints: [pk-process-tr-request]
+      datasources: [pk-taksa-db]
+      dbProbes: [journal-index-status-probe]
+      kafkaTopics: []
+      grpcTargets: []
+  - id: universal-as-itr
+    title: "UNIVERSAL обрабатывается как ИТР"
+    goal: "Проверить, что Пункт ТР с codeTariffsPack=UNIVERSAL идёт в ручной режим (EDIT)."
+    preconditions: ["ЛТР/ИТР с Пунктом, где codeTariffsPack=UNIVERSAL"]
+    testData: ["tariffPacks/codeTariffsPack = UNIVERSAL", "categoryTariffsPack задаёт распространение"]
+    action: "Передать сообщение с UNIVERSAL-пунктом в REST-сервис ПК"
+    expected:
+      rest: ["HTTP 200"]
+      kafka: []
+      db: ["PACTPREFLog: индексные строки UNIVERSAL-пункта Status=EDIT"]
+      grpc: []
+    assertions: ["PACTPREFLog.Status == 'EDIT' для UNIVERSAL-пункта", "авто-утверждённый ИТ не создан"]
+    cleanup: ["unresolved"]
+    risks: ["Ожидаемый Status для UNIVERSAL выведен из правила (не дан явный тест-кейс)"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 11
+      section: "2.6.7.2"
+      heading: "Допущения и ограничения"
+      quote: "Код UNIVERSAL интерпретируется как ИТР, обрабатывается как ИТР — вручную."
+    confidence: medium
+    kbDependencies:
+      endpoints: [pk-process-tr-request]
+      datasources: [pk-taksa-db]
+      dbProbes: [journal-index-status-probe]
+      kafkaTopics: []
+      grpcTargets: []
+  - id: individual-no-standart-as-itr
+    title: "Individual_No_Standart обрабатывается как ИТР"
+    goal: "Проверить ручной режим для codeTariffsPack=Individual_No_Standart."
+    preconditions: ["Пункт ТР с codeTariffsPack=Individual_No_Standart"]
+    testData: ["tariffPacks/codeTariffsPack = Individual_No_Standart"]
+    action: "Передать сообщение в REST-сервис ПК"
+    expected:
+      rest: ["HTTP 200"]
+      db: ["PACTPREFLog: индексные строки Status=EDIT"]
+      kafka: []
+      grpc: []
+    assertions: ["PACTPREFLog.Status == 'EDIT'"]
+    cleanup: ["unresolved"]
+    risks: ["Ожидаемый Status выведен из правила"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 11
+      section: "2.6.9.2"
+      heading: "Общие правила для ИТР"
+      quote: "Для ИТР в поле codeTariffsPack должно быть заполнено Individual_No_Standart."
+    confidence: medium
+    kbDependencies:
+      endpoints: [pk-process-tr-request]
+      datasources: [pk-taksa-db]
+      dbProbes: [journal-index-status-probe]
+      kafkaTopics: []
+      grpcTargets: []
+  - id: archive-start-date
+    title: "Архивная дата начала действия смещается на текущую"
+    goal: "Проверить, что при архивной dateBegin объекты создаются с датой начала = текущая + сдвижка."
+    preconditions: ["ЛТР с dateBegin в прошлом (архивная)"]
+    testData: ["dateBegin < текущая дата"]
+    action: "Передать ЛТР с архивной датой в REST-сервис ПК"
+    expected:
+      rest: ["HTTP 200"]
+      db: ["Дата начала действия созданного ИТ >= текущей даты (не архивная)"]
+      kafka: []
+      grpc: []
+    assertions: ["Дата начала ИТ не в прошлом", "смещена на текущую + минимальная сдвижка"]
+    cleanup: ["unresolved"]
+    risks: ["Величина 'минимальной сдвижки' в ФС не задана числом -> unresolved", "Поле даты начала ИТ в БД не смоделировано напрямую"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 10
+      section: "2.6.4"
+      heading: "Допущения и ограничения"
+      quote: "Объекты тарификации должны создаваться с Датой начала действия равной текущей дате + минимальная сдвижка."
+    confidence: medium
+    kbDependencies:
+      endpoints: [pk-process-tr-request]
+      datasources: [pk-taksa-db]
+      dbProbes: []
+      kafkaTopics: []
+      grpcTargets: []
+  - id: complex-index-usd-eur
+    title: "Сложный индекс: усечённые Тарифы для USD и EUR"
+    goal: "Проверить создание двух ИТ и двух усечённых Тарифов (по строке USD и EUR) для сложного индекса."
+    preconditions: ["ЛТР на дочерние индексы 2.2.2.1.2 (USD) и 2.2.2.1.3 (EUR) сложного индекса 2.2.2.1"]
+    testData: ["ЛТР с льготируемыми индексами USD/EUR"]
+    action: "Передать ЛТР со сложным индексом в REST-сервис ПК"
+    expected:
+      rest: ["HTTP 200"]
+      db: ["Два ИТ на одну Услугу 2.2.2.1; каждый с усечённым Тарифом из одной строки"]
+      kafka: ["Уведомление о привязке обоих ИТ"]
+      grpc: []
+    assertions: ["Создано 2 ИТ", "каждый Тариф из одной строки с сохранёнными условиями (Валюта USD/EUR)"]
+    cleanup: ["unresolved"]
+    risks: ["Структура ИТ/Тариф в БД не смоделирована (нет таблиц ИТ/Тариф в ФС)", "проверка через журнал/UI"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 12
+      section: "3.1"
+      heading: "Требования к пользовательским сценариям"
+      quote: "Создаем два разных ИТ; Тарифы для этих ИТ усеченные — из одной строки, с сохранением условий применения (Валюта USD/EUR)."
+    confidence: medium
+    kbDependencies:
+      endpoints: [pk-process-tr-request]
+      datasources: [pk-taksa-db]
+      dbProbes: [journal-index-status-probe]
+      kafkaTopics: [it-index-binding-notification]
+      grpcTargets: []
+  - id: jpy-fallback-to-package
+    title: "JPY: расчёт переходит на ТП/ПУ (fallback)"
+    goal: "Проверить, что операция в JPY (индекс без ИТ) не попадает в усечённые ИТ и рассчитывается по полному Тарифу ТП/ПУ."
+    preconditions: ["Созданы усечённые ИТ по USD и EUR", "операция в JPY по индексу 2.2.2.1.1"]
+    testData: ["операция в валюте JPY"]
+    action: "Выполнить расчёт комиссии по операции в JPY"
+    expected:
+      rest: []
+      db: []
+      kafka: []
+      grpc: []
+    assertions: ["Комиссия рассчитана по Тарифу ТП/ПУ, а не по усечённым ИТ"]
+    cleanup: ["unresolved"]
+    risks: ["Расчёт комиссии - функция ТК; контракт вызова расчёта в ФС не описан (REST/gRPC?) -> unresolved, поэтому эффект НЕ помещён в транспортный бакет (grpc/rest), а проверяется через assertions", "Канал вызова расчёта неизвестен", "низкая тестируемость через данную ФС"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 13
+      section: "3.1 п.7"
+      heading: "Требования к пользовательским сценариям"
+      quote: "При расчёте по операции в JPY оба ИТ будут пропущены, и расчёт перейдёт на ТП, ПУ, Подписку."
+    confidence: low
+    kbDependencies:
+      endpoints: []
+      datasources: []
+      dbProbes: []
+      kafkaTopics: []
+      grpcTargets: []
+  - id: limit-index-manual
+    title: "Лимитный индекс требует ручной настройки"
+    goal: "Проверить, что по лимитному индексу ИТ создаётся в статусе Создан и не утверждается автоматически."
+    preconditions: ["ЛТР содержит лимитный индекс"]
+    testData: ["ЛТР с лимитным индексом (услуга с Лимитом)"]
+    action: "Передать ЛТР с лимитным индексом в REST-сервис ПК"
+    expected:
+      rest: ["HTTP 200"]
+      db: ["ИТ создан в статусе «Создан» (L569); строка журнала фиксируется (Status в лимитной ветке L2076 явно не задан)"]
+      kafka: []
+      grpc: []
+    assertions: ["ИТ по лимитному индексу не утверждён автоматически (Status ИТ = «Создан»)"]
+    cleanup: ["unresolved"]
+    risks: ["Статус ИТ «Создан» не проверяется напрямую через таблицы ФС", "Журнальный Status=EDIT для лимитного индекса — инференс: лимитная ветка алгоритма (L2076) Status не задаёт; проверять статус ИТ «Создан», а не Status журнала"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 15
+      section: "3.2.4.4"
+      heading: "Обработка ЛТР/ИТР"
+      quote: "Для Лимитного индекса всегда безусловно создается новый ИТ в статусе Создан; дальнейшая настройка и утверждение вручную."
+    confidence: medium
+    kbDependencies:
+      endpoints: [pk-process-tr-request]
+      datasources: [pk-taksa-db]
+      dbProbes: [journal-index-status-probe]
+      kafkaTopics: []
+      grpcTargets: []
+  - id: reprocess-skips-processed
+    title: "Повторная обработка пропускает обработанные строки"
+    goal: "Проверить, что повторная обработка не переобрабатывает ранее обработанные строки журнала."
+    preconditions: ["ТР уже обработан ранее; строки журнала в терминальных статусах"]
+    testData: ["строка журнала с сохранённым PACTPREFMessage"]
+    action: "Запустить операцию повторной обработки по строке журнала"
+    expected:
+      rest: []
+      db: ["Ранее обработанные строки не меняются повторно; новые строки только по необработанному"]
+      kafka: ["Пере-отправка ранее направленных привязок в МУП"]
+      grpc: []
+    assertions: ["Обработанные строки пропущены", "привязки пере-отправлены в МУП"]
+    cleanup: ["unresolved"]
+    risks: ["'Обработанная строка' определяется по статусу - критерий пропуска не формализован явно"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 15
+      section: "3.2.5"
+      heading: "Требования к операции повторной обработки"
+      quote: "Строки журнала, обработанные ранее, должны пропускаться при повторной обработке."
+    confidence: medium
+    kbDependencies:
+      endpoints: []
+      datasources: [pk-taksa-db]
+      dbProbes: [journal-index-status-probe]
+      kafkaTopics: [it-index-binding-notification]
+      grpcTargets: []
+  - id: kafka-notification-to-mup
+    title: "Kafka-уведомление в МУП о привязке ИТ"
+    goal: "Проверить, что в конце обработки ТР в МУП отправляется пакетное сообщение с привязками ИТ->индекс."
+    preconditions: ["Обработан ЛТР, для индексов подобраны/созданы ИТ"]
+    testData: ["ЛТР с несколькими льготируемыми индексами"]
+    action: "Передать ЛТР в REST-сервис ПК и дождаться конца обработки"
+    expected:
+      rest: ["HTTP 200"]
+      kafka: ["Одно пакетное сообщение с привязками ИТ по всем подобранным/созданным индексам"]
+      db: []
+      grpc: []
+    assertions: ["Kafka-сообщение получено", "содержит привязки по всем обработанным индексам"]
+    cleanup: ["unresolved"]
+    risks: ["Точное имя топика и схема сообщения неизвестны (image12.emf) -> unresolved", "нет correlation-стратегии"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 16
+      section: "3.2.7"
+      heading: "Уведомление МУП"
+      quote: "Отправляется одно пакетное сообщение с привязками ИТ по всем индексам, для которых удалось подобрать или создать ИТ, в самом конце работы REST-сервиса."
+    confidence: medium
+    kbDependencies:
+      endpoints: [pk-process-tr-request]
+      kafkaTopics: [it-index-binding-notification]
+      datasources: []
+      dbProbes: []
+      grpcTargets: []
+  - id: journal-records-stages
+    title: "Журнал фиксирует этапы обработки"
+    goal: "Проверить, что в PACTPREFLog фиксируются строки этапов: DECISION, PACKAGE, BRANCH, INDEX."
+    preconditions: ["Передан ТР с пакетами, отделениями и индексами"]
+    testData: ["ЛТР/ИТР с ТП/ПУ, списком отделений и индексами"]
+    action: "Передать ТР в REST-сервис ПК"
+    expected:
+      rest: ["HTTP 200"]
+      db: ["PACTPREFLog содержит строки Type=DECISION (голова), PACKAGE, BRANCH, INDEX по всем индексам без исключения"]
+      kafka: []
+      grpc: []
+    assertions: ["Есть головная строка Type=DECISION (её Id уникален и прописывается дочерним строкам как HeaderLog; у самой головы HeaderLog=null, L787)", "есть строки INDEX по всем индексам"]
+    cleanup: ["unresolved"]
+    risks: ["Полнота строк проверяется по количеству индексов входного сообщения"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 14
+      section: "3.2.3 / 4.3.1"
+      heading: "Требования к Журналу ТР ПАКТ.Льготы"
+      quote: "В журнале отдельными строками фиксируются: начало обработки сообщения, обработка ТП/ПУ, списка подразделений, всех индексов без исключения."
+    confidence: high
+    kbDependencies:
+      endpoints: [pk-process-tr-request]
+      datasources: [pk-taksa-db]
+      dbProbes: [journal-head-by-decision-probe, journal-index-status-probe]
+      kafkaTopics: []
+      grpcTargets: []
+  - id: parallel-two-trs
+    title: "Параллельная загрузка двух разных ТР"
+    goal: "Проверить, что два разных ТР, загруженные одновременно, обрабатываются независимо и ошибки не влияют друг на друга."
+    preconditions: ["Два разных ЛТР/ИТР с разными Номерами решения"]
+    testData: ["ТР A (валидный) и ТР B (с ошибочной строкой)"]
+    action: "Одновременно вызвать REST-сервис ПК для ТР A и ТР B"
+    expected:
+      rest: ["Оба вызова -> HTTP 200"]
+      db: ["Журналы двух ТР независимы (разные HeaderLog); ошибка в ТР B (Status=ERROR) не влияет на ТР A"]
+      kafka: ["Уведомления по каждому ТР независимы"]
+      grpc: []
+    assertions: ["ТР A обработан успешно независимо от ТР B", "ошибка ТР B не останавливает ТР A"]
+    cleanup: ["unresolved"]
+    risks: ["Нет testRunId/дискриминатора для изоляции параллельных прогонов в БД/Kafka -> unresolved (важно для parallel-safe теста)"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 10
+      section: "2.6.3"
+      heading: "Допущения и ограничения"
+      quote: "Несколько одновременно загруженных ТР не должны препятствовать обработке друг друга; ошибки строк одного ТР никогда не должны влиять на другие ТР."
+    confidence: medium
+    kbDependencies:
+      endpoints: [pk-process-tr-request]
+      datasources: [pk-taksa-db]
+      dbProbes: [journal-head-by-decision-probe]
+      kafkaTopics: [it-index-binding-notification]
+      grpcTargets: []

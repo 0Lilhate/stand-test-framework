@@ -1,0 +1,9 @@
+# No conflicts detected.
+# Axis 1 (candidate vs curated KB): the curated KB has no services/endpoints/topics/tables for
+#   ПК/МУП/ТК/PACTPREFLog — every candidate is `added`, none contradicts an existing entry.
+# Axis 2 (candidate vs candidate cross-document): this is the only ingested document (single documentId),
+#   so there is no cross-document disagreement.
+# The list is emitted empty (not omitted) per the conflict-item schema.
+documentId: fs-pk-pakt-lgoty-2025-04-17
+generatedAt: "2026-07-13"
+conflicts: []

@@ -1,0 +1,112 @@
+documentId: fs-pk-pakt-lgoty-2025-04-17
+candidates:
+  - candidateId: pk-taksa-db
+    candidateType: datasource
+    status: needs-review
+    confidence: medium
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 43
+      section: "4.3"
+      heading: "Требования к БД"
+      quote: "Создать таблицу PACTPREFLog Журнал ТР ПАКТ.Льготы и таблицу PACTPREFMessage Текст запроса по ТР от ПАКТ.Льготы в БД ПК."
+      extractionNotes: "БД модуля ПК, где создаются PACTPREFLog и PACTPREFMessage. Имя схемы/квалификатор и env alias НЕ указаны -> unresolved db-schema / env. Для чтения (probes) readonly; для seed нет tag-колонки testRunId -> write не подтверждён."
+    normalized:
+      id: pk-taksa-db
+      alias: pk-taksa-db
+      title: "БД ПК (Такса) — журнал и запросы ПАКТ.Льготы"
+      description: "Хранит PACTPREFLog (журнал обработки) и PACTPREFMessage (текст JSON-запроса). Схема-квалификатор не указан."
+    naturalKey:
+      alias: pk-taksa-db
+  - candidateId: pactpreflog-table
+    candidateType: db-table
+    status: needs-review
+    confidence: high
+    promotionBlocked: curated-collection-missing
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 43
+      section: "4.3.1"
+      heading: "ПК. Добавить таблицу для хранения журнала"
+      quote: "Создать таблицу PACTPREFLog. Id BIGINT PRIMARY KEY; CreatedOn/ModifiedOn TIMESTAMP; CreatedBy/ModifiedBy VARCHAR(250); HeaderLog BIGINT (ссылка на головную запись); DecisionLabel Номер решения; DecisionBegDate/DecisionEndDate/DecisionApproveDate TIMESTAMP; DecisionIsDeal INT (0,1); DecisionType; DecisionPart INT; Type (DECISION/PACKAGE/BRANCH/INDEX); Status (ERROR/INFO/EDIT/AUTO/CANCEL); IsLTR INT (0-ИТР,1-ЛТР); Index; IndexType INT (0-3); IsSimple INT (0-сложный,1-простой); Service/IndividualTariff/Tariff/Package BIGINT; ServiceIndex; Description VARCHAR(2000); IndexBegDate TIMESTAMP."
+      extractionNotes: "Реальное имя таблицы PACTPREFLog (mixed-case) хранится в title/columns; extracted.table не заполнен (curated qualifiedName lowercase-only). Нет колонки testRunId -> seed невозможен без доработки. Нет curated-дома для db-table -> promotionBlocked."
+    normalized:
+      id: pactpreflog-table
+      title: "PACTPREFLog — Журнал ТР ПАКТ.Льготы"
+      description: "Журнал обработки ЛТР/ИТР: одна головная строка (Type=DECISION, HeaderLog) + дочерние строки по пакетам/отделениям/индексам со Status обработки."
+    extracted:
+      datasourceAlias: pk-taksa-db
+      columns: [Id, CreatedOn, CreatedBy, CreatedByName, ModifiedOn, ModifiedBy, ModifiedByName, HeaderLog, DecisionLabel, DecisionApproveDate, DecisionBegDate, DecisionEndDate, DecisionIsDeal, DecisionType, DecisionPart, Type, Status, Package, IsLTR, Index, IndexType, IsSimple, Service, ServiceIndex, IndividualTariff, Tariff, Description, Data, IndexBegDate]
+    naturalKey:
+      alias: pactpreflog-table
+    raw:
+      text: "PACTPREFLog PK=Id BIGINT. Type in (DECISION,PACKAGE,BRANCH,INDEX). Status in (ERROR,INFO,EDIT,AUTO,CANCEL). IsLTR 1=ЛТР/0=ИТР. HeaderLog ссылается на головную запись сообщения."
+  - candidateId: pactprefmessage-table
+    candidateType: db-table
+    status: needs-review
+    confidence: high
+    promotionBlocked: curated-collection-missing
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 45
+      section: "4.3.2"
+      heading: "ПК. Добавить таблицу для хранения запроса ПАКТ.Льготы"
+      quote: "Создать таблицу PACTPREFMessage. PACTPREFLog BIGINT PRIMARY KEY (ссылка на PACTPREFLog.Id по головной записи); Message VARCHAR(MAX) - текст JSON-запроса по ТР от ПАКТ.Льготы."
+      extractionNotes: "Хранит исходный JSON-текст запроса для повторной обработки. PK ссылается на головную запись журнала. Имя таблицы в title (mixed-case)."
+    normalized:
+      id: pactprefmessage-table
+      title: "PACTPREFMessage — текст запроса по ТР от ПАКТ.Льготы"
+      description: "Хранит JSON-текст ЛТР/ИТР по головной записи журнала; используется операцией повторной обработки."
+    extracted:
+      datasourceAlias: pk-taksa-db
+      columns: [PACTPREFLog, Message]
+    naturalKey:
+      alias: pactprefmessage-table
+  - candidateId: journal-head-by-decision-probe
+    candidateType: db-probe
+    status: needs-review
+    confidence: medium
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 14
+      section: "3.2.3"
+      heading: "Требования к «Журналу ТР ПАКТ.Льготы»"
+      quote: "Строка с фиксацией начала обработки сообщения (Type=DECISION); ID сообщения — уникальный ID головной записи сообщения, который также прописывается во все дочерние строки."
+      extractionNotes: "Probe чтения per-ТР DECISION-строки по номеру решения (DecisionLabel). NB: у самой строки «начала обработки» HeaderLog=null (L787), уникальность в её Id, который прописывается дочерним строкам как HeaderLog. Точный SQL и схема-квалификатор компонуются на scenario-design (не выдумываем схему здесь)."
+    normalized:
+      id: journal-head-by-decision-probe
+      title: "Journal head row by DecisionLabel"
+      description: "SELECT Status/Type/HeaderLog FROM PACTPREFLog WHERE DecisionLabel = :decisionLabel AND Type = 'DECISION' — проверка появления/статуса головной строки обработки."
+    extracted:
+      datasourceAlias: pk-taksa-db
+    naturalKey:
+      alias: journal-head-by-decision-probe
+  - candidateId: journal-index-status-probe
+    candidateType: db-probe
+    status: needs-review
+    confidence: medium
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 44
+      section: "4.3.1"
+      heading: "PACTPREFLog.Status / Type"
+      quote: "Type=INDEX строки обработки индексов; Status: AUTO завершено с объектами тарификации, EDIT требует ручной обработки, ERROR ошибка, CANCEL отмена."
+      extractionNotes: "Probe чтения статуса обработки индексных строк по HeaderLog+Index. Базовый DB-assertion: ЛТР -> AUTO, ИТР/UNIVERSAL -> EDIT. ВНИМАНИЕ (упрощение, уточнять на scenario-design): исключения — лимитный индекс в ЛТР всегда ручной (L346), ЛТР с несовпадением версий обрабатывается как ИТР (L348), EDIT->AUTO только после ручного завершения (L2074)."
+    normalized:
+      id: journal-index-status-probe
+      title: "Journal INDEX row status by header + index"
+      description: "SELECT Status FROM PACTPREFLog WHERE HeaderLog = :headerLog AND Type = 'INDEX' AND Index = :indexCode — проверка автоматической (AUTO) vs ручной (EDIT) обработки."
+    extracted:
+      datasourceAlias: pk-taksa-db
+    naturalKey:
+      alias: journal-index-status-probe

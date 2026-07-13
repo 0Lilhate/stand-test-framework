@@ -1,0 +1,104 @@
+documentId: fs-pk-pakt-lgoty-2025-04-17
+candidates:
+  - candidateId: pk-product-catalog
+    candidateType: service
+    status: new
+    confidence: high
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 8
+      section: "2.3"
+      heading: "Функциональное назначение"
+      quote: "Реализации в ПК внутреннего REST-сервиса Таксы для передачи запроса по ЛТР/ИТР из МУП в ПК; реализации операции обработки ЛТР/ИТР, Журнала ТР ПАКТ.Льготы и уведомления МУП через внутреннюю Kafka."
+      extractionNotes: "ПК (Продуктовый каталог, Такса) - система под тестом: хостит внутренний REST-сервис, операцию обработки, журнал БД и Kafka-продюсера. Base URL/env alias не указаны -> unresolved-env."
+    normalized:
+      id: pk-product-catalog
+      alias: pk-product-catalog
+      title: "ПК — Продуктовый каталог (Такса)"
+      description: "Модуль Таксы: внутренний REST-сервис обработки ЛТР/ИТР, операция обработки, журнал PACTPREFLog, Kafka-уведомление МУП."
+    naturalKey:
+      alias: pk-product-catalog
+    raw:
+      text: "В ПК реализуется REST-сервис обработки ЛТР/ИТР, операция обработки, Журнал ТР ПАКТ.Льготы, уведомление МУП через внутреннюю Kafka."
+  - candidateId: mup-subscription-module
+    candidateType: service
+    status: new
+    confidence: high
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 40
+      section: "4.2.1.2"
+      heading: "Реализовать внутренний REST-сервис обработки запроса по ЛТР/ИТР"
+      quote: "Потребителем сервиса является МУП, который получает запрос по ЛТР/ИТР из ПАКТ.Льготы и передает его без изменений в ПК."
+      extractionNotes: "МУП (Модуль управления подписками) - вызывает внутренний REST-сервис ПК и является потребителем Kafka-уведомления о привязке ИТ."
+    normalized:
+      id: mup-subscription-module
+      alias: mup-subscription-module
+      title: "МУП — Модуль управления подписками (Такса)"
+      description: "Вызывает внутренний REST-сервис ПК; потребитель Kafka-уведомления о привязке ИТ к льготируемым индексам."
+    naturalKey:
+      alias: mup-subscription-module
+  - candidateId: tk-tariff-calculator
+    candidateType: service
+    status: new
+    confidence: medium
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 14
+      section: "3.2.2"
+      heading: "Требования к реализации в ТК и ПК поддержки обработки «Условий оказания услуги» для ИТ"
+      quote: "В ТК должна быть реализована обработка «Условий оказания услуги» по ИТ при расчете комиссии. Правила обработки должны полностью соответствовать таковым по ТУ в ТП/ПУ."
+      extractionNotes: "ТК (Тарифный калькулятор, сокращения §1) — смежный модуль: считает комиссию и реализует обработку «Условий оказания услуги» для ИТ (реализация — §4.2.2 «Требования к модулю ТК», п. «Включить обработку Условия оказания услуги для ИТ при расчете комиссии»). Отдельно, как зависимость US по P2P ЮЛ (§3.1): при неполном Тарифе расчёт переходит на «следующий по приоритету ИТ/Подписку/ПУ/ТП» — это не требование к ТК данной ФС. ТК не хостит тестируемый REST; quote вербатим из §3.2.2."
+    normalized:
+      id: tk-tariff-calculator
+      alias: tk-tariff-calculator
+      title: "ТК — Тарифный калькулятор (Такса)"
+      description: "Расчёт комиссии; обработка Условий оказания услуги для ИТ и усечённых Тарифов (fallback на след. приоритет)."
+    naturalKey:
+      alias: tk-tariff-calculator
+  - candidateId: pakt-lgoty
+    candidateType: service
+    status: new
+    confidence: high
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 10
+      section: "2.4"
+      heading: "Характеристика объекта автоматизации"
+      quote: "ТР должно загружаться в МУП Таксы на тестовый стенд через REST-сервис из ПАКТ.Льготы. ТР может формироваться и выгружаться из ПАКТ.Льготы на любой стадии процесса утверждения ТР."
+      extractionNotes: "ПАКТ.Льготы — внешняя мастер-система, источник ЛТР/ИТР. Характеристика «мастер-система» — §2.2 L236 («из мастер-системы ПАКТ.Льготы»); определение — сокращения §1 L174 («Единая система управления льготными и индивидуальными тарифами Банка»). Вне периметра ПК-тестов, но участник интеграции. Quote вербатим из §2.4 (L284)."
+    normalized:
+      id: pakt-lgoty
+      alias: pakt-lgoty
+      title: "ПАКТ.Льготы"
+      description: "Мастер-система льготных/индивидуальных тарифов Банка; источник ЛТР/ИТР, передаёт их в МУП."
+    naturalKey:
+      alias: pakt-lgoty
+  - candidateId: dwh
+    candidateType: service
+    status: needs-review
+    confidence: low
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 16
+      section: "3.2.8"
+      heading: "Требования к view для чтения настроек тарификации в ПК модулями DWH"
+      quote: "Требования формируются на Этапе 2."
+      extractionNotes: "DWH читает настройки тарификации через view/select. Контракт (view, поля) НЕ определён - Этап 2. Низкая уверенность."
+    normalized:
+      id: dwh
+      alias: dwh
+      title: "DWH"
+      description: "Читает настройки тарификации в ПК через view/select (контракт формируется на Этапе 2)."
+    naturalKey:
+      alias: dwh

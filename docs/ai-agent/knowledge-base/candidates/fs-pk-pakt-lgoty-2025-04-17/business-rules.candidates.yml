@@ -1,0 +1,266 @@
+documentId: fs-pk-pakt-lgoty-2025-04-17
+businessRules:
+  - id: ltr-processed-automatically
+    title: "ЛТР обрабатывается автоматически"
+    condition: "Пункт ТР является ЛТР и версии индексов совпадают с ТП/ПУ"
+    action: "Создать и АВТОМАТИЧЕСКИ утвердить объекты тарификации (ИТ/ТУ/Тариф); строки журнала Status=AUTO"
+    exceptions: ["Лимитные индексы — всегда вручную", "Несовпадение версий индексов — обрабатывается как ИТР"]
+    priority: high
+    appliesTo:
+      systems: [pk]
+      operations: ["обработка ЛТР/ИТР"]
+      entities: ["ЛТР", "ИТ", "Тариф"]
+    testImplications:
+      positiveCases: ["ЛТР с совпадающими версиями -> объекты созданы и утверждены авто; Status=AUTO"]
+      negativeCases: ["Лимитный индекс в ЛТР -> ИТ в статусе Создан, не утверждён авто"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 10
+      section: "2.6.8.1"
+      heading: "Общие правила для ЛТР"
+      quote: "Создание объектов тарификации в ПК по ЛТР должно происходить полностью в автоматическом режиме, а все объекты тарификации должны утверждаться автоматически, кроме исключений."
+    confidence: high
+  - id: itr-processed-manually
+    title: "ИТР обрабатывается вручную"
+    condition: "Пункт ТР является ИТР (в т.ч. код Individual_No_Standart или UNIVERSAL)"
+    action: "Не обрабатывать индекс автоматически; объекты тарификации создаются и утверждаются пользователем вручную; строки Status=EDIT"
+    exceptions: []
+    priority: high
+    appliesTo:
+      systems: [pk]
+      operations: ["обработка ЛТР/ИТР"]
+      entities: ["ИТР"]
+    testImplications:
+      positiveCases: ["ИТР -> строки INDEX Status=EDIT, авто-объекты не создаются"]
+      negativeCases: ["ИТР не должен создавать утверждённые ИТ автоматически"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 15
+      section: "3.2.4.2 / 2.6.9.1"
+      heading: "Обработка ЛТР/ИТР; Общие правила для ИТР"
+      quote: "Индексы ИТР не подлежат автоматической обработке, так как по ним все объекты тарификации должны создаваться в ПК вручную."
+    confidence: high
+  - id: limit-index-manual-it
+    title: "Лимитный индекс создаёт ИТ только вручную"
+    condition: "Обрабатывается Лимитный индекс из ЛТР (индекс-лист без параметров цены)"
+    action: "Всегда создать новый ИТ в статусе Создан; никогда не утверждать автоматически; ручная до-настройка лимитов и счётчиков и ручное утверждение"
+    exceptions: []
+    priority: high
+    appliesTo:
+      systems: [pk]
+      operations: ["обработка ЛТР"]
+      entities: ["Лимитный индекс", "ИТ"]
+    testImplications:
+      positiveCases: ["Лимитный индекс -> ИТ в статусе «Создан», не утверждён автоматически (L569). NB: журнальный Status в лимитной ветке алгоритма (L2076) явно не задан — не проверять как EDIT."]
+      negativeCases: ["ИТ по лимитному индексу не должен быть утверждён автоматически"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 11
+      section: "2.6.8.9 / 3.2.4.4"
+      heading: "Общие правила для ЛТР"
+      quote: "При обработке Лимитных индексов из ЛТР для них всегда должны создаваться новые ИТ; ИТ для Лимитных индексов никогда не должны утверждаться автоматически и всегда требуют ручной до-настройки."
+    confidence: high
+  - id: archive-start-date-shift
+    title: "Архивная Дата начала действия сдвигается на текущую дату"
+    condition: "ЛТР/ИТР передано с архивной Датой начала действия (в прошлом)"
+    action: "Создать объекты тарификации с Датой начала действия = текущая дата + минимальная сдвижка на цикл утверждения"
+    exceptions: []
+    priority: medium
+    appliesTo:
+      systems: [pk]
+      operations: ["обработка ЛТР/ИТР"]
+      entities: ["ИТ", "Дата начала действия"]
+    testImplications:
+      positiveCases: ["Архивная dateBegin -> Дата начала ИТ = текущая + сдвижка, не в прошлом"]
+      negativeCases: ["Объект не должен создаваться с архивной (прошлой) датой начала"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 10
+      section: "2.6.4"
+      heading: "Допущения и ограничения"
+      quote: "В Таксу могут быть переданы ЛТР/ИТР с архивной Датой начала действия; объекты тарификации должны создаваться с Датой начала действия равной текущей дате + некая минимальная сдвижка."
+    confidence: high
+  - id: universal-treated-as-itr
+    title: "UNIVERSAL обрабатывается как ИТР"
+    condition: "В tariffPacks/codeTariffsPack передан код UNIVERSAL"
+    action: "Интерпретировать Пункт ТР как ИТР — тарификация настраивается вручную; распространение (ТП/ПУ/оба) определяется по categoryTariffsPack"
+    exceptions: []
+    priority: high
+    appliesTo:
+      systems: [pk]
+      operations: ["классификация Пункта ТР"]
+      entities: ["UNIVERSAL"]
+    testImplications:
+      positiveCases: ["codeTariffsPack=UNIVERSAL -> ручной режим (как ИТР), Status=EDIT"]
+      negativeCases: ["UNIVERSAL не должен обрабатываться автоматически как ЛТР"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 11
+      section: "2.6.7.2 / 2.6.9.3"
+      heading: "Допущения и ограничения"
+      quote: "По льготе, которая применяется для всех ТП и/или ПУ, передается код UNIVERSAL; однако такой Пункт ТР также интерпретируется как ИТР, а значит обрабатывается как ИТР."
+    confidence: high
+  - id: individual-no-standart-is-itr
+    title: "Individual_No_Standart означает ИТР"
+    condition: "В tariffPacks/codeTariffsPack передан код Individual_No_Standart"
+    action: "Обрабатывать Пункт ТР как ИТР — объекты тарификации создаются вручную"
+    exceptions: []
+    priority: high
+    appliesTo:
+      systems: [pk]
+      operations: ["классификация Пункта ТР"]
+      entities: ["Individual_No_Standart"]
+    testImplications:
+      positiveCases: ["codeTariffsPack=Individual_No_Standart -> ручной режим, Status=EDIT"]
+      negativeCases: []
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 11
+      section: "2.6.9.2"
+      heading: "Общие правила для ИТР"
+      quote: "Для ИТР в поле tariffPacks/codeTariffsPack должно быть заполнено Individual_No_Standart."
+    confidence: high
+  - id: index-version-mismatch-becomes-itr
+    title: "Несовпадение версий индексов ЛТР и ТП/ПУ переводит обработку в режим ИТР"
+    condition: "Версии или состав индексов в ЛТР не совпадают с версиями индексов в ТП/ПУ, на который ссылается ЛТР"
+    action: "Обрабатывать такие индексы по правилам ИТР — полная ручная настройка в ПК"
+    exceptions: []
+    priority: high
+    appliesTo:
+      systems: [pk]
+      operations: ["обработка ЛТР"]
+      entities: ["Версии индексов"]
+    testImplications:
+      positiveCases: ["Версии совпадают -> авто (ЛТР)"]
+      negativeCases: ["Версии не совпадают -> ручной режим (ИТР), Status=EDIT"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 11
+      section: "2.6.8.10"
+      heading: "Допущения и ограничения"
+      quote: "Версии индексов, полученные в ЛТР, обязаны совпадать с версиями индексов в ТП/ПУ; если версии или состав индексов не совпадают, такие индексы будут обрабатываться по правилам ИТР."
+    confidence: high
+  - id: complex-index-truncated-tariff
+    title: "Сложный индекс: усечённый Тариф на каждый льготируемый индекс"
+    condition: "Льгота устанавливается на отдельные дочерние Индексы тарификации Сложного индекса"
+    action: "Создать отдельный усечённый Тариф (одна строка с условиями применения и параметрами оригинала) под каждый льготируемый Индекс тарификации; допускается несколько ИТ с одной Услугой в одном ЛТР"
+    exceptions: []
+    priority: medium
+    appliesTo:
+      systems: [pk, tk]
+      operations: ["создание объектов тарификации"]
+      entities: ["Сложный индекс", "усечённый Тариф"]
+    testImplications:
+      positiveCases: ["ЛТР на 2.2.2.1.2/2.2.2.1.3 -> два ИТ, два усечённых Тарифа по одной строке"]
+      negativeCases: ["Тариф не должен терять условия применения/параметры оригинала (Валюта)"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 11
+      section: "2.6.8.4 / 3.1"
+      heading: "Общие правила для ЛТР; пользовательские сценарии"
+      quote: "Для Сложных индексов льгота может устанавливаться на часть индексов; в этом случае для ЛТР создается отдельный урезанный Тариф для каждого льготируемого Индекса тарификации."
+    confidence: medium
+  - id: incomplete-tariff-fallback
+    title: "Неполный тариф: расчёт переходит на следующий приоритет"
+    condition: "При расчёте комиссии по усечённому Тарифу ни одна строка не подобрана по параметрам операции"
+    action: "Вместо ошибки 021 расчёт переходит на следующий по приоритету ИТ/Подписку/ПУ/ТП"
+    exceptions: ["Если признак 'Неполный тариф'=НЕТ — расчёт завершается ошибкой 021"]
+    priority: medium
+    appliesTo:
+      systems: [tk]
+      operations: ["расчёт комиссии"]
+      entities: ["Неполный тариф"]
+    testImplications:
+      positiveCases: ["Операция в USD -> ИТ USD; операция в JPY -> fallback на ТП/ПУ (полный Тариф)"]
+      negativeCases: ["При 'Неполный тариф'=НЕТ и отсутствии строки -> ошибка 021"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 12
+      section: "3.1 / 2.6.8.5"
+      heading: "Требования к пользовательским сценариям"
+      quote: "Если при фильтрации строк Тарифа не будет подобрана ни одна строка, расчёт должен переходить на следующий по приоритету ИТ/Подписку/ПУ/ТП."
+    confidence: medium
+  - id: reprocess-skips-processed-rows
+    title: "Повторная обработка пропускает уже обработанные строки"
+    condition: "Запущена операция повторной обработки по строке журнала"
+    action: "Найти текст запроса и обработать повторно; строки журнала, обработанные ранее, пропускать"
+    exceptions: []
+    priority: high
+    appliesTo:
+      systems: [pk]
+      operations: ["повторная обработка"]
+      entities: ["строка журнала"]
+    testImplications:
+      positiveCases: ["Повторная обработка -> ранее обработанные строки не меняются повторно"]
+      negativeCases: ["Не должно происходить дублирующей обработки уже обработанных строк"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 15
+      section: "3.2.5"
+      heading: "Требования к операции повторной обработки"
+      quote: "Строки журнала, обработанные ранее, должны пропускаться при повторной обработке."
+    confidence: high
+  - id: parallel-tr-isolation
+    title: "Параллельная обработка разных ТР изолирована"
+    condition: "Одновременно обрабатываются несколько разных ТР"
+    action: "Обрабатывать каждый ТР независимо; ошибки строк одного ТР не влияют на другие ТР"
+    exceptions: []
+    priority: high
+    appliesTo:
+      systems: [pk]
+      operations: ["обработка ЛТР/ИТР"]
+      entities: ["ТР"]
+    testImplications:
+      positiveCases: ["Два разных ТР параллельно -> обработка независима, взаимно не блокирует"]
+      negativeCases: ["Ошибка (Status=ERROR) в одном ТР не останавливает и не влияет на другой ТР"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 10
+      section: "2.6.3"
+      heading: "Допущения и ограничения"
+      quote: "Несколько одновременно загруженных и обрабатываемых ТР не должны препятствовать обработке друг друга; возникновение ошибок в обработке строк одного ТР никогда не должно влиять на обработку других ТР."
+    confidence: high
+  - id: rest-returns-status-only-internal
+    title: "REST-сервис возвращает только HTTP-статус и внутренний"
+    condition: "Вызов внутреннего REST-сервиса обработки ЛТР/ИТР"
+    action: "Вернуть только HTTP-код (200/400/404/500) без тела результата; сервис не выставляется наружу Таксы"
+    exceptions: []
+    priority: high
+    appliesTo:
+      systems: [pk, mup]
+      operations: ["REST обработки ЛТР/ИТР"]
+      entities: ["HTTP-статус"]
+    testImplications:
+      positiveCases: ["Валидное сообщение -> 200 без тела"]
+      negativeCases: ["Ошибка парсинга -> 400; отсутствует метод/сервис -> 404; сервер не стартован -> 500"]
+    source:
+      documentId: fs-pk-pakt-lgoty-2025-04-17
+      documentName: "ФС ПК ПАКТ.Льготы 2025.04.17"
+      documentVersion: "1.0.4"
+      page: 40
+      section: "4.2.1.2"
+      heading: "REST-сервис обработки запроса по ЛТР/ИТР"
+      quote: "Сервис не должен возвращать результаты обработки, а должен отвечать только HTTP-кодами; сервис внутренний, не выставлен наружу, чтобы внешние системы не могли вызвать его напрямую, минуя МУП."
+    confidence: high
