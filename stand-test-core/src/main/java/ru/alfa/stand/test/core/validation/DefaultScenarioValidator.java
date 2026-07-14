@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
@@ -23,10 +24,15 @@ import ru.alfa.stand.test.core.scenario.StepParameterKeys;
  *
  * <p>{@link #validate(Scenario, EnvironmentRegistry)} adds the guardrails the runner enforces before any
  * step runs, keyed off {@link ForbiddenOperation}: the scenario environment must be whitelisted
- * ({@link ForbiddenOperation#NON_WHITELISTED_ENVIRONMENT}), every {@code db.*} step's datasource must be
- * whitelisted ({@link ForbiddenOperation#NON_WHITELISTED_DATASOURCE}) and its inline SQL must not be
- * destructive or unclassifiable ({@link ForbiddenOperation#DESTRUCTIVE_SQL_WITHOUT_ALLOW}). Service/topic
- * whitelist and DB write-allow semantics stay with the adapters as defence in depth.
+ * ({@link ForbiddenOperation#NON_WHITELISTED_ENVIRONMENT}) and every step's logical alias must resolve in
+ * that environment pre-flight — a REST {@code service} ({@link ForbiddenOperation#NON_WHITELISTED_SERVICE}),
+ * a Kafka {@code topic} ({@link ForbiddenOperation#NON_WHITELISTED_TOPIC}), a gRPC {@code target}
+ * ({@link ForbiddenOperation#NON_WHITELISTED_GRPC_TARGET}) and a {@code db.*} {@code datasource}
+ * ({@link ForbiddenOperation#NON_WHITELISTED_DATASOURCE}) — so a typo'd alias in ANY step aborts the run
+ * before an earlier step can mutate the stand, not only when the adapter later resolves it. A {@code db.*}
+ * step's inline SQL must additionally not be destructive or unclassifiable
+ * ({@link ForbiddenOperation#DESTRUCTIVE_SQL_WITHOUT_ALLOW}). Adapters re-resolve each alias as defence in
+ * depth (plan §8.6); DB write-allow semantics stay with the adapters.
  *
  * <p>The registry overload also re-enforces at runtime the value-level guardrails the AI JSON Schema
  * ({@code stand-test-ai-schema}) expresses statically, so a declarative document that reaches the runner
@@ -54,9 +60,6 @@ public final class DefaultScenarioValidator implements ScenarioValidator {
 
     private static final Pattern SECRET_HEADER_VALUE =
             Pattern.compile("^\\s*(?:bearer|basic)\\s+\\S+", Pattern.CASE_INSENSITIVE);
-
-    private static final Pattern SQL_SLEEP_FUNCTION =
-            Pattern.compile("\\b(?:pg_sleep|sleep|waitfor|benchmark|dbms_lock)\\b", Pattern.CASE_INSENSITIVE);
 
     private static final List<String> TIMEOUT_KEYS = List.of(
             StepParameterKeys.TIMEOUT_MILLIS,
@@ -125,9 +128,45 @@ public final class DefaultScenarioValidator implements ScenarioValidator {
         }
         EnvironmentDefinition definition = environment.get();
         for (ScenarioStep step : scenario.steps()) {
-            if (step instanceof GenericStep generic && generic.type().startsWith(StepParameterKeys.DB_PREFIX)) {
-                checkDbStep(generic, definition, issues);
+            if (step instanceof GenericStep generic) {
+                checkAliasWhitelist(generic, definition, issues);
             }
+        }
+    }
+
+    /**
+     * Pre-flight alias whitelist: every step's logical alias (REST {@code service}, Kafka {@code topic},
+     * gRPC {@code target}, {@code db.*} {@code datasource}) must resolve in the environment, so a typo'd or
+     * non-whitelisted alias in ANY step aborts the run before an earlier step can mutate the stand — not only
+     * when the adapter later resolves it. Only a plain string alias is checked (a step that omits the alias
+     * is a per-adapter schema concern); adapters re-resolve as defence in depth (plan §8.6).
+     */
+    private static void checkAliasWhitelist(GenericStep step, EnvironmentDefinition environment, List<ValidationIssue> issues) {
+        String type = step.type();
+        if (type.startsWith(StepParameterKeys.DB_PREFIX)) {
+            checkDbStep(step, environment, issues);
+        } else if (type.startsWith(StepParameterKeys.REST_PREFIX)) {
+            checkAlias(step, StepParameterKeys.SERVICE, environment, ForbiddenOperation.NON_WHITELISTED_SERVICE, "Service", EnvironmentDefinition::service, issues);
+        } else if (type.startsWith(StepParameterKeys.KAFKA_PREFIX)) {
+            checkAlias(step, StepParameterKeys.TOPIC, environment, ForbiddenOperation.NON_WHITELISTED_TOPIC, "Topic", EnvironmentDefinition::topic, issues);
+        } else if (type.startsWith(StepParameterKeys.GRPC_PREFIX)) {
+            checkAlias(step, StepParameterKeys.TARGET, environment, ForbiddenOperation.NON_WHITELISTED_GRPC_TARGET, "gRPC target", EnvironmentDefinition::grpcTarget, issues);
+        }
+    }
+
+    private static void checkAlias(
+            GenericStep step,
+            String parameterKey,
+            EnvironmentDefinition environment,
+            ForbiddenOperation operation,
+            String label,
+            BiFunction<EnvironmentDefinition, String, Optional<?>> resolver,
+            List<ValidationIssue> issues) {
+        if (step.parameters().get(parameterKey) instanceof String alias && !alias.isBlank()
+                && resolver.apply(environment, alias).isEmpty()) {
+            issues.add(ValidationIssue.error(
+                    operation.code(),
+                    label + " '" + alias + "' is not whitelisted in environment '" + environment.name() + "'"));
         }
     }
 
@@ -174,9 +213,12 @@ public final class DefaultScenarioValidator implements ScenarioValidator {
     /**
      * Static SQL guardrail over the INLINE {@code sql} parameter only. A {@code sqlResource} parameter
      * is a classpath path whose content is not visible at validation time — that content is loaded and
-     * re-classified fail-closed by the DB adapter at runtime ({@code DbWriteGuard.classifyAndEnforce}
-     * over the exact assembled SQL, before any IO), so the resource path meets the same net one layer
-     * later. The same applies to any non-{@code GenericStep} custom step the static layer cannot inspect.
+     * re-classified fail-closed by the DB adapter at runtime over the exact assembled SQL, before any IO:
+     * {@code DbWriteGuard} runs the SAME destructive/unclassifiable classification AND the same
+     * {@link SqlStatementClassifier#containsSideEffectingTimeFunction sleep/side-effect scan} this method
+     * applies here, so the resource path genuinely meets the same net one layer later (they share
+     * {@link SqlStatementClassifier}, so they cannot drift). The same applies to any non-{@code GenericStep}
+     * custom step the static layer cannot inspect.
      */
     private static void checkSql(GenericStep step, String sql, List<ValidationIssue> issues) {
         SqlStatementKind kind = SqlStatementClassifier.classify(sql).kind();
@@ -185,7 +227,7 @@ public final class DefaultScenarioValidator implements ScenarioValidator {
                     ForbiddenOperation.DESTRUCTIVE_SQL_WITHOUT_ALLOW.code(),
                     "Destructive or unclassifiable SQL in step '" + step.id() + "'"));
         }
-        if (SQL_SLEEP_FUNCTION.matcher(sql).find()) {
+        if (SqlStatementClassifier.containsSideEffectingTimeFunction(sql)) {
             issues.add(ValidationIssue.error(
                     ForbiddenOperation.THREAD_SLEEP.code(),
                     "SQL sleep/side-effect time function in step '" + step.id()

@@ -1,0 +1,83 @@
+documentId: payments-onboarding-spec-v3
+candidates:
+  - candidateId: create-payment
+    candidateType: endpoint
+    status: new
+    confidence: high
+    source:
+      documentId: payments-onboarding-spec-v3
+      documentName: "Payments Onboarding Functional Specification"
+      documentVersion: "3.1"
+      documentDate: "2026-05-20"
+      page: 14
+      section: "4.2 Create payment"
+      heading: "Request/Response"
+      quote: "POST /api/payments creates a payment and returns 201 with paymentId and status."
+      extractionNotes: "Method, path and success status stated verbatim in the endpoint table."
+    normalized:
+      id: create-payment
+      alias: create-payment
+      title: "Create payment (POST /api/payments)"
+      description: "Creates a payment request; returns 201 with paymentId and status."
+    extracted:
+      method: POST
+      path: /api/payments
+      successStatus: 201
+      requiresAuth: true
+      requiredFields: [amount, currency, debtorId]
+      serviceAlias: payments-api
+    naturalKey:
+      method: POST
+      path: /api/payments
+      serviceAlias: payments-api
+    raw:
+      text: "4.2 Create payment - POST /api/payments -> 201 Created {paymentId, status}"
+    review:
+      reviewer: null
+      decision: pending
+      comment: null
+  - candidateId: payment-created-topic
+    candidateType: kafka-topic
+    status: new
+    confidence: high
+    source:
+      documentId: payments-onboarding-spec-v3
+      documentName: "Payments Onboarding Functional Specification"
+      page: 18
+      section: "5.3 Events"
+      heading: "Events"
+      quote: "After acceptance the service publishes PaymentCreated with header X-Correlation-Id."
+      extractionNotes: "Direction produced from publishes; correlation header named; timeout not stated -> unresolved."
+    normalized:
+      id: payment-created
+      alias: payment-created
+      title: "PaymentCreated event"
+    extracted:
+      topicAlias: payment-created
+      direction: produced
+      correlationHeader: X-Correlation-Id
+    naturalKey:
+      alias: payment-created
+  - candidateId: payment-write-table
+    candidateType: db-table
+    status: needs-review
+    confidence: high
+    promotionBlocked: curated-collection-missing
+    source:
+      documentId: payments-db-ddl-v3
+      documentName: "Payments DB DDL"
+      page: null
+      section: "client.payment"
+      heading: "CREATE TABLE client.payment"
+      quote: "create table client.payment (payment_id uuid primary key, status varchar, test_run_id varchar not null)"
+      extractionNotes: "test_run_id present -> db.seed-taggable; no curated seed-table collection exists yet."
+    normalized:
+      id: client-payment-table
+      title: "client.payment write/seed target"
+    extracted:
+      datasourceAlias: client-db
+      table: client.payment
+      tagColumn: test_run_id
+      columns: [payment_id, status, test_run_id]
+    naturalKey:
+      table: client.payment

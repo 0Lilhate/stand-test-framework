@@ -1,0 +1,9 @@
+candidates:
+  - candidateId: create-payment
+    candidateType: endpoint
+    status: new
+    confidence: high
+    source:
+      documentId: payments-onboarding-spec-v3
+      documentName: "Payments Onboarding Functional Specification"
+      quote: "The endpoint is hosted at https://prod.internal.example/api/payments per the spec."

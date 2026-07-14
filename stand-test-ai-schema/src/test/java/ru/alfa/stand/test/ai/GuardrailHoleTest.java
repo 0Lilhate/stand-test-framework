@@ -92,19 +92,22 @@ class GuardrailHoleTest {
         assertThat(validate(restPostBody("fixtures/request.json"))).isEmpty();
     }
 
-    private static String kafkaExpectAssertion(String assertionJson) {
-        return "{\"id\":\"a\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"kafka.expect\","
-                + "\"topic\":\"t\",\"timeout\":\"5s\",\"assert\":[" + assertionJson + "]}]}";
+    private static String restAssertion(String assertionJson) {
+        // The full assertion grammar (all five matchers, exactly-one, equals:null rejected) lives on the
+        // REST surface; kafka.expect/grpc.unary use the restricted equals-only list (pinned separately in
+        // ScenarioSchemaValidationTest#kafkaGrpcAssertionsAreEqualsOnly).
+        return "{\"id\":\"a\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"rest.post\","
+                + "\"service\":\"svc\",\"path\":\"/a\",\"expect\":{\"status\":200},\"assert\":[" + assertionJson + "]}]}";
     }
 
     @Test
-    @DisplayName("G6: an assertion carries exactly one matcher and equals:null is rejected")
+    @DisplayName("G6: a REST assertion carries exactly one matcher and equals:null is rejected")
     void g6_assertionExactlyOneMatcher() {
-        assertThat(validate(kafkaExpectAssertion("{\"path\":\"$.x\"}"))).isNotEmpty();
-        assertThat(validate(kafkaExpectAssertion("{\"path\":\"$.x\",\"equals\":1,\"exists\":true}"))).isNotEmpty();
-        assertThat(validate(kafkaExpectAssertion("{\"path\":\"$.x\",\"equals\":null}"))).isNotEmpty();
-        assertThat(validate(kafkaExpectAssertion("{\"path\":\"$.x\",\"equals\":\"OK\"}"))).isEmpty();
-        assertThat(validate(kafkaExpectAssertion("{\"path\":\"$.x\",\"exists\":true}"))).isEmpty();
-        assertThat(validate(kafkaExpectAssertion("{\"path\":\"$.x\",\"matches\":\"^A\"}"))).isEmpty();
+        assertThat(validate(restAssertion("{\"path\":\"$.x\"}"))).isNotEmpty();
+        assertThat(validate(restAssertion("{\"path\":\"$.x\",\"equals\":1,\"exists\":true}"))).isNotEmpty();
+        assertThat(validate(restAssertion("{\"path\":\"$.x\",\"equals\":null}"))).isNotEmpty();
+        assertThat(validate(restAssertion("{\"path\":\"$.x\",\"equals\":\"OK\"}"))).isEmpty();
+        assertThat(validate(restAssertion("{\"path\":\"$.x\",\"exists\":true}"))).isEmpty();
+        assertThat(validate(restAssertion("{\"path\":\"$.x\",\"matches\":\"^A\"}"))).isEmpty();
     }
 }

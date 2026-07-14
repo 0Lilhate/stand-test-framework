@@ -54,8 +54,35 @@ public final class SqlStatementClassifier {
     // An INSERT upsert tail mutates pre-existing rows just like an UPDATE, but hides behind the INSERT
     // leading keyword and so escapes the testRunId-predicate requirement; rejected fail-closed in the MVP.
     private static final Pattern UPSERT_CLAUSE = Pattern.compile("(?i)\\bON\\s+CONFLICT\\b|\\bON\\s+DUPLICATE\\s+KEY\\b");
+    // Blocking/side-effecting time functions (a delay/DoS primitive). They have no place in a bounded
+    // stand test and can hide behind a READ classification (e.g. SELECT pg_sleep(3600)), so both the static
+    // validator and the runtime DB write-guard reject them via {@link #containsSideEffectingTimeFunction}.
+    private static final Pattern SIDE_EFFECT_TIME_FUNCTION =
+            Pattern.compile("\\b(?:pg_sleep|sleep|waitfor|benchmark|dbms_lock)\\b", Pattern.CASE_INSENSITIVE);
 
     private SqlStatementClassifier() {
+    }
+
+    /**
+     * Returns {@code true} if the statement calls a blocking/side-effecting time function
+     * ({@code pg_sleep}/{@code sleep}/{@code waitfor}/{@code benchmark}/{@code dbms_lock}) — a delay/DoS
+     * primitive that has no place in a bounded stand test and would otherwise hide behind a {@code READ}
+     * classification (e.g. {@code SELECT pg_sleep(3600)} runs a real sleep on the stand while classifying as
+     * a harmless read). Detected over the same stripped skeleton {@link #classify} uses, so a match inside a
+     * comment or a string literal does not trigger (fewer false positives than a raw-text scan).
+     *
+     * <p>The static {@code ScenarioValidator} (over inline {@code sql}) and the DB write-guard (over the
+     * exact assembled SQL, so {@code sqlResource} content is covered too) both call this, so the inline and
+     * resource-loaded paths meet the same net and cannot drift (plan §8.6/§8.8).
+     *
+     * @param sql the raw SQL text
+     * @return true if a sleep/side-effecting time function is present outside comments/literals
+     */
+    public static boolean containsSideEffectingTimeFunction(String sql) {
+        if (sql == null || sql.isBlank()) {
+            return false;
+        }
+        return SIDE_EFFECT_TIME_FUNCTION.matcher(strip(sql)).find();
     }
 
     /**

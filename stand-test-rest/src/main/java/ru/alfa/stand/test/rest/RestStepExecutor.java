@@ -221,11 +221,18 @@ public final class RestStepExecutor implements StepExecutor {
     }
 
     private static void injectCorrelationId(Map<String, Object> parameters, ServiceEndpointDefinition endpoint, Map<String, String> headers, StepExecutionContext context) {
-        if (!RestStepParameters.injectCorrelationId(parameters)) {
+        CorrelationConfig correlation = endpoint.correlation();
+        boolean hasHeaderCarrier = correlation != null && correlation.source() == CorrelationSource.HEADER;
+        // Default-on: inject when the service declares a HEADER carrier, unless the step opted in/out
+        // explicitly. The SDK owns correlationId (plan §8), so end-to-end traceability is the safe default
+        // rather than a builder call an AI author can silently forget.
+        boolean shouldInject = RestStepParameters.injectCorrelationIdFlag(parameters).orElse(hasHeaderCarrier);
+        if (!shouldInject) {
             return;
         }
-        CorrelationConfig correlation = endpoint.correlation();
-        if (correlation == null || correlation.source() != CorrelationSource.HEADER) {
+        if (!hasHeaderCarrier) {
+            // Only reachable when the step forced injection on a service that declares no HEADER carrier —
+            // an unmet request, surfaced rather than silently sending nothing.
             throw new StandTestException("Correlation id injection was requested for service '" + endpoint.name() + "', but it has no HEADER correlation config");
         }
         headers.put(correlation.name(), context.scenarioContext().correlationId().value());

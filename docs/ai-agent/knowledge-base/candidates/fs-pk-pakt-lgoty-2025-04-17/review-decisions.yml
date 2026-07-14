@@ -45,4 +45,21 @@ businessRules:
       reason: "medium — cross-ref базовой доработки US P2P ЮЛ (Неполный тариф)"
 
 # business-flows / test-scenarios: not part of this decision (still needs-review as digest).
-# Contract families (services/endpoints/kafka/db): NOT approved — blocked by open unresolved items.
+
+services:
+  # Superseding decision (2026-07-14, per maintainer instruction): the three HIGH-confidence, fully
+  # resolved SERVICE IDENTITIES are promoted to the curated services collection as identities only. The
+  # environments:[ift] binding is a recorded promotion-time assumption (the ФС gives no env/base-url).
+  # Endpoints/topics/datasources stay UNRESOLVED and are NOT promoted (no invented contracts).
+  disposition: promoted-identities-only
+  promotedOn: "2026-07-14"
+  promotedTo: services/pakt-lgoty.yml            # ledger: candidates/promotion-log.yml
+  approved:
+    - id: pk-product-catalog        # high
+    - id: mup-subscription-module   # high
+    - id: pakt-lgoty                # high
+  held:
+    - id: tk-tariff-calculator      # medium — needs a human tick
+    - id: dwh                       # low — Этап 2, contract undefined
+# endpoints / kafka / db contract families: still NOT promoted — blocked by open unresolved items
+# (REST method/path, topic name/payload, DB schema-qualifier). See unresolved.candidates.yml.

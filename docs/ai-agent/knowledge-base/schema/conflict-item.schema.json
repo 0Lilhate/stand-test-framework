@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stand-test.alfa.ru/schema/conflict-item.schema.json",
+  "title": "stand-test KB ingestion - conflict item",
+  "description": "A detected value disagreement between an extracted candidate and an existing curated KB entry, or between two candidates of different documents. Conflicts are NEVER auto-resolved: autoResolvable is a constant false and whoDecides is a constant human. Both sides carry their own provenance (candidate side a document quote; existing-kb side a file+id reference). suggestedResolution is a deterministic but NON-BINDING hint. File shape: { conflicts: [ ... ] }.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["conflicts"],
+  "properties": {
+    "documentId": { "$ref": "#/$defs/kebabId" },
+    "generatedAt": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "conflicts": { "type": "array", "items": { "$ref": "#/$defs/conflictItem" } }
+  },
+  "$defs": {
+    "kebabId": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$", "minLength": 2, "maxLength": 64 },
+    "confidence": { "enum": ["high", "medium", "low"] },
+    "noUrl": { "if": { "type": "string" }, "then": { "not": { "pattern": "(://|[jJ][dD][bB][cC]:)" } } },
+    "secretShape": { "if": { "type": "string" }, "then": { "not": { "pattern": "([Bb]earer [A-Za-z0-9._-]{6}|[Bb]asic [A-Za-z0-9+/=]{8}|[Aa]uthorization\\s*[:=]|[Aa][Pp][Ii][-_]?[Kk][Ee][Yy]|[Xx]-[Aa][Pp][Ii]-[Kk][Ee][Yy]|[Pp]assword\\s*[:=]|[Pp]asswd\\s*[:=]|[Ss]ecret\\s*[:=]|AKIA[0-9A-Z]{12}|eyJ[A-Za-z0-9._-]{10})" } } },
+    "safeLong": { "type": "string", "maxLength": 500, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] },
+    "safeScalar": {
+      "type": ["string", "number", "boolean", "null"],
+      "if": { "type": "string" },
+      "then": { "allOf": [ { "maxLength": 300 }, { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documentId", "documentName", "quote"],
+      "properties": {
+        "documentId": { "$ref": "#/$defs/kebabId" },
+        "documentName": { "type": "string", "minLength": 1, "maxLength": 300, "allOf": [ { "$ref": "#/$defs/noUrl" } ] },
+        "documentVersion": { "type": ["string", "null"], "maxLength": 40 },
+        "documentDate": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "page": { "type": ["integer", "null"], "minimum": 1 },
+        "section": { "type": ["string", "null"], "maxLength": 160 },
+        "heading": { "type": ["string", "null"], "maxLength": 200 },
+        "quote": { "type": "string", "minLength": 1, "maxLength": 600, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] },
+        "extractionNotes": { "type": ["string", "null"], "maxLength": 500, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] }
+      }
+    },
+    "curatedProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "kbFile"],
+      "properties": {
+        "source": { "const": "curated-kb" },
+        "kbFile": { "type": "string", "maxLength": 200, "pattern": "^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$", "not": { "pattern": "(://|\\.\\.)" } },
+        "kbEntryId": { "$ref": "#/$defs/kebabId" },
+        "lastPromotedFrom": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "documentId": { "$ref": "#/$defs/kebabId" },
+            "documentVersion": { "type": ["string", "null"], "maxLength": 40 },
+            "documentDate": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+          }
+        }
+      }
+    },
+    "conflictSide": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["side", "value", "provenance"],
+      "properties": {
+        "side": { "enum": ["existing-kb", "candidate"] },
+        "value": { "type": "object", "additionalProperties": { "$ref": "#/$defs/safeScalar" }, "maxProperties": 20 },
+        "provenance": { "oneOf": [ { "$ref": "#/$defs/source" }, { "$ref": "#/$defs/curatedProvenance" } ] }
+      }
+    },
+    "conflictItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conflictId", "type", "category", "autoResolvable", "whoDecides", "status", "field", "sides"],
+      "properties": {
+        "conflictId": { "$ref": "#/$defs/kebabId" },
+        "type": {
+          "enum": [
+            "endpoint-path-mismatch", "endpoint-contract-mismatch", "topic-direction-mismatch",
+            "topic-producer-consumer-mismatch", "db-table-column-mismatch", "business-rule-behavior-mismatch",
+            "document-version-conflict", "duplicate-scenario-candidate", "stale-source-document",
+            "correlation-mismatch", "auth-mismatch", "other"
+          ]
+        },
+        "category": { "enum": ["services", "endpoints", "kafkaTopics", "datasources", "dbTables", "dbProbes", "grpcTargets", "business-rule", "test-scenario"] },
+        "autoResolvable": { "const": false },
+        "whoDecides": { "const": "human" },
+        "status": { "enum": ["unresolved", "resolved"] },
+        "field": { "type": "string", "maxLength": 120, "allOf": [ { "$ref": "#/$defs/noUrl" } ] },
+        "sides": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "$ref": "#/$defs/conflictSide" } },
+        "suggestedResolution": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hint": { "enum": ["prefer-candidate", "prefer-existing-kb", "keep-both", "manual", null] },
+            "rationale": { "$ref": "#/$defs/safeLong" },
+            "confidence": { "$ref": "#/$defs/confidence" }
+          }
+        },
+        "resolution": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "decidedBy": { "type": ["string", "null"], "maxLength": 120 },
+            "decidedAt": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+            "chosenSide": { "enum": ["existing-kb", "candidate", "neither", "manual", null] },
+            "note": { "type": ["string", "null"], "maxLength": 500, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] }
+          }
+        }
+      }
+    }
+  }
+}

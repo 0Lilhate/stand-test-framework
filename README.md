@@ -112,9 +112,13 @@ Add `stand-test-spring-boot-starter` plus the adapters you use, declare the envi
 `stand.test.environments.*` in `application.yml`, and `@Autowired StandClient` — see the
 [starter README](stand-test-spring-boot-starter/README.md) for the full `application.yml` example,
 bean override rules and troubleshooting. `stand.test.enabled: false` switches the whole
-auto-configuration off. Non-secret endpoint fields also accept real Spring placeholders via value
-twins (`base-url: ${CLIENT_SERVICE_URL:}` instead of `base-url-ref: CLIENT_SERVICE_URL`); secrets
-stay `*-ref` — see "Endpoint values via Spring placeholders" in the starter README.
+auto-configuration off. Value fields also accept real Spring placeholders via value twins
+(`base-url: ${CLIENT_SERVICE_URL:}` instead of `base-url-ref: CLIENT_SERVICE_URL`), including secret
+credentials (`password: ${TKS_PASSWORD:pwddev3}`) — but a secret twin materialises the resolved value
+in the Spring Environment and puts the default in the file, so prefer the bare
+`password-ref: TKS_PASSWORD` spelling for secrets. Never put a `${...}` placeholder inside a `*-ref`
+field: Spring collapses it and the ref is then misread as a variable name (the double-resolution trap).
+See "Endpoint values via Spring placeholders" in the starter README.
 
 ## AI-generated scenarios
 
@@ -124,6 +128,18 @@ LLM needs to produce safe declarative scenarios; `stand-test-scenario-yaml` pars
 the same validated model. Guardrails (whitelisted environments only, no raw URLs, no inline secrets,
 no destructive SQL, bounded timeouts) derive from the single `ForbiddenOperation` source of truth and
 are re-enforced at runtime by the validator.
+
+### AI-agent authoring kit
+
+For turning a plain-text business case into a complete, safe Java autotest with an AI agent (Claude
+Code), see the deployable authoring bundle under [`docs/ai-agent/`](docs/ai-agent/README.md): a copyable
+`.claude/` set of skills and slash commands (case analysis → knowledge-base lookup → environment mapping
+→ scenario design → Java/YAML authoring → fixtures → safety review → test review → debugging), the
+**knowledge-base contract** ([`docs/ai-agent/knowledge-base/`](docs/ai-agent/knowledge-base/README.md) —
+strict JSON schemas + worked examples for services/endpoints/topics/datasources/gRPC targets/environments),
+and a spec-ingestion pipeline (unstructured spec → schema-valid KB candidates → review → apply). Start
+with [`docs/ai-agent/README.md`](docs/ai-agent/README.md) (bundle install) and the RU worked walkthrough
+in [`docs/ai-agent/usage-guide.md`](docs/ai-agent/usage-guide.md).
 
 ## Parallel execution
 

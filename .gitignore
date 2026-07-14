@@ -54,3 +54,12 @@ bin/
 .env
 *.env
 .env.*
+
+### stand-test KB ingestion — verbatim source stays LOCAL (never commit) ###
+# The whole _source/ tree (raw binaries, converter output normalized.md, extracted media/*.emf)
+# holds verbatim, un-redacted document content that may carry live hosts/credentials/PII.
+# Only redacted, schema-valid candidate YAML is committed; the source is traced by document.hash.
+docs/ai-agent/knowledge-base/candidates/**/_source/
+knowledge-base/candidates/**/_source/
+# Ad-hoc drop location for raw spec documents fed into ingestion — same rule: verbatim, never commit.
+docs/source/

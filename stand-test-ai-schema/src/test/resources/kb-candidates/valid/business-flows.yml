@@ -1,0 +1,40 @@
+documentId: payments-onboarding-spec-v3
+businessFlows:
+  - id: payment-acceptance-flow
+    title: "Payment acceptance end-to-end"
+    actors: ["Client", "Payments API"]
+    systems: [payments-api, client-db]
+    trigger: "Client submits a payment via the create-payment endpoint."
+    preconditions: ["Client is onboarded", "Debtor account exists"]
+    steps:
+      - order: 1
+        actor: "Client"
+        action: "Submit payment request"
+        target: "payments-api"
+        expectedEffect: "201 Created with paymentId"
+      - order: 2
+        actor: "Payments API"
+        action: "Publish PaymentCreated event"
+        target: "payment-created"
+        expectedEffect: "Event visible with matching correlation id"
+      - order: 3
+        actor: "Payments API"
+        action: "Persist payment row"
+        target: "client.payment"
+        expectedEffect: "Row status ACCEPTED"
+    expectedResult: "Payment persisted as ACCEPTED and event published."
+    failureBehavior: "On validation failure returns 400 and publishes nothing."
+    parallelism: "Concurrent runs isolate by testRunId."
+    source:
+      documentId: payments-onboarding-spec-v3
+      documentName: "Payments Onboarding Functional Specification"
+      page: 9
+      section: "3.1"
+      heading: "Payment acceptance"
+      quote: "The end-to-end acceptance flow spans the API, the event bus and the client database."
+    confidence: medium
+    relatedArtifacts:
+      endpoints: [create-payment]
+      kafkaTopics: [payment-created]
+      dbTables: [client-payment-table]
+      grpcMethods: []

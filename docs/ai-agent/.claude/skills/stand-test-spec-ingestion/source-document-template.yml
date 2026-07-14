@@ -1,0 +1,21 @@
+# source-document.yml — the provenance root for one ingested document.
+# Validated by knowledge-base/schema/source-document.schema.json.
+# Written to knowledge-base/candidates/<document-id>/source-document.yml.
+# documentId is a mechanical kebab of the file name/title (stable across re-runs).
+# version/date are null unless the document states them - never invent them.
+# sourceHash detects a repeated ingest of the same bytes. sourcePath points into the
+# GITIGNORED _source/raw/ tree - the binary itself is not committed.
+document:
+  documentId: <kebab-id>                       # required; == the candidates/<document-id>/ directory name
+  documentName: "<human title of the document>" # required; no URLs
+  documentType: pdf                            # docx | pdf | markdown | txt | html | unknown
+  documentVersion: "<version or null>"         # optional
+  documentDate: "<YYYY-MM-DD or null>"         # optional
+  sourcePath: candidates/<document-id>/_source/raw/<file>   # gitignored; not a URL
+  sourceHash: "sha256:<64 hex chars or null>"
+  domain: <domain-alias-or-null>
+  systems: [<system-alias>, ...]               # logical aliases named in the document
+  relatedDocuments: [<other-document-id>, ...]
+  ingestedAt: "<YYYY-MM-DD>"
+  ingestedBy: stand-test-spec-ingestion
+  status: parsed                               # parsed | candidates_created | reviewed | applied | rejected

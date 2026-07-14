@@ -21,12 +21,18 @@ Details and detection patterns: `.claude/skills/stand-test-safety-review/safety-
 ## Hard constraints (violations BLOCK, never work around)
 
 - Logical aliases only in scenarios/tests — never URLs, hosts, ports, JDBC strings, bootstrap
-  servers. In the Spring-starter REGISTRY the sanctioned exception is the endpoint value twins
-  (`base-url`/`url`/`target`/`bootstrap-servers`/`security-protocol`), and even there only as
-  `${ENV_VAR:...}` placeholders — a hardcoded endpoint in a value field is a review finding
-  (no runtime check catches it: Spring resolves before the SDK sees it).
-- No secrets anywhere: no `Authorization`/token/cookie/api-key headers or Bearer/Basic
-  values; auth comes from the registry (`auth:` with `*-ref` env-var NAMES).
+  servers. In the Spring-starter REGISTRY, value fields may carry Spring-resolved `${ENV_VAR:...}`
+  placeholders: non-secret endpoints (`base-url`/`url`/`target`/`bootstrap-servers`/
+  `security-protocol`) and — as a consumer trade-off — secret credentials (auth `password`/`token`,
+  datasource `password`, Kafka `sasl-jaas-config`). A `${VAR:default}` secret twin works but
+  materialises the resolved secret in the Spring Environment and puts the default in the file, so
+  **prefer the `*-ref` spelling for secrets**. Two hard rules: a bare hardcoded value (no `${}`) in a
+  value field is a review finding; and a `*-ref` field must be a bare env-var NAME — NEVER a `${...}`
+  placeholder (on the starter Spring collapses it before the SDK sees the ref, which is then misread as
+  a variable name — the double-resolution trap; no runtime check catches it).
+- No secrets in scenarios/tests: no `Authorization`/token/cookie/api-key headers or Bearer/Basic
+  values in a scenario/step/fixture/Java literal; auth comes from the registry (`auth:` with a `*-ref`
+  env-var NAME, or a `${ENV_VAR:default}` value twin on the starter).
 - No production environments in any test registry.
 - No destructive SQL: no DDL/TRUNCATE/MERGE/upserts/multi-statement; DB writes only via
   `db.seed`/`db.cleanup` on `write-allowed` datasources into whitelisted schemas, scoped by

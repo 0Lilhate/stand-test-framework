@@ -1,0 +1,22 @@
+# Example KB entry — DB table. Schema: ../schema/db-table.schema.json
+# A structural contract for a test-relevant table: schema-qualified name, its columns, the primary key
+# and the reserved testRunId tag column that db.seed/db.cleanup scope on. No data, no secrets, no
+# connection details (those live on the datasource + environment). References a datasource by id
+# (example-datasources.yml, one direction of reference).
+dbTables:
+  - id: client-orders-table
+    datasourceId: client-db
+    description: Orders table used by seed/cleanup and read-only projection probes (example entry)
+    schema: client
+    table: orders
+    columns:
+      - id
+      - status
+      - amount
+      - test_run_id
+    primaryKey:
+      - id
+    testRunIdColumn: test_run_id
+    tags:
+      - client
+      - orders

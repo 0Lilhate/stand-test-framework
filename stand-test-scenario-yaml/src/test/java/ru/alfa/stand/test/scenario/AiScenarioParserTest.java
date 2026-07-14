@@ -106,9 +106,12 @@ class AiScenarioParserTest {
                       fixture: fixtures/cmd.json
                 """);
         assertThat(scenario.steps()).hasSize(2);
-        assertThat(params(scenario.steps().get(0))).containsEntry("method", "GET").containsEntry("injectCorrelationId", false);
+        // A step that omits `correlation` leaves injectCorrelationId UNSET (not defaulted to false), so the
+        // executor applies the default-on behaviour (inject when the endpoint declares a correlation carrier).
+        assertThat(params(scenario.steps().get(0))).containsEntry("method", "GET").doesNotContainKey("injectCorrelationId");
         Map<String, Object> send = params(scenario.steps().get(1));
-        assertThat(send).containsEntry("topic", "commands").containsEntry("key", "k").containsEntry("bodyResource", "fixtures/cmd.json");
+        assertThat(send).containsEntry("topic", "commands").containsEntry("key", "k").containsEntry("bodyResource", "fixtures/cmd.json")
+                .doesNotContainKey("injectCorrelationId");
     }
 
     @Test
@@ -234,10 +237,10 @@ class AiScenarioParserTest {
     }
 
     @Test
-    @DisplayName("non-equals matchers on kafka/grpc and rowExists are rejected as not-yet-executable")
+    @DisplayName("a non-equals matcher on kafka.expect and rowExists are rejected as not-yet-executable")
     void unsupportedMatchers_rejected() {
         assertThatThrownBy(() -> parser.parse("id: f\nenvironment: ift\nsteps:\n  - type: kafka.expect\n    topic: t\n    timeout: 5s\n    assert:\n      - path: $.x\n        exists: true\n"))
-                .isInstanceOf(StandTestException.class).hasMessageContaining("only executable for REST");
+                .isInstanceOf(StandTestException.class).hasMessageContaining("equals' only");
         assertThatThrownBy(() -> parser.parse("id: f\nenvironment: ift\nsteps:\n  - type: db.expectEventually\n    datasource: d\n    timeout: 5s\n    query: SELECT 1\n    expect:\n      rowExists: true\n"))
                 .isInstanceOf(StandTestException.class).hasMessageContaining("rowExists");
     }
@@ -286,7 +289,7 @@ class AiScenarioParserTest {
     }
 
     @Test
-    @DisplayName("grpc.unary fails closed on inline request.json, expect.status and non-equals matchers")
+    @DisplayName("grpc.unary fails closed on inline request.json, expect.status and unknown fields")
     void grpcUnary_failsClosedOnNonExecutable() {
         String base = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"c\",\"type\":\"grpc.unary\","
                 + "\"target\":\"t\",\"method\":\"p.S/M\",\"timeout\":\"5s\",";
@@ -294,10 +297,20 @@ class AiScenarioParserTest {
                 .isInstanceOf(StandTestException.class).hasMessageContaining("request.json");
         assertThatThrownBy(() -> parser.parse(base + "\"expect\":{\"status\":\"OK\"}}]}"))
                 .isInstanceOf(StandTestException.class).hasMessageContaining("expect.status");
-        assertThatThrownBy(() -> parser.parse(base + "\"expect\":{\"assert\":[{\"path\":\"$.x\",\"exists\":true}]}}]}"))
-                .isInstanceOf(StandTestException.class).hasMessageContaining("only executable for REST");
         assertThatThrownBy(() -> parser.parse(base + "\"bogus\":1}]}"))
                 .isInstanceOf(StandTestException.class).hasMessageContaining("bogus");
+    }
+
+    @Test
+    @DisplayName("grpc.unary maps non-equals matchers (exists/contains) onto the wire keys — the full matcher set")
+    void grpcUnary_fullMatcherSet() {
+        Scenario scenario = parser.parse("{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"c\",\"type\":\"grpc.unary\","
+                + "\"target\":\"t\",\"method\":\"p.S/M\",\"timeout\":\"5s\","
+                + "\"expect\":{\"assert\":[{\"path\":\"$.status\",\"exists\":true},{\"path\":\"$.msg\",\"contains\":\"OK\"}]}}]}");
+
+        assertThat(params(scenario.steps().get(0)).get("assertions")).isEqualTo(List.of(
+                Map.of("jsonPath", "$.status", "expectedValue", true, "matcher", "EXISTS"),
+                Map.of("jsonPath", "$.msg", "expectedValue", "OK", "matcher", "CONTAINS")));
     }
 
     @Test

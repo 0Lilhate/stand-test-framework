@@ -1,6 +1,6 @@
 ---
 name: stand-test-yaml-authoring
-description: Generate an AI-format (steps/type) JSON/YAML scenario for stand-test-sdk from a scenario design, conforming to the stand-test-ai-schema JSON Schema and its executable subset (7 step types, equals-only outside REST, fixture-only bodies, bounded timeouts, logical aliases). Use when the design's track is the declarative AI format.
+description: Generate an AI-format (steps/type) JSON/YAML scenario for stand-test-sdk from a scenario design, conforming to the stand-test-ai-schema JSON Schema and its executable subset (7 step types, full matcher set on REST and grpc.unary but equals-only on kafka.expect, fixture-only bodies, bounded timeouts, logical aliases). Use when the design's track is the declarative AI format.
 ---
 
 # Skill: stand-test-yaml-authoring
@@ -102,7 +102,8 @@ not in the schema fails validation.**
    `DROP|TRUNCATE|DELETE|UPDATE|ALTER|INSERT|MERGE|GRANT|REVOKE|PG_SLEEP|SLEEP|WAITFOR|BENCHMARK|DBMS_LOCK`.
    Values only via `:name` binds + `params` map.
 7. Assertions: exactly one matcher key per item (`equals|exists|notNull|contains|matches`);
-   `equals: null` is forbidden (use `exists`/`notNull`); non-equals only on `rest.*` steps.
+   `equals: null` is forbidden (use `exists`/`notNull`); non-equals on `rest.*` and `grpc.unary` steps
+   (`kafka.expect` is `equals` only).
 8. Data flow only via `capture` (keys `^[A-Za-z_][A-Za-z0-9_]*$`, values start with `$`) and
    `${identifier}` references. No expressions, functions, `$()`, nesting.
 9. Query param values are strings (`{"page": "1"}`, not `{"page": 1}`); `rest.get` has no body.

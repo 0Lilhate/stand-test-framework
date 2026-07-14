@@ -34,7 +34,11 @@ final class KafkaStepTranslator {
         if (send) {
             SurfaceValues.putInlineOrResource(params, fields, "body", "bodyResource",
                     YamlStepKeys.BODY, YamlStepKeys.BODY_RESOURCE, true, location);
-            params.put(YamlStepKeys.INJECT_CORRELATION_ID, SurfaceValues.boolFlag(fields, "injectCorrelationId", location));
+            // Emit the flag only when the surface set it explicitly, so its absence means "default" (inject
+            // when the topic declares a HEADER correlation carrier) rather than an explicit opt-out.
+            if (fields.containsKey("injectCorrelationId")) {
+                params.put(YamlStepKeys.INJECT_CORRELATION_ID, SurfaceValues.boolFlag(fields, "injectCorrelationId", location));
+            }
         } else {
             params.put(YamlStepKeys.CORRELATION_FROM_CONTEXT, SurfaceValues.boolFlag(fields, "correlationIdFromContext", location));
             params.put(YamlStepKeys.ASSERTIONS, fields.containsKey("assert")

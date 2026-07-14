@@ -107,7 +107,7 @@ class KnowledgeBaseSchemaValidationTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"service", "endpoint", "kafka-topic", "datasource", "db-probe", "grpc-target", "environment", "test-case-mapping"})
+    @ValueSource(strings = {"service", "endpoint", "kafka-topic", "datasource", "db-probe", "db-table", "grpc-target", "environment", "test-case-mapping"})
     @DisplayName("every thin per-entity schema points at an existing umbrella $def")
     void thinSchemas_pointIntoUmbrella(String name) {
         JsonNode thin = readJson(KB_DIR.resolve(Paths.get("schema", name + ".schema.json")));
@@ -124,6 +124,7 @@ class KnowledgeBaseSchemaValidationTest {
         "kafka/example-topics.yml, kafkaTopicsFile",
         "db/example-datasources.yml, datasourcesFile",
         "db/example-db-probes.yml, dbProbesFile",
+        "db/example-db-tables.yml, dbTablesFile",
         "grpc/example-grpc-targets.yml, grpcTargetsFile",
         "environments/example-env.yml, environmentsFile",
         "mappings/example-test-case-mapping.yml, testCaseMappingsFile"
@@ -135,6 +136,19 @@ class KnowledgeBaseSchemaValidationTest {
         assertThat(byEnvelope).as("example %s should pass %s: %s", relativePath, envelope, joinMessages(byEnvelope)).isEmpty();
         Set<ValidationMessage> byRoot = FACTORY.getSchema(UMBRELLA).validate(document);
         assertThat(byRoot).as("example %s should match exactly one root envelope", relativePath).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the promoted pilot services (services/pakt-lgoty.yml) validate against the strict curated schema and are sterile")
+    void promotedPilotServices_validate() {
+        JsonNode document = readYaml(KB_DIR.resolve("services/pakt-lgoty.yml"));
+        Set<ValidationMessage> byEnvelope = envelopeSchema("servicesFile").validate(document);
+        assertThat(byEnvelope).as("promoted services should pass servicesFile: %s", joinMessages(byEnvelope)).isEmpty();
+        Set<ValidationMessage> byRoot = FACTORY.getSchema(UMBRELLA).validate(document);
+        assertThat(byRoot).as("promoted services should match exactly one umbrella root envelope").isEmpty();
+        List<String> offenders = new ArrayList<>();
+        collectForbiddenStrings(document, "services/pakt-lgoty.yml", offenders);
+        assertThat(offenders).as("promoted services must carry references/contracts only, no URL/JDBC/secret shapes").isEmpty();
     }
 
     @ParameterizedTest
@@ -165,6 +179,7 @@ class KnowledgeBaseSchemaValidationTest {
         JsonNode topics = readYaml(KB_DIR.resolve("kafka/example-topics.yml")).get("kafkaTopics");
         JsonNode datasources = readYaml(KB_DIR.resolve("db/example-datasources.yml")).get("datasources");
         JsonNode probes = readYaml(KB_DIR.resolve("db/example-db-probes.yml")).get("dbProbes");
+        JsonNode dbTables = readYaml(KB_DIR.resolve("db/example-db-tables.yml")).get("dbTables");
         JsonNode grpcTargets = readYaml(KB_DIR.resolve("grpc/example-grpc-targets.yml")).get("grpcTargets");
         JsonNode environments = readYaml(KB_DIR.resolve("environments/example-env.yml")).get("environments");
         final JsonNode mappings = readYaml(KB_DIR.resolve("mappings/example-test-case-mapping.yml")).get("testCaseMappings");
@@ -186,6 +201,9 @@ class KnowledgeBaseSchemaValidationTest {
         }
         for (JsonNode probe : probes) {
             assertThat(datasourceIds).as("probe %s datasourceId", probe.get("id")).contains(probe.get("datasourceId").asText());
+        }
+        for (JsonNode table : dbTables) {
+            assertThat(datasourceIds).as("dbTable %s datasourceId", table.get("id")).contains(table.get("datasourceId").asText());
         }
         for (JsonNode service : services) {
             assertThat(texts(service.get("endpoints"))).as("service endpoints exist").isSubsetOf(endpointIds);
@@ -234,7 +252,7 @@ class KnowledgeBaseSchemaValidationTest {
     @DisplayName("no string anywhere in the shipped examples carries a URL, JDBC or credential shape")
     void examples_carryNoSecretShapedStrings() {
         List<String> offenders = new ArrayList<>();
-        for (String relativePath : List.of("services/example-service.yml", "endpoints/example-endpoints.yml", "kafka/example-topics.yml", "db/example-datasources.yml", "db/example-db-probes.yml", "grpc/example-grpc-targets.yml", "environments/example-env.yml", "mappings/example-test-case-mapping.yml")) {
+        for (String relativePath : List.of("services/example-service.yml", "endpoints/example-endpoints.yml", "kafka/example-topics.yml", "db/example-datasources.yml", "db/example-db-probes.yml", "db/example-db-tables.yml", "grpc/example-grpc-targets.yml", "environments/example-env.yml", "mappings/example-test-case-mapping.yml")) {
             collectForbiddenStrings(readYaml(KB_DIR.resolve(relativePath)), relativePath, offenders);
         }
         assertThat(offenders).as("KB examples must hold references and contracts only").isEmpty();

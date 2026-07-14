@@ -133,6 +133,21 @@
       "minItems": 1,
       "items": { "$ref": "#/$defs/assertion" }
     },
+    "equalsOnlyAssertion": {
+      "description": "A single EQUALS-only assertion over a JSONPath, for adapters whose executor supports EQUALS only (kafka.expect, grpc.unary). Only `path` + `equals` are allowed here, so a schema-valid document is exactly what the runtime can execute (no exists/notNull/contains/matches/script that the kafka/grpc executors would reject or silently degrade). `equals: null` is forbidden — express a null check on the REST surface where the full matcher set executes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "equals"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "equals": { "type": ["string", "number", "boolean"] }
+      }
+    },
+    "equalsOnlyAssertionList": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/equalsOnlyAssertion" }
+    },
     "restStep": {
       "type": "object",
       "additionalProperties": false,
@@ -165,7 +180,7 @@
           }
         },
         "assert": {
-          "description": "Optional assertions over the response body (JSONPath). REST assertions execute ALL five matchers (equals/exists/notNull/contains/matches); kafka.expect/grpc.unary still execute equals only.",
+          "description": "Optional assertions over the response body (JSONPath). REST and grpc.unary execute ALL five matchers (equals/exists/notNull/contains/matches); kafka.expect is restricted by construction to the equals-only assertion list, so a schema-valid kafka assertion is always executable.",
           "$ref": "#/$defs/assertionList"
         },
         "capture": { "$ref": "#/$defs/captureMap" }
@@ -241,7 +256,7 @@
         "topic": { "$ref": "#/$defs/alias" },
         "correlation": { "$ref": "#/$defs/correlationFromContext" },
         "timeout": { "$ref": "#/$defs/duration" },
-        "assert": { "$ref": "#/$defs/assertionList" },
+        "assert": { "$ref": "#/$defs/equalsOnlyAssertionList" },
         "capture": { "$ref": "#/$defs/captureMap" }
       }
     },

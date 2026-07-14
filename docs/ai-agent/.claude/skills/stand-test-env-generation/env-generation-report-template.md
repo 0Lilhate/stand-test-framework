@@ -41,8 +41,8 @@
 
 ## Security check
 
-- No secret values / credential defaults: <CLEAN/findings>
-- No value twins for secrets; one twin per field (starter only): <CLEAN/findings/N-A>
+- No bare inline secret value (no `${}`); a `${VAR:default}` secret twin only if explicitly requested: <CLEAN/findings>
+- No `*-ref` field carrying a `${...}` placeholder (double-resolution); one twin per field (starter only): <CLEAN/findings/N-A>
 - No production environments: <CLEAN/findings>
 
 ## Validation result

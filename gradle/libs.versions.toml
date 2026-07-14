@@ -8,6 +8,10 @@ checkstyle = "10.18.2"
 junit = "5.11.4"
 assertj = "3.26.3"
 jacoco = "0.8.15"
+# ArchUnit pins the module dependency graph (core as a pure sink, no adapter-to-adapter edges,
+# allure/scenario-yaml/ai-schema/config core-only, nothing depends on the starter) as a JUnit test in the
+# example module — the only module with every SDK module on its classpath. TEST-ONLY.
+archunit = "1.3.0"
 # SLF4J is the SDK's logging facade (plan §17): every module logs through `slf4j-api` (a pure facade,
 # no binding, no IO). The published SDK ships ONLY the facade — the consumer supplies the binding
 # (Logback via Spring Boot, etc.), so there is never a multiple-bindings clash. Logback is TEST-ONLY:
@@ -61,6 +65,7 @@ junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 junit-platform-testkit = { module = "org.junit.platform:junit-platform-testkit" }
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
+archunit = { module = "com.tngtech.archunit:archunit", version.ref = "archunit" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 # Test-only binding: provides a functional MDCAdapter and ch.qos.logback.core.read.ListAppender so
 # tests can capture and assert emitted log lines. Never a runtime dependency of any published module.

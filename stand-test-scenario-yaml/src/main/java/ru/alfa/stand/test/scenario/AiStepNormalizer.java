@@ -92,7 +92,8 @@ final class AiStepNormalizer {
     /**
      * REST assertions keep their full matcher form as the surface list — {@code RestStepTranslator}
      * routes them through {@code SurfaceValues.assertionsWithMatchers}, so all five schema matchers
-     * are executable for the REST family (kafka/grpc stay equals-only, see {@link #equalsAssertions}).
+     * are executable for the REST family. grpc.unary now does the same (see {@link #applyGrpcExpect});
+     * only kafka.expect stays equals-only (see {@link #equalsAssertions}).
      */
     private static void applyRestAssert(Map<String, Object> fields, Map<String, Object> out, String location) {
         if (!fields.containsKey("assert")) {
@@ -206,7 +207,15 @@ final class AiStepNormalizer {
             throw new StandTestException("'expect.status' at " + expectLoc + " is not executable yet: the gRPC status is surfaced as an exception, not a declarative assertion");
         }
         if (expect.containsKey("assert")) {
-            out.put("assert", equalsAssertions(expect.get("assert"), expectLoc + ".assert"));
+            // grpc.unary executes the full REST matcher set, so its assertions keep their full surface form
+            // (GrpcStepTranslator routes them through SurfaceValues.assertionsWithMatchers) — unlike
+            // kafka.expect, which stays equals-only via equalsAssertions.
+            String assertLoc = expectLoc + ".assert";
+            List<Object> items = SurfaceValues.asList(expect.get("assert"), assertLoc);
+            for (int i = 0; i < items.size(); i++) {
+                SurfaceValues.checkKnownKeys(SurfaceValues.asMap(items.get(i), assertLoc + "[" + i + "]"), ASSERT_KNOWN, assertLoc + "[" + i + "]");
+            }
+            out.put("assert", items);
         }
     }
 
@@ -220,7 +229,7 @@ final class AiStepNormalizer {
             String path = SurfaceValues.requireString(item, "path", itemLoc);
             if (item.containsKey("exists") || item.containsKey("notNull")
                     || item.containsKey("contains") || item.containsKey("matches")) {
-                throw new StandTestException("Assertion at " + itemLoc + " uses a matcher that is only executable for REST assertions: kafka.expect/grpc.unary run 'equals' only for now");
+                throw new StandTestException("Assertion at " + itemLoc + " uses a matcher that kafka.expect cannot execute: kafka.expect runs 'equals' only (REST and grpc.unary support the full matcher set)");
             }
             Object expected = item.get("equals");
             if (expected == null) {

@@ -23,6 +23,14 @@ import ru.alfa.stand.test.core.validation.SqlSpanScanner;
  */
 final class NamedParameterStatement {
 
+    /**
+     * Bounded default per-statement query timeout, in seconds. Every statement the SDK executes is capped
+     * so a blocking or sleeping query on a real DEV/IFT stand can never hang the calling test thread
+     * unbounded — the SDK's single bounded-wait invariant (plan §2.5). A {@code db.expectEventually} poll
+     * passes a smaller value when its poll timeout is shorter, so one poll cannot overshoot the await window.
+     */
+    static final int DEFAULT_STATEMENT_TIMEOUT_SECONDS = 60;
+
     private final String translatedSql;
     private final List<String> orderedNames;
 
@@ -64,9 +72,23 @@ final class NamedParameterStatement {
         return new NamedParameterStatement(translated.toString(), names);
     }
 
-    PreparedStatement create(Connection connection, Map<String, Object> values) throws SQLException {
+    /**
+     * Prepares the translated statement, applies a bounded query timeout, and binds the values. The
+     * {@code queryTimeoutSeconds} cap is set before any execution so a blocking/sleeping query cannot hang
+     * the calling thread unbounded (plan §2.5) — a driver that does not honour {@link
+     * PreparedStatement#setQueryTimeout(int)} is a driver limitation, but the standard JDBC bound is always
+     * requested.
+     *
+     * @param connection the run-scoped connection
+     * @param values the named bind values
+     * @param queryTimeoutSeconds the bounded per-statement timeout in seconds (must be positive)
+     * @return the prepared, bounded, bound statement
+     * @throws SQLException if preparing, bounding or binding fails
+     */
+    PreparedStatement create(Connection connection, Map<String, Object> values, int queryTimeoutSeconds) throws SQLException {
         PreparedStatement statement = connection.prepareStatement(this.translatedSql);
         try {
+            statement.setQueryTimeout(queryTimeoutSeconds);
             bind(statement, values);
         } catch (SQLException | RuntimeException failure) {
             statement.close();

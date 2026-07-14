@@ -42,7 +42,9 @@ public final class RestStep {
     private String id;
     private String body;
     private String bodyResource;
-    private boolean injectCorrelationId;
+    // Tri-state: null = unset (inject when the resolved service declares a HEADER correlation carrier —
+    // the safe default), TRUE = force-inject, FALSE = explicit opt-out.
+    private Boolean injectCorrelationId;
     private Integer expectedStatus;
     private Long timeoutMillis;
     private Long pollIntervalMillis;
@@ -170,13 +172,29 @@ public final class RestStep {
     }
 
     /**
-     * Requests injection of the SDK-owned correlation id into the outbound request, using the header
+     * Forces injection of the SDK-owned correlation id into the outbound request, using the header
      * configured for the target service.
+     *
+     * <p>Injection is <strong>on by default</strong> whenever the resolved service declares a HEADER
+     * correlation carrier, so this call is only needed to be explicit; use {@link #injectCorrelationId(boolean)
+     * injectCorrelationId(false)} to opt out. Forcing it on a service that declares no HEADER carrier fails
+     * the step (an unmet request), rather than silently sending nothing.
      *
      * @return this builder
      */
     public RestStep injectCorrelationId() {
-        this.injectCorrelationId = true;
+        return injectCorrelationId(true);
+    }
+
+    /**
+     * Explicitly enables ({@code true}) or opts out of ({@code false}) correlation-id injection, overriding
+     * the default (inject when the service declares a HEADER correlation carrier).
+     *
+     * @param inject whether to inject the correlation id
+     * @return this builder
+     */
+    public RestStep injectCorrelationId(boolean inject) {
+        this.injectCorrelationId = inject;
         return this;
     }
 
@@ -367,7 +385,11 @@ public final class RestStep {
         parameters.put(RestStepParameters.PATH, this.path);
         parameters.put(RestStepParameters.QUERY, Map.copyOf(this.query));
         parameters.put(RestStepParameters.HEADERS, Map.copyOf(this.headers));
-        parameters.put(RestStepParameters.INJECT_CORRELATION_ID, this.injectCorrelationId);
+        // Only emit the flag when explicitly set; its absence means "default" (inject when the service
+        // declares a HEADER correlation carrier), decided by the executor.
+        if (this.injectCorrelationId != null) {
+            parameters.put(RestStepParameters.INJECT_CORRELATION_ID, this.injectCorrelationId);
+        }
         parameters.put(RestStepParameters.ASSERTIONS, assertionMaps());
         parameters.put(RestStepParameters.CAPTURES, captureMaps());
         if (this.expectedStatus != null) {

@@ -106,8 +106,14 @@ public final class RestStepParameters {
         }
     }
 
-    static boolean injectCorrelationId(Map<String, Object> parameters) {
-        return Boolean.TRUE.equals(parameters.get(INJECT_CORRELATION_ID));
+    /**
+     * The explicit correlation-injection choice, if the step set one: {@code Optional.of(true)} to force
+     * injection, {@code Optional.of(false)} to opt out, {@code Optional.empty()} when unset (the executor
+     * then defaults to injecting when the service declares a HEADER correlation carrier).
+     */
+    static Optional<Boolean> injectCorrelationIdFlag(Map<String, Object> parameters) {
+        Object value = parameters.get(INJECT_CORRELATION_ID);
+        return (value instanceof Boolean flag) ? Optional.of(flag) : Optional.empty();
     }
 
     static OptionalInt expectedStatus(Map<String, Object> parameters) {

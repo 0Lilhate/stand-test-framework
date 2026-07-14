@@ -3,8 +3,12 @@ package ru.alfa.stand.test.grpc;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+import ru.alfa.stand.test.core.assertion.AssertionMatcher;
 import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.scenario.StepParameterKeys;
 import ru.alfa.stand.test.core.validation.DefaultScenarioValidator;
@@ -49,6 +53,8 @@ public final class GrpcStepParameters {
     public static final String JSON_PATH = StepParameterKeys.JSON_PATH;
     /** Nested key (assertion): expected value. */
     public static final String EXPECTED_VALUE = StepParameterKeys.EXPECTED_VALUE;
+    /** Nested key (assertion): matcher name; absent means EQUALS. */
+    public static final String MATCHER = StepParameterKeys.MATCHER;
     /** Nested key (capture): target variable name. */
     public static final String VARIABLE_NAME = StepParameterKeys.VARIABLE_NAME;
 
@@ -76,6 +82,16 @@ public final class GrpcStepParameters {
 
     static boolean flag(Map<String, Object> parameters, String key) {
         return Boolean.TRUE.equals(parameters.get(key));
+    }
+
+    /**
+     * The explicit correlation-injection choice, if the step set one: {@code Optional.of(true)} to force
+     * injection, {@code Optional.of(false)} to opt out, {@code Optional.empty()} when unset (the executor
+     * then defaults to injecting when the target declares a METADATA correlation carrier).
+     */
+    static Optional<Boolean> injectCorrelationIdFlag(Map<String, Object> parameters) {
+        Object value = parameters.get(INJECT_CORRELATION_ID);
+        return (value instanceof Boolean flag) ? Optional.of(flag) : Optional.empty();
     }
 
     static long requirePositiveMillis(Map<String, Object> parameters, String key) {
@@ -135,9 +151,42 @@ public final class GrpcStepParameters {
             if (expected == null) {
                 throw new StandTestException("gRPC assertion '" + EXPECTED_VALUE + "' must not be null");
             }
-            result.add(new GrpcAssertion(text, expected));
+            AssertionMatcher matcher = matcher(entry);
+            validateMatcherOperand(matcher, expected, text);
+            result.add(new GrpcAssertion(text, expected, matcher));
         }
         return result;
+    }
+
+    private static AssertionMatcher matcher(Map<String, Object> entry) {
+        Object value = entry.get(MATCHER);
+        if (value == null) {
+            return AssertionMatcher.EQUALS;
+        }
+        if (!(value instanceof String name)) {
+            throw new StandTestException("gRPC assertion '" + MATCHER + "' must be a string");
+        }
+        try {
+            return AssertionMatcher.valueOf(name.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException unknown) {
+            throw new StandTestException("Unknown gRPC assertion matcher: '" + name + "'");
+        }
+    }
+
+    private static void validateMatcherOperand(AssertionMatcher matcher, Object expected, String jsonPath) {
+        if ((matcher == AssertionMatcher.EXISTS || matcher == AssertionMatcher.NOT_NULL) && !(expected instanceof Boolean)) {
+            throw new StandTestException("gRPC assertion at '" + jsonPath + "': matcher " + matcher + " requires a boolean '" + EXPECTED_VALUE + "'");
+        }
+        if (matcher == AssertionMatcher.MATCHES) {
+            if (!(expected instanceof String regex)) {
+                throw new StandTestException("gRPC assertion at '" + jsonPath + "': matcher MATCHES requires a string regular expression");
+            }
+            try {
+                Pattern.compile(regex);
+            } catch (PatternSyntaxException invalid) {
+                throw new StandTestException("gRPC assertion at '" + jsonPath + "': invalid regular expression for matcher MATCHES", invalid);
+            }
+        }
     }
 
     static List<GrpcCapture> captures(Map<String, Object> parameters) {

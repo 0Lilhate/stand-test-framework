@@ -37,9 +37,13 @@ import ru.alfa.stand.test.core.environment.TopicDefinition;
  * an empty value then fails lazily at step execution, preserving skip-without-stand behaviour. Each
  * value field is mutually exclusive with its {@code *-ref} twin. Credentials (auth
  * username/password/token, datasource user/password, Kafka SASL) also have value twins; supplying one
- * routes the Spring-resolved value through {@link SecretReferences#literal}, so a secret given that way
- * materialises in the Spring Environment — the {@code *-ref} spelling remains the choice when it must
- * not.
+ * routes the Spring-resolved value through {@link SecretReferences#literal}, so a {@code ${VAR:default}}
+ * placeholder for a secret works on this surface (Spring expands it at context startup and the resolved
+ * value is used verbatim as the credential). The trade-off is the consumer's: a value given that way
+ * materialises in the Spring {@code Environment} (reachable via actuator {@code /env}, logs, error dumps)
+ * and any inline default lives in the configuration file — so the {@code *-ref} spelling (a bare env-var
+ * NAME resolved lazily by the adapter, never bound into the Environment) remains the choice when a secret
+ * must not appear anywhere but the environment variable.
  */
 public final class EnvironmentRegistryFactory {
 

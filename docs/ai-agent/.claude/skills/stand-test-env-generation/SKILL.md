@@ -1,6 +1,6 @@
 ---
 name: stand-test-env-generation
-description: Render environment configuration from the stand-test knowledge base into the REAL SDK formats - stand-test-environments.yml (plain JUnit, refs-only) or application.yml stand.test.environments.* (Spring starter, refs + optional non-secret value twins). Deterministic merge, never touches unrelated keys, never writes secret values, shows a diff before apply, re-validates YAML and alias coverage after. Use via /stand-test-generate-env.
+description: Render environment configuration from the stand-test knowledge base into the REAL SDK formats - stand-test-environments.yml (plain JUnit, refs-only) or application.yml stand.test.environments.* (Spring starter, refs + optional value twins: non-secret endpoints, and secrets as ${VAR:default} on request). Deterministic merge, never touches unrelated keys, never writes a bare inline secret value, never a *-ref carrying a ${...} placeholder, shows a diff before apply, re-validates YAML and alias coverage after. Use via /stand-test-generate-env.
 ---
 
 # Skill: stand-test-env-generation
@@ -14,7 +14,7 @@ format.
 | Consumer | Target file | Tree | Rules |
 |---|---|---|---|
 | Plain JUnit + `stand-test-config` | `src/test/resources/stand-test-environments.yml` | `environments.<env>...` | **refs-only**: every endpoint/credential field is `*-ref`; value keys are rejected fail-closed by the loader |
-| Spring Boot + starter | `src/test/resources/application.yml` (or `application-test.yml` if the project uses it) | `stand.test.environments.<env>...` | refs by default; NON-SECRET endpoint fields may use value twins (`base-url`/`url`/`target`/`bootstrap-servers`/`security-protocol`) with real `${ENV_VAR:}` placeholders, empty default kept so unset vars defer to a skipped run; exactly one twin per field. The starter also offers CREDENTIAL value twins (`user`/`password`/`username`/`token`/`sasl-jaas-config`), but **generated config never uses them** — this skill emits secrets in the `*-ref` spelling only (kit policy: a credential twin materialises the secret in the Spring Environment and has no `requireReferenceShape` guard; see the starter README tradeoff) |
+| Spring Boot + starter | `src/test/resources/application.yml` (or `application-test.yml` if the project uses it) | `stand.test.environments.<env>...` | refs by default; NON-SECRET endpoint fields may use value twins (`base-url`/`url`/`target`/`bootstrap-servers`/`security-protocol`) with real `${ENV_VAR:}` placeholders, empty default kept so unset vars defer to a skipped run; exactly one twin per field. SECRET credential fields (`password`/`token`/`sasl-jaas-config`) — **emit `*-ref` (a bare env-var NAME) by default** (the secret then lives only in the variable); a `${VAR:default}` value twin is a sanctioned option ONLY on explicit request when a dev default is wanted (trade-off: the resolved secret materialises in the Spring Environment and the default lands in the file). NEVER emit a `*-ref` field carrying a `${...}` placeholder — Spring collapses it and the SDK misreads the result as a variable name (double-resolution). |
 
 ## KB → registry mapping (fixed)
 
@@ -81,10 +81,11 @@ secret) into the registry before the SDK ever sees the reference.
 
 - Applying without an explicit request: **dry-run is the default**; `apply` only when asked, and
   the diff is shown either way.
-- Secret values or credential `${VAR:default}` defaults anywhere, on any surface; credential
-  value twins (`user`/`password`/`username`/`token`/`sasl-jaas-config`) in generated config —
-  secrets are emitted as `*-ref` only.
-- Value twins for secrets, or on the plain-JUnit surface at all (the loader rejects them).
+- A bare inline secret VALUE (no `${}`) in a value field, or a `*-ref` field carrying a `${...}`
+  placeholder (double-resolution on the starter). A `${VAR:default}` secret value twin is allowed on
+  the starter only on explicit request (trade-off noted); otherwise secrets are emitted as `*-ref`.
+- Value twins on the plain-JUnit surface at all (it has no value keys — the loader rejects them; use
+  `*-ref`, which itself accepts a bare NAME or a `${VAR:default}` the SDK resolves).
 - Deleting or rewriting keys outside the managed subtree; reordering unrelated YAML.
 - Inventing aliases/refs not present in the KB (a gap is a `Missing KB reference`, fix the KB).
 - Production environments (schema-rejected in the KB; do not hand-author one here).

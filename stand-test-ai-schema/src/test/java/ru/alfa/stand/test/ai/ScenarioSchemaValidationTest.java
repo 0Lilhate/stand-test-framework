@@ -155,6 +155,36 @@ class ScenarioSchemaValidationTest {
     }
 
     @Test
+    @DisplayName("F4: kafka.expect is equals-only (a non-equals matcher is rejected); grpc.unary accepts the full REST matcher set")
+    void kafkaEqualsOnly_grpcFullMatchers() {
+        // kafka.expect: equals-only (executor is equals-only), so a non-equals matcher is rejected.
+        String kafkaEquals = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"kafka.expect\","
+                + "\"topic\":\"t\",\"timeout\":\"30s\",\"assert\":[{\"path\":\"$.status\",\"equals\":\"OK\"}]}]}";
+        assertThat(validateJson(kafkaEquals)).as("kafka.expect with an equals assertion should pass").isEmpty();
+
+        String kafkaContains = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"kafka.expect\","
+                + "\"topic\":\"t\",\"timeout\":\"30s\",\"assert\":[{\"path\":\"$.status\",\"contains\":\"OK\"}]}]}";
+        assertThat(validateJson(kafkaContains)).as("kafka.expect with a contains matcher should be rejected (equals-only)").isNotEmpty();
+
+        // grpc.unary: the executor now supports the full matcher set, so exists/contains are valid.
+        String grpcExists = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"grpc.unary\","
+                + "\"target\":\"svc\",\"method\":\"pkg.Svc/M\",\"timeout\":\"5s\","
+                + "\"expect\":{\"assert\":[{\"path\":\"$.status\",\"exists\":true}]}}]}";
+        assertThat(validateJson(grpcExists)).as("grpc.unary with an exists matcher should now pass (full matcher set)").isEmpty();
+
+        String grpcContains = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"grpc.unary\","
+                + "\"target\":\"svc\",\"method\":\"pkg.Svc/M\",\"timeout\":\"5s\","
+                + "\"expect\":{\"assert\":[{\"path\":\"$.msg\",\"contains\":\"OK\"}]}}]}";
+        assertThat(validateJson(grpcContains)).as("grpc.unary with a contains matcher should now pass (full matcher set)").isEmpty();
+
+        // grpc.unary still rejects a script matcher (never in the grammar).
+        String grpcScript = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"grpc.unary\","
+                + "\"target\":\"svc\",\"method\":\"pkg.Svc/M\",\"timeout\":\"5s\","
+                + "\"expect\":{\"assert\":[{\"path\":\"$.status\",\"script\":\"x\"}]}}]}";
+        assertThat(validateJson(grpcScript)).as("grpc.unary with a script matcher should still be rejected").isNotEmpty();
+    }
+
+    @Test
     @DisplayName("an invalid step reports only its own type's errors, not every step type (T3)")
     void invalidStep_reportsFocusedErrors() {
         String doc = "{\"id\":\"f\",\"environment\":\"ift\",\"steps\":[{\"id\":\"s\",\"type\":\"rest.post\","

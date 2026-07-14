@@ -1,0 +1,25 @@
+# unresolved.candidates.yml — the anti-hallucination sink.
+# Validated by knowledge-base/schema/unresolved-item.schema.json.
+# EVERY contract detail the document does not state becomes an item here, never a guessed value.
+documentId: <document-id>
+unresolved:
+  - id: <kebab-item-id>
+    type: missing-http-method    # missing-endpoint-path | missing-http-method | missing-topic-name |
+                                 # missing-table-name | missing-column | missing-env |
+                                 # unclear-business-rule | no-curated-collection |
+                                 # low-confidence-inference | unparseable-source | conflict | other
+    question: "<the precise open question a human must answer>"
+    context: "<what the document does say around this gap>"
+    source:
+      documentId: <document-id>
+      documentName: "<document title>"
+      documentVersion: "<version or null>"
+      page: <n or null>
+      section: "<section>"
+      heading: "<heading>"
+      quote: "<redacted verbatim of the surrounding text>"
+      extractionNotes: "<why it cannot be resolved from the document>"
+    blockingFor: [endpoint, test-scenario]   # which candidate kinds this blocks
+    suggestedResolution: "<who to ask / what would resolve it>"
+    proposedProjection: testCaseMapping.missing   # testCaseMapping.missing | testCaseMapping.assumptions | null
+    confidence: low              # low-confidence items are ALWAYS unresolved

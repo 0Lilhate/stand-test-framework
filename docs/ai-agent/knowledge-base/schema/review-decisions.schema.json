@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stand-test.alfa.ru/schema/review-decisions.schema.json",
+  "title": "stand-test KB ingestion - review decisions record",
+  "description": "The human review-decisions record for one ingested document: per candidate-family dispositions (approved/held/promoted) that cannot be stamped inside the additionalProperties:false candidate files. A review artifact, NOT itself promotable. File shape: { documentId, reviewedOn, reviewedBy, basisNote?, <family>: familyDecision, ... }.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["documentId", "reviewedOn", "reviewedBy"],
+  "properties": {
+    "documentId": { "$ref": "#/$defs/kebabId" },
+    "reviewedOn": { "$ref": "#/$defs/date" },
+    "reviewedBy": { "$ref": "#/$defs/safeShort" },
+    "basisNote": { "$ref": "#/$defs/safeLong" },
+    "businessRules": { "$ref": "#/$defs/familyDecision" },
+    "businessFlows": { "$ref": "#/$defs/familyDecision" },
+    "testScenarios": { "$ref": "#/$defs/familyDecision" },
+    "services": { "$ref": "#/$defs/familyDecision" },
+    "endpoints": { "$ref": "#/$defs/familyDecision" },
+    "kafka": { "$ref": "#/$defs/familyDecision" },
+    "db": { "$ref": "#/$defs/familyDecision" },
+    "grpc": { "$ref": "#/$defs/familyDecision" }
+  },
+  "$defs": {
+    "kebabId": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$", "minLength": 2, "maxLength": 64 },
+    "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "noUrl": { "if": { "type": "string" }, "then": { "not": { "pattern": "(://|[jJ][dD][bB][cC]:)" } } },
+    "secretShape": { "if": { "type": "string" }, "then": { "not": { "pattern": "([Bb]earer [A-Za-z0-9._-]{6}|[Bb]asic [A-Za-z0-9+/=]{8}|[Aa]uthorization\\s*[:=]|[Aa][Pp][Ii][-_]?[Kk][Ee][Yy]|[Xx]-[Aa][Pp][Ii]-[Kk][Ee][Yy]|[Pp]assword\\s*[:=]|[Pp]asswd\\s*[:=]|[Ss]ecret\\s*[:=]|AKIA[0-9A-Z]{12}|eyJ[A-Za-z0-9._-]{10})" } } },
+    "safeShort": { "type": "string", "minLength": 1, "maxLength": 200, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] },
+    "safeLong": { "type": "string", "minLength": 1, "maxLength": 500, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] },
+    "familyDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["disposition"],
+      "properties": {
+        "disposition": {
+          "enum": ["approved-digest", "promoted-identities-only", "promoted", "not-approved", "needs-review", "held", "rejected"]
+        },
+        "promotedOn": { "$ref": "#/$defs/date" },
+        "promotedTo": { "$ref": "#/$defs/safeShort" },
+        "approved": { "type": "array", "items": { "$ref": "#/$defs/decisionItem" } },
+        "held": { "type": "array", "items": { "$ref": "#/$defs/decisionItem" } }
+      }
+    },
+    "decisionItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/kebabId" },
+        "basis": { "$ref": "#/$defs/safeLong" },
+        "reason": { "$ref": "#/$defs/safeLong" }
+      }
+    }
+  }
+}

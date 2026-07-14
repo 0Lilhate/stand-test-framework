@@ -326,19 +326,39 @@ class KafkaStepExecutorExpectTest {
     }
 
     @Test
-    @DisplayName("exceeding the unmatched-buffer bound is an immediate infrastructure error, not a slow timeout")
+    @DisplayName("exceeding the buffer bound (this run's correlated but key-unmatched records) is an immediate infrastructure error, not a slow timeout")
     void bufferCapBreachFailsFast() {
         KafkaStepExecutor executor = executor(new DefaultAwaiter(new FakeTimeSource()));
-        ScenarioStep step = KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).correlationIdFromContext().build();
+        ScenarioStep step = KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).correlationIdFromContext().key("k-wanted").build();
         executor.prepare(step, this.context);
+        // Records carry THIS run's correlation id (so they are not evicted as foreign) but a key the expect
+        // does not want, so they stay buffered-unmatched and eventually breach the bound.
         for (long offset = 0; offset <= ArmedConsumer.MAX_BUFFERED; offset++) {
-            addResponse(offset, null, "{}", "other-correlation-" + offset);
+            addResponse(offset, "k-other-" + offset, "{}", correlationId());
         }
 
         assertThatThrownBy(() -> executor.execute(step, this.context))
                 .isInstanceOf(StandTestException.class)
                 .hasMessageContaining("buffered more than " + ArmedConsumer.MAX_BUFFERED)
                 .hasMessageContaining(KafkaTestSupport.RESPONSE_NAME);
+    }
+
+    @Test
+    @DisplayName("a flood of another run's correlated records is evicted, not buffered, so the bound is not tripped and this run's message is still selected")
+    void foreignFloodIsEvictedNotBuffered() {
+        KafkaStepExecutor executor = executor(new DefaultAwaiter(new FakeTimeSource()));
+        ScenarioStep step = KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).correlationIdFromContext().assertPath("$.n", 7).build();
+        executor.prepare(step, this.context);
+        // Far more than the buffer bound of OTHER runs' correlated records (each a distinct correlation id) ...
+        for (long offset = 0; offset < ArmedConsumer.MAX_BUFFERED + 100; offset++) {
+            addResponse(offset, null, "{}", "other-run-" + offset);
+        }
+        // ... plus this run's own matching message: it must still be found, and the bound must not trip.
+        addResponse(ArmedConsumer.MAX_BUFFERED + 100, null, "{\"n\":7}", correlationId());
+
+        StepResult result = executor.execute(step, this.context);
+
+        assertThat(result.status()).isEqualTo(StepStatus.SUCCESS);
     }
 
     @Test

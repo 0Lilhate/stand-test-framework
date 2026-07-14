@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stand-test.alfa.ru/schema/business-rule.schema.json",
+  "title": "stand-test KB ingestion - business rule candidate",
+  "description": "An extracted conditional business rule / acceptance criterion (condition -> action, with exceptions). SEMANTIC content with no curated home: it feeds the expected values and negative cases of stand-test-scenario-design, never the strict 8-collection contract. Provenance and confidence mandatory; every free-text field rejects URLs and inline secrets. File shape: { businessRules: [ ... ] }.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["businessRules"],
+  "properties": {
+    "documentId": { "$ref": "#/$defs/kebabId" },
+    "businessRules": { "type": "array", "items": { "$ref": "#/$defs/businessRule" } }
+  },
+  "$defs": {
+    "kebabId": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$", "minLength": 2, "maxLength": 64 },
+    "confidence": { "enum": ["high", "medium", "low"] },
+    "noUrl": { "if": { "type": "string" }, "then": { "not": { "pattern": "(://|[jJ][dD][bB][cC]:)" } } },
+    "secretShape": { "if": { "type": "string" }, "then": { "not": { "pattern": "([Bb]earer [A-Za-z0-9._-]{6}|[Bb]asic [A-Za-z0-9+/=]{8}|[Aa]uthorization\\s*[:=]|[Aa][Pp][Ii][-_]?[Kk][Ee][Yy]|[Xx]-[Aa][Pp][Ii]-[Kk][Ee][Yy]|[Pp]assword\\s*[:=]|[Pp]asswd\\s*[:=]|[Ss]ecret\\s*[:=]|AKIA[0-9A-Z]{12}|eyJ[A-Za-z0-9._-]{10})" } } },
+    "safeShort": { "type": "string", "maxLength": 200, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] },
+    "safeLong": { "type": "string", "maxLength": 500, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] },
+    "idArray": { "type": "array", "items": { "$ref": "#/$defs/kebabId" }, "uniqueItems": true, "maxItems": 100 },
+    "safeArray": { "type": "array", "items": { "$ref": "#/$defs/safeLong" }, "maxItems": 100 },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documentId", "documentName", "quote"],
+      "properties": {
+        "documentId": { "$ref": "#/$defs/kebabId" },
+        "documentName": { "type": "string", "minLength": 1, "maxLength": 300, "allOf": [ { "$ref": "#/$defs/noUrl" } ] },
+        "documentVersion": { "type": ["string", "null"], "maxLength": 40 },
+        "documentDate": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "page": { "type": ["integer", "null"], "minimum": 1 },
+        "section": { "type": ["string", "null"], "maxLength": 160 },
+        "heading": { "type": ["string", "null"], "maxLength": 200 },
+        "quote": { "type": "string", "minLength": 1, "maxLength": 600, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] },
+        "extractionNotes": { "type": ["string", "null"], "maxLength": 500, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] }
+      }
+    },
+    "businessRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "condition", "action", "source", "confidence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/kebabId" },
+        "title": { "$ref": "#/$defs/safeShort" },
+        "condition": { "$ref": "#/$defs/safeLong" },
+        "action": { "$ref": "#/$defs/safeLong" },
+        "exceptions": { "$ref": "#/$defs/safeArray" },
+        "priority": { "enum": ["high", "medium", "low", null] },
+        "appliesTo": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "systems": { "$ref": "#/$defs/idArray" },
+            "operations": { "type": "array", "items": { "$ref": "#/$defs/safeShort" }, "maxItems": 100 },
+            "entities": { "type": "array", "items": { "$ref": "#/$defs/safeShort" }, "maxItems": 100 }
+          }
+        },
+        "testImplications": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "positiveCases": { "$ref": "#/$defs/safeArray" },
+            "negativeCases": { "$ref": "#/$defs/safeArray" }
+          }
+        },
+        "source": { "$ref": "#/$defs/source" },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    }
+  }
+}

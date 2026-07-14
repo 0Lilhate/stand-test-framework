@@ -9,6 +9,7 @@
     { "$ref": "#/$defs/kafkaTopicsFile" },
     { "$ref": "#/$defs/datasourcesFile" },
     { "$ref": "#/$defs/dbProbesFile" },
+    { "$ref": "#/$defs/dbTablesFile" },
     { "$ref": "#/$defs/grpcTargetsFile" },
     { "$ref": "#/$defs/environmentsFile" },
     { "$ref": "#/$defs/testCaseMappingsFile" }
@@ -708,6 +709,31 @@
       "required": ["dbProbes"],
       "properties": {
         "dbProbes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/dbProbe" } }
+      }
+    },
+    "dbTable": {
+      "description": "A test-relevant DB table contract in a datasource: schema-qualified name, its columns, optional primary key and the reserved testRunId tag column that db.seed/db.cleanup scope on. A structural contract only — no data, no secrets, no connection details (those live on the datasource + environment).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "datasourceId", "schema", "table"],
+      "properties": {
+        "id": { "$ref": "#/$defs/kebabId" },
+        "datasourceId": { "$ref": "#/$defs/kebabId" },
+        "description": { "$ref": "#/$defs/freeText" },
+        "schema": { "$ref": "#/$defs/schemaName" },
+        "table": { "$ref": "#/$defs/fieldName" },
+        "columns": { "type": "array", "items": { "$ref": "#/$defs/fieldName" }, "uniqueItems": true },
+        "primaryKey": { "type": "array", "items": { "$ref": "#/$defs/fieldName" }, "uniqueItems": true, "minItems": 1 },
+        "testRunIdColumn": { "$ref": "#/$defs/fieldName" },
+        "tags": { "$ref": "#/$defs/idArray" }
+      }
+    },
+    "dbTablesFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dbTables"],
+      "properties": {
+        "dbTables": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/dbTable" } }
       }
     },
     "grpcTargetsFile": {

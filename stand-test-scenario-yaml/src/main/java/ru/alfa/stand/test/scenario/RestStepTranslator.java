@@ -66,7 +66,11 @@ final class RestStepTranslator {
         params.put(YamlStepKeys.PATH, SurfaceValues.requireString(fields, "path", location));
         params.put(YamlStepKeys.QUERY, SurfaceValues.stringMap(fields.get("query"), location + ".query"));
         params.put(YamlStepKeys.HEADERS, SurfaceValues.stringMap(fields.get("headers"), location + ".headers"));
-        params.put(YamlStepKeys.INJECT_CORRELATION_ID, SurfaceValues.boolFlag(fields, "injectCorrelationId", location));
+        // Emit the flag only when the surface set it explicitly, so its absence means "default" (inject when
+        // the service declares a HEADER correlation carrier) rather than an explicit opt-out.
+        if (fields.containsKey("injectCorrelationId")) {
+            params.put(YamlStepKeys.INJECT_CORRELATION_ID, SurfaceValues.boolFlag(fields, "injectCorrelationId", location));
+        }
         params.put(YamlStepKeys.ASSERTIONS, fields.containsKey("assert")
                 ? SurfaceValues.assertionsWithMatchers(fields.get("assert"), location + ".assert") : List.of());
         params.put(YamlStepKeys.CAPTURES, fields.containsKey("capture")

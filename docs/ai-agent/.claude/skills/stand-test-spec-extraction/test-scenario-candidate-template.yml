@@ -1,0 +1,36 @@
+# test-scenarios.candidates.yml — extracted candidate autotest intents.
+# Validated by knowledge-base/schema/test-scenario-candidate.schema.json.
+# These pre-fill stand-test-case-analysis / stand-test-scenario-design.
+# NEVER auto-promoted to a curated testCaseMapping - a human authors the real test.
+documentId: <document-id>
+testScenarios:
+  - id: <kebab-scenario-id>
+    title: "<short scenario name>"
+    goal: "<what the test verifies>"
+    preconditions: ["<precondition>", ...]
+    testData: ["<required data / boundary class>", ...]
+    action: "<the trigger action - reference an endpoint/event by its candidate id>"
+    expected:
+      rest: ["<expected REST effect, e.g. 201 with paymentId>", ...]
+      kafka: ["<expected event with correlation>", ...]
+      db: ["<expected row/state>", ...]
+      grpc: ["<expected gRPC response>", ...]
+    assertions: ["<concrete assertion>", ...]
+    cleanup: ["<cleanup need, e.g. delete seeded rows by testRunId>", ...]
+    risks: ["<flakiness / unstated timeout / missing data>", ...]
+    source:
+      documentId: <document-id>
+      documentName: "<document title>"
+      documentVersion: "<version or null>"
+      page: <n or null>
+      section: "<section>"
+      heading: "<heading>"
+      quote: "<redacted verbatim>"
+      extractionNotes: "<how this was derived>"
+    confidence: medium           # high | medium | low
+    kbDependencies:              # KB entry ids the scenario needs (kb-lookup resolves; missing -> unresolved)
+      endpoints: [<endpoint-id>, ...]
+      kafkaTopics: [<topic-id>, ...]
+      datasources: [<datasource-id>, ...]
+      dbProbes: [<probe-id>, ...]
+      grpcTargets: [<target-id>, ...]

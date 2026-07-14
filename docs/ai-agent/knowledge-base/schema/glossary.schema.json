@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stand-test.alfa.ru/schema/glossary.schema.json",
+  "title": "stand-test KB ingestion - glossary digest",
+  "description": "A domain glossary digest (abbreviations, terms, code aliases) extracted from a spec's terminology section. A SEMANTIC digest that feeds scenario-design vocabulary; NEVER promoted to the curated KB. Provenance is file-level (documentName + section, no per-item quote). File shape: { documentId, source, abbreviations?, terms?, aliases? }.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["documentId", "source"],
+  "properties": {
+    "documentId": { "$ref": "#/$defs/kebabId" },
+    "source": { "$ref": "#/$defs/fileSource" },
+    "abbreviations": { "type": "array", "items": { "$ref": "#/$defs/glossaryEntry" } },
+    "terms": { "type": "array", "items": { "$ref": "#/$defs/glossaryEntry" } },
+    "aliases": { "type": "array", "items": { "$ref": "#/$defs/aliasEntry" } }
+  },
+  "$defs": {
+    "kebabId": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$", "minLength": 2, "maxLength": 64 },
+    "noUrl": { "if": { "type": "string" }, "then": { "not": { "pattern": "(://|[jJ][dD][bB][cC]:)" } } },
+    "secretShape": { "if": { "type": "string" }, "then": { "not": { "pattern": "([Bb]earer [A-Za-z0-9._-]{6}|[Bb]asic [A-Za-z0-9+/=]{8}|[Aa]uthorization\\s*[:=]|[Aa][Pp][Ii][-_]?[Kk][Ee][Yy]|[Xx]-[Aa][Pp][Ii]-[Kk][Ee][Yy]|[Pp]assword\\s*[:=]|[Pp]asswd\\s*[:=]|[Ss]ecret\\s*[:=]|AKIA[0-9A-Z]{12}|eyJ[A-Za-z0-9._-]{10})" } } },
+    "safeShort": { "type": "string", "minLength": 1, "maxLength": 200, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] },
+    "safeLong": { "type": "string", "minLength": 1, "maxLength": 500, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] },
+    "fileSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documentName"],
+      "properties": {
+        "documentName": { "type": "string", "minLength": 1, "maxLength": 300, "allOf": [ { "$ref": "#/$defs/noUrl" } ] },
+        "documentVersion": { "type": ["string", "null"], "maxLength": 40 },
+        "documentDate": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "page": { "type": ["integer", "null"], "minimum": 1 },
+        "section": { "type": ["string", "null"], "maxLength": 160 },
+        "heading": { "type": ["string", "null"], "maxLength": 200 }
+      }
+    },
+    "glossaryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["term", "definition"],
+      "properties": {
+        "term": { "$ref": "#/$defs/safeShort" },
+        "definition": { "$ref": "#/$defs/safeLong" }
+      }
+    },
+    "aliasEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "meaning"],
+      "properties": {
+        "code": { "$ref": "#/$defs/safeShort" },
+        "meaning": { "$ref": "#/$defs/safeLong" }
+      }
+    }
+  }
+}

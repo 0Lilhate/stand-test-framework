@@ -16,6 +16,10 @@ dependencies {
     testImplementation(project(":stand-test-rest"))
     testImplementation(project(":stand-test-db"))
     testImplementation(project(":stand-test-kafka"))
+    // kafka-clients (test-only) gives KafkaOfflineExampleTest the Apache MockProducer/MockConsumer to run
+    // kafka.send/kafka.expect end-to-end with no broker (via the KafkaClientFactory seam), so the offline
+    // composition proof covers Kafka too. The published SDK never exposes kafka-clients transitively.
+    testImplementation(libs.kafka.clients)
     testImplementation(project(":stand-test-grpc"))
     testImplementation(project(":stand-test-allure"))
     // The @StandTest path resolves its EnvironmentRegistry from the stand.test.environments section of
@@ -46,6 +50,9 @@ dependencies {
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
+    // ArchUnit pins the module dependency graph (ModuleDependencyArchTest): this module has every SDK
+    // module on its test classpath, so it is the one place the whole graph can be analysed at once.
+    testImplementation(libs.archunit)
     testImplementation(libs.h2)
     testRuntimeOnly(libs.junit.platform.launcher)
     // The SDK ships only the SLF4J facade; the CONSUMER supplies a binding. The example plays the

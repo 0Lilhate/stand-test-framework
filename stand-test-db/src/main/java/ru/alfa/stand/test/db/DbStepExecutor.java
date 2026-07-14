@@ -170,10 +170,15 @@ public final class DbStepExecutor implements StepExecutor {
             pkValues.put(column, binds.get(column));
         }
         RunScopedConnection connection = connection(context, datasource, datasourceAlias);
+        // Fail closed BEFORE the INSERT commits if identifiedBy is not a provable unique key of the target
+        // table: a non-unique undo key could otherwise arm a DELETE that matches rows this test never wrote
+        // (the compensator's pre-count net is the second line of defence). Verified via DatabaseMetaData on
+        // the run-scoped connection — no rows read (plan §15; CONFIRMED-HIGH, 2026-07 review).
+        UndoKeyVerifier.verifyUniqueKey(connection.connection(), classification.writeSchema(), classification.writeTable(), pkColumns, datasourceAlias);
         Instant startedAt = Instant.now();
         int rowsAffected;
         NamedParameterStatement statement = NamedParameterStatement.parse(finalSql);
-        try (PreparedStatement prepared = statement.create(connection.connection(), binds)) {
+        try (PreparedStatement prepared = statement.create(connection.connection(), binds, NamedParameterStatement.DEFAULT_STATEMENT_TIMEOUT_SECONDS)) {
             rowsAffected = prepared.executeUpdate();
         } catch (SQLException failure) {
             throw new StandTestException("db.write failed on datasource '" + datasourceAlias + "': " + failure.getMessage(), failure);
@@ -199,7 +204,7 @@ public final class DbStepExecutor implements StepExecutor {
         Instant startedAt = Instant.now();
         List<DbCapture> captures = DbStepParameters.captures(parameters);
         NamedParameterStatement statement = NamedParameterStatement.parse(finalSql);
-        try (PreparedStatement prepared = statement.create(connection.connection(), binds); ResultSet rows = prepared.executeQuery()) {
+        try (PreparedStatement prepared = statement.create(connection.connection(), binds, NamedParameterStatement.DEFAULT_STATEMENT_TIMEOUT_SECONDS); ResultSet rows = prepared.executeQuery()) {
             if (!captures.isEmpty()) {
                 if (!rows.next()) {
                     throw new StandTestException("db.query on '" + datasourceAlias + "' captured columns but the SELECT returned no rows");
@@ -224,6 +229,9 @@ public final class DbStepExecutor implements StepExecutor {
         NamedParameterStatement statement = NamedParameterStatement.parse(finalSql);
         Duration timeout = Duration.ofMillis(DbStepParameters.positiveMillis(parameters, DbStepParameters.TIMEOUT_MILLIS, DbStepParameters.DEFAULT_TIMEOUT_MILLIS));
         Duration pollInterval = Duration.ofMillis(DbStepParameters.positiveMillis(parameters, DbStepParameters.POLL_INTERVAL_MILLIS, DbStepParameters.DEFAULT_POLL_INTERVAL_MILLIS));
+        // Cap each poll's statement at the poll timeout (never above the default bound), so a single blocking
+        // probe cannot overshoot the await window and the whole expect stays bounded (plan §2.5).
+        int probeTimeoutSeconds = boundedStatementTimeoutSeconds(timeout);
         Object[] lastObserved = {"<no rows>"};
         AwaitPolicy policy = AwaitPolicy.builder("db.expectEventually " + datasourceAlias)
                 .timeout(timeout)
@@ -232,7 +240,7 @@ public final class DbStepExecutor implements StepExecutor {
                 .build();
         AwaitResult<Optional<Object>> result = this.awaiter.await(
                 policy,
-                () -> probe(connection, statement, binds, lastObserved),
+                () -> probe(connection, statement, binds, probeTimeoutSeconds, lastObserved),
                 observed -> observed.isPresent() && DbValues.valuesMatch(expected, observed.get()));
         Object value = result
                 .orElseThrow(diagnostics -> expectTimeout(diagnostics, datasourceAlias, finalSql, expected, lastObserved[0]))
@@ -250,7 +258,7 @@ public final class DbStepExecutor implements StepExecutor {
         Instant startedAt = Instant.now();
         NamedParameterStatement statement = NamedParameterStatement.parse(finalSql);
         int rowsAffected;
-        try (PreparedStatement prepared = statement.create(connection.connection(), binds)) {
+        try (PreparedStatement prepared = statement.create(connection.connection(), binds, NamedParameterStatement.DEFAULT_STATEMENT_TIMEOUT_SECONDS)) {
             rowsAffected = prepared.executeUpdate();
         } catch (SQLException failure) {
             throw new StandTestException(operation.stepType() + " failed on datasource '" + datasourceAlias + "': " + failure.getMessage(), failure);
@@ -261,8 +269,8 @@ public final class DbStepExecutor implements StepExecutor {
         return writeSuccess(step, operation, startedAt, datasourceAlias, rowsAffected);
     }
 
-    private Optional<Object> probe(RunScopedConnection connection, NamedParameterStatement statement, Map<String, Object> binds, Object[] lastObserved) {
-        try (PreparedStatement prepared = statement.create(connection.connection(), binds); ResultSet rows = prepared.executeQuery()) {
+    private Optional<Object> probe(RunScopedConnection connection, NamedParameterStatement statement, Map<String, Object> binds, int queryTimeoutSeconds, Object[] lastObserved) {
+        try (PreparedStatement prepared = statement.create(connection.connection(), binds, queryTimeoutSeconds); ResultSet rows = prepared.executeQuery()) {
             if (!rows.next()) {
                 lastObserved[0] = "<no rows>";
                 return Optional.empty();
@@ -441,6 +449,18 @@ public final class DbStepExecutor implements StepExecutor {
     private static String truncate(String sql) {
         String collapsed = sql.replaceAll("\\s+", " ").strip();
         return (collapsed.length() <= TIMEOUT_RENDER_LIMIT) ? collapsed : collapsed.substring(0, TIMEOUT_RENDER_LIMIT) + "...";
+    }
+
+    /**
+     * Bounds a per-statement query timeout (seconds) for a {@code db.expectEventually} poll: the poll
+     * timeout rounded up to whole seconds, at least 1 and never above
+     * {@link NamedParameterStatement#DEFAULT_STATEMENT_TIMEOUT_SECONDS}, so a single blocking probe cannot
+     * overshoot the await window (plan §2.5).
+     */
+    private static int boundedStatementTimeoutSeconds(Duration within) {
+        long seconds = (within.toMillis() + 999L) / 1000L;
+        long bounded = Math.min(Math.max(1L, seconds), NamedParameterStatement.DEFAULT_STATEMENT_TIMEOUT_SECONDS);
+        return (int) bounded;
     }
 
     private static StepResult querySuccess(ScenarioStep step, Instant startedAt, String datasourceAlias, List<DbCapture> captures) {

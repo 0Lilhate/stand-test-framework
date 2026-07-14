@@ -40,7 +40,7 @@ class NamedParameterStatementBindTest {
     void bindsValuesIntoTheStatement() throws SQLException {
         NamedParameterStatement insert = NamedParameterStatement.parse(
                 "INSERT INTO test_data.orders(id, status, test_run_id) VALUES (:id, :status, :run)");
-        try (PreparedStatement statement = insert.create(this.connection, Map.of("id", "o1", "status", "READY", "run", "r1"))) {
+        try (PreparedStatement statement = insert.create(this.connection, Map.of("id", "o1", "status", "READY", "run", "r1"), NamedParameterStatement.DEFAULT_STATEMENT_TIMEOUT_SECONDS)) {
             statement.executeUpdate();
         }
 
@@ -57,7 +57,7 @@ class NamedParameterStatementBindTest {
     void missingBindValueFailsClosed() {
         NamedParameterStatement statement = NamedParameterStatement.parse("SELECT id FROM test_data.orders WHERE id = :missing");
 
-        assertThatThrownBy(() -> statement.create(this.connection, Map.of("other", "x")))
+        assertThatThrownBy(() -> statement.create(this.connection, Map.of("other", "x"), NamedParameterStatement.DEFAULT_STATEMENT_TIMEOUT_SECONDS))
                 .isInstanceOf(StandTestException.class)
                 .hasMessageContaining("No bind value supplied")
                 .hasMessageContaining("missing");

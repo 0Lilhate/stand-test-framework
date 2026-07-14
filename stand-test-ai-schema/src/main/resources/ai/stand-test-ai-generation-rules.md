@@ -18,9 +18,11 @@ enforced later at runtime (and therefore cannot be expressed in a static schema)
    `grpc.unary` require a positive, bounded `timeout` (`<n>ms` / `<n>s` / `<n>m`, at most `99999ms` /
    `999s` / `60m`). Never `0`, negative, empty, or unbounded. The runtime validator independently caps
    every timeout/deadline at 1 hour, so a larger value is rejected even without a schema pass.
-4. **`correlationId` is SDK-owned.** Request it with `correlation.inject: true` on the producing step
-   and await it with `correlation.fromContext: true` on the consuming step. Never hardcode a correlation
-   value.
+4. **`correlationId` is SDK-owned.** Outbound injection is **on by default** whenever the resolved
+   endpoint (service/topic/gRPC target) declares a correlation carrier, so you normally omit
+   `correlation` entirely on the producing step; set `correlation.inject: false` only to opt out. Await it
+   with `correlation.fromContext: true` on the consuming step (matching is explicit). Never hardcode a
+   correlation value.
 5. **Never write secrets inline.** Do not put tokens, passwords, API keys, or `Authorization` headers in
    the document. Secrets come from secret references configured for the environment; when a service
    needs BASIC/BEARER authentication, the SDK injects the `Authorization` header itself from the
@@ -62,7 +64,7 @@ These are provided by the SDK and may be referenced with `${...}`:
 
 Assertions attach to `kafka.expect`, `rest.get`/`rest.post`/`rest.expectEventually` (over the response
 body), and, as a draft, `grpc.unary`, as `assert: [ { "path": "$.x", "equals": ... } ]`. Each targets a
-`path` (JSONPath). **REST steps execute all five matchers**: `equals` (type-aware equality),
+`path` (JSONPath). **REST steps and `grpc.unary` execute all five matchers**: `equals` (type-aware equality),
 `contains` (substring of a String value / element of a List value), `exists` (path presence — JSON null
 counts as present; `exists: false` asserts absence), `notNull` (the present value is/is not JSON null)
 and `matches` (full regex match over a String value). `kafka.expect`/`grpc.unary` still execute
@@ -95,6 +97,9 @@ structurally by the JSON Schema; **runtime** = enforced by the core `ScenarioVal
 | `RAW_JDBC_CLIENT` | No raw JDBC — only the declarative `db.expectEventually` probe. | schema |
 | `NON_WHITELISTED_ENVIRONMENT` | Use only whitelisted environment aliases (resolved at runtime). | runtime |
 | `NON_WHITELISTED_DATASOURCE` | Use only whitelisted datasource aliases (resolved at runtime). | runtime |
+| `NON_WHITELISTED_SERVICE` | Use only whitelisted REST service aliases; the runtime validator rejects an unknown `service` alias pre-flight, before any step runs. | runtime |
+| `NON_WHITELISTED_TOPIC` | Use only whitelisted Kafka topic aliases; the runtime validator rejects an unknown `topic` alias pre-flight, before any step runs. | runtime |
+| `NON_WHITELISTED_GRPC_TARGET` | Use only whitelisted gRPC target aliases; the runtime validator rejects an unknown `target` alias pre-flight, before any step runs. | runtime |
 | `DESTRUCTIVE_SQL_WITHOUT_ALLOW` | No `drop`/`truncate`/`delete`/`update`/`alter` — read-only `SELECT` only. | schema + runtime |
 | `BUSINESS_LOGIC_IN_SDK` | Keep service-specific business logic out of the scenario/SDK. | prompt |
 | `IMPERATIVE_EAGER_IO` | No imperative eager-IO — the document is fully declarative. | schema |
@@ -108,8 +113,9 @@ executable forms:
 - **Bodies/payloads:** use `body.fixture` / `payload.fixture` (a classpath resource). Inline `body.json` /
   `payload.json` is not executable yet. `kafka.send` requires a `payload` (schema fail-closed, matching the
   runtime translator).
-- **Assertions:** REST steps (`rest.get`/`rest.post`/`rest.expectEventually`) execute all five matchers.
-  For `kafka.expect` and `grpc.unary` use `equals` — the other matchers are not executable there yet.
+- **Assertions:** REST steps (`rest.get`/`rest.post`/`rest.expectEventually`) and `grpc.unary` execute all
+  five matchers (`equals`/`contains`/`exists`/`notNull`/`matches`). For `kafka.expect` use `equals` — the
+  other matchers are not executable there yet.
 - **REST polling:** `rest.expectEventually` is fully executable: `timeout` is required (poll interval
   defaults to 200ms), at least one of `expect.status`/`assert` must be present, captures apply to the
   final satisfied response only.

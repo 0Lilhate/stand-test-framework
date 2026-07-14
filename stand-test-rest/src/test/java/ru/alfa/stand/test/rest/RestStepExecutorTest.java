@@ -137,11 +137,24 @@ class RestStepExecutorTest {
     }
 
     @Test
-    @DisplayName("no correlation header is added when injection is not requested")
-    void correlationIdNotInjected() {
-        FakeHttpCaller caller = responding(200, "{}");
-        run(RestStep.get(RestTestSupport.SERVICE, "/x").build(), caller, context(RestTestSupport.registry(BASE_URL), new VariableStore()));
-        assertThat(caller.lastRequest().headers()).doesNotContainKey(RestTestSupport.CORRELATION_HEADER);
+    @DisplayName("correlation is injected by default when the service declares a HEADER carrier; an explicit opt-out and a carrier-less service both skip it")
+    void correlationDefaultOnAndOptOut() {
+        // Default-on: a HEADER-carrier service injects even without an explicit builder call.
+        FakeHttpCaller onByDefault = responding(200, "{}");
+        StepExecutionContext defaultCtx = context(RestTestSupport.registry(BASE_URL), new VariableStore());
+        run(RestStep.get(RestTestSupport.SERVICE, "/x").build(), onByDefault, defaultCtx);
+        assertThat(onByDefault.lastRequest().headers())
+                .containsEntry(RestTestSupport.CORRELATION_HEADER, defaultCtx.scenarioContext().correlationId().value());
+
+        // Explicit opt-out: no header even though the service declares a carrier.
+        FakeHttpCaller optOut = responding(200, "{}");
+        run(RestStep.get(RestTestSupport.SERVICE, "/x").injectCorrelationId(false).build(), optOut, context(RestTestSupport.registry(BASE_URL), new VariableStore()));
+        assertThat(optOut.lastRequest().headers()).doesNotContainKey(RestTestSupport.CORRELATION_HEADER);
+
+        // No carrier declared: nothing to inject and no error.
+        FakeHttpCaller noCarrier = responding(200, "{}");
+        run(RestStep.get(RestTestSupport.SERVICE, "/x").build(), noCarrier, context(RestTestSupport.registryWithoutCorrelation(BASE_URL), new VariableStore()));
+        assertThat(noCarrier.lastRequest().headers()).doesNotContainKey(RestTestSupport.CORRELATION_HEADER);
     }
 
     @Test

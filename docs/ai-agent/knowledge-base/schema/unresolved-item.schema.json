@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stand-test.alfa.ru/schema/unresolved-item.schema.json",
+  "title": "stand-test KB ingestion - unresolved item",
+  "description": "A gap or open question surfaced during extraction: a contract detail the document does not state (missing method/path/topic/table/column/env), an unclear rule, or a fact with no curated home. This is the anti-hallucination sink: whatever cannot be extracted with certainty becomes an unresolved item, NEVER an invented value. Provenance and confidence mandatory. File shape: { unresolved: [ ... ] }.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["unresolved"],
+  "properties": {
+    "documentId": { "$ref": "#/$defs/kebabId" },
+    "unresolved": { "type": "array", "items": { "$ref": "#/$defs/unresolvedItem" } }
+  },
+  "$defs": {
+    "kebabId": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$", "minLength": 2, "maxLength": 64 },
+    "confidence": { "enum": ["high", "medium", "low"] },
+    "noUrl": { "if": { "type": "string" }, "then": { "not": { "pattern": "(://|[jJ][dD][bB][cC]:)" } } },
+    "secretShape": { "if": { "type": "string" }, "then": { "not": { "pattern": "([Bb]earer [A-Za-z0-9._-]{6}|[Bb]asic [A-Za-z0-9+/=]{8}|[Aa]uthorization\\s*[:=]|[Aa][Pp][Ii][-_]?[Kk][Ee][Yy]|[Xx]-[Aa][Pp][Ii]-[Kk][Ee][Yy]|[Pp]assword\\s*[:=]|[Pp]asswd\\s*[:=]|[Ss]ecret\\s*[:=]|AKIA[0-9A-Z]{12}|eyJ[A-Za-z0-9._-]{10})" } } },
+    "safeShort": { "type": "string", "maxLength": 200, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] },
+    "safeLong": { "type": "string", "maxLength": 500, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documentId", "documentName", "quote"],
+      "properties": {
+        "documentId": { "$ref": "#/$defs/kebabId" },
+        "documentName": { "type": "string", "minLength": 1, "maxLength": 300, "allOf": [ { "$ref": "#/$defs/noUrl" } ] },
+        "documentVersion": { "type": ["string", "null"], "maxLength": 40 },
+        "documentDate": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "page": { "type": ["integer", "null"], "minimum": 1 },
+        "section": { "type": ["string", "null"], "maxLength": 160 },
+        "heading": { "type": ["string", "null"], "maxLength": 200 },
+        "quote": { "type": "string", "minLength": 1, "maxLength": 600, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] },
+        "extractionNotes": { "type": ["string", "null"], "maxLength": 500, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] }
+      }
+    },
+    "unresolvedItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "question", "source", "confidence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/kebabId" },
+        "type": {
+          "enum": [
+            "missing-endpoint-path", "missing-http-method", "missing-topic-name", "missing-table-name",
+            "missing-column", "missing-env", "unclear-business-rule", "no-curated-collection",
+            "low-confidence-inference", "unparseable-source", "conflict", "other"
+          ]
+        },
+        "question": { "$ref": "#/$defs/safeLong" },
+        "context": { "$ref": "#/$defs/safeLong" },
+        "source": { "$ref": "#/$defs/source" },
+        "blockingFor": {
+          "type": "array",
+          "items": { "enum": ["service", "endpoint", "kafka-topic", "datasource", "db-table", "db-probe", "grpc-target", "business-flow", "business-rule", "test-scenario"] },
+          "uniqueItems": true,
+          "maxItems": 20
+        },
+        "suggestedResolution": { "$ref": "#/$defs/safeLong" },
+        "proposedProjection": { "enum": ["testCaseMapping.missing", "testCaseMapping.assumptions", null] },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    }
+  }
+}

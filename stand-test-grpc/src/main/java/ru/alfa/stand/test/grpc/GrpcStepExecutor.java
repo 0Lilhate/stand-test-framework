@@ -184,11 +184,17 @@ public final class GrpcStepExecutor implements StepExecutor {
     }
 
     private static String correlationId(Map<String, Object> parameters, GrpcTargetDefinition target, String targetAlias, StepExecutionContext context) {
-        if (!GrpcStepParameters.flag(parameters, GrpcStepParameters.INJECT_CORRELATION_ID)) {
+        CorrelationConfig correlation = target.correlation();
+        boolean hasMetadataCarrier = correlation != null && correlation.source() == CorrelationSource.METADATA;
+        // Default-on: inject when the target declares a METADATA carrier, unless the step opted in/out
+        // explicitly. The SDK owns correlationId (plan §8), so end-to-end traceability is the safe default
+        // rather than a builder call an AI author can silently forget.
+        boolean shouldInject = GrpcStepParameters.injectCorrelationIdFlag(parameters).orElse(hasMetadataCarrier);
+        if (!shouldInject) {
             return null;
         }
-        CorrelationConfig correlation = target.correlation();
-        if (correlation == null || correlation.source() != CorrelationSource.METADATA) {
+        if (!hasMetadataCarrier) {
+            // Only reachable when the step forced injection on a target that declares no METADATA carrier.
             throw new StandTestException("Correlation id injection was requested for gRPC target '" + targetAlias + "', but it has no METADATA correlation config");
         }
         return context.scenarioContext().correlationId().value();

@@ -24,6 +24,7 @@ import ru.alfa.stand.test.core.environment.GrpcTargetDefinition;
 import ru.alfa.stand.test.core.validation.DefaultScenarioValidator;
 import ru.alfa.stand.test.db.DbStepExecutor;
 import ru.alfa.stand.test.grpc.GrpcStepExecutor;
+import ru.alfa.stand.test.kafka.KafkaClientFactory;
 import ru.alfa.stand.test.kafka.KafkaStepExecutor;
 import ru.alfa.stand.test.rest.RestStepExecutor;
 import ru.alfa.stand.test.rest.WebClientHttpCaller;
@@ -102,6 +103,18 @@ final class ExampleStand {
 
     static StandClient kafkaStand(EnvironmentRegistry registry) {
         List<StepExecutor> executors = List.of(new KafkaStepExecutor());
+        DefaultScenarioRunner runner = new DefaultScenarioRunner(
+                executors, new DefaultScenarioValidator(), registry, NoOpReportingEventPublisher.INSTANCE);
+        return new DefaultStandClient(runner);
+    }
+
+    /**
+     * The Kafka client over a custom {@link KafkaClientFactory} — the sanctioned test-double seam that lets
+     * {@code KafkaOfflineExampleTest} run {@code kafka.send}/{@code kafka.expect} against an in-JVM
+     * MockProducer/MockConsumer with no broker.
+     */
+    static StandClient kafkaStand(EnvironmentRegistry registry, KafkaClientFactory clientFactory) {
+        List<StepExecutor> executors = List.of(new KafkaStepExecutor(clientFactory));
         DefaultScenarioRunner runner = new DefaultScenarioRunner(
                 executors, new DefaultScenarioValidator(), registry, NoOpReportingEventPublisher.INSTANCE);
         return new DefaultStandClient(runner);

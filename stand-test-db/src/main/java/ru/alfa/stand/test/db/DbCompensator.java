@@ -92,7 +92,7 @@ final class DbCompensator implements Compensator {
             }
             NamedParameterStatement statement = NamedParameterStatement.parse(deleteSql);
             int rowsAffected;
-            try (PreparedStatement prepared = statement.create(connection.connection(), binds)) {
+            try (PreparedStatement prepared = statement.create(connection.connection(), binds, NamedParameterStatement.DEFAULT_STATEMENT_TIMEOUT_SECONDS)) {
                 rowsAffected = prepared.executeUpdate();
             }
             if (rowsAffected <= 0) {
@@ -108,7 +108,7 @@ final class DbCompensator implements Compensator {
 
     private long countMatching(String countSql, Map<String, Object> binds) throws java.sql.SQLException {
         NamedParameterStatement statement = NamedParameterStatement.parse(countSql);
-        try (PreparedStatement prepared = statement.create(connection.connection(), binds);
+        try (PreparedStatement prepared = statement.create(connection.connection(), binds, NamedParameterStatement.DEFAULT_STATEMENT_TIMEOUT_SECONDS);
                 java.sql.ResultSet rows = prepared.executeQuery()) {
             return rows.next() ? rows.getLong(1) : 0L;
         }

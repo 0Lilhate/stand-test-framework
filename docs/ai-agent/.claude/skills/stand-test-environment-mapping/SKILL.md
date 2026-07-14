@@ -31,9 +31,14 @@ instead use value twins resolved by Spring at context startup — real `${ENV_VA
 `security-protocol` (Kafka cluster). Rules: exactly one twin per field (both = startup failure);
 always keep the `:` empty-default so an unset variable defers the failure to execution (gated
 tests still SKIP); values must be `${ENV_VAR:...}` placeholders — a hardcoded URL in a value
-field is a review finding even though Spring would accept it. Secrets (auth refs, datasource
-user/password, SASL) have NO value twins on any surface, and the plain-JUnit
-`stand-test-environments.yml` stays refs-only (value keys are rejected as unknown fields).
+field is a review finding even though Spring would accept it. Secret credentials (auth
+`password`/`token`, datasource `password`, SASL) MAY also use a Spring value twin on the starter — a
+`${VAR:default}` is resolved and used as the secret — but that materialises the resolved secret in the
+Spring Environment and puts the default in the file, so **prefer the `*-ref` spelling for secrets**; and
+a `*-ref` field must be a bare env-var NAME, never a `${...}` placeholder (Spring collapses it, then it
+is misread as a name — the double-resolution trap). The plain-JUnit `stand-test-environments.yml` has no
+value-twin fields (value keys are rejected as unknown); its `*-ref` fields accept a bare NAME or a
+`${VAR:default}` placeholder, which the SDK's own resolver expands.
 
 ```yaml
 environments:

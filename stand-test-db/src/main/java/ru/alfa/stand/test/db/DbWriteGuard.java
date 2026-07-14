@@ -49,9 +49,27 @@ final class DbWriteGuard {
      * overload, which additionally enforces seed tagging.
      */
     static SqlClassification classifyAndEnforce(String sql, DbOperation operation, DatasourceDefinition datasource, boolean testRunIdPredicateDeclared) {
+        rejectSideEffectingTimeFunction(sql);
         SqlClassification classification = SqlStatementClassifier.classify(sql);
         enforce(classification, operation, datasource, testRunIdPredicateDeclared);
         return classification;
+    }
+
+    /**
+     * Fails closed on a blocking/side-effecting SQL time function
+     * ({@code pg_sleep}/{@code sleep}/{@code waitfor}/{@code benchmark}/{@code dbms_lock}) on the exact
+     * assembled SQL — the runtime re-enforcement that closes the {@code sqlResource} bypass (the static
+     * validator only sees inline {@code sql}, plan §8.6). It also catches a side-effecting function hidden
+     * behind a {@code SELECT} (which classifies as a {@code READ}), so a read cannot run a real sleep on the
+     * stand. Shares {@link SqlStatementClassifier#containsSideEffectingTimeFunction} with the static
+     * validator, so the inline and resource paths cannot drift.
+     */
+    private static void rejectSideEffectingTimeFunction(String sql) {
+        if (SqlStatementClassifier.containsSideEffectingTimeFunction(sql)) {
+            throw new StandTestException("SQL calls a blocking/side-effecting time function "
+                    + "(pg_sleep/sleep/waitfor/benchmark/dbms_lock), which is forbidden — the only sanctioned wait is the "
+                    + "declarative step timeout [" + ForbiddenOperation.THREAD_SLEEP.code() + "]");
+        }
     }
 
     /**
@@ -66,6 +84,7 @@ final class DbWriteGuard {
      */
     static SqlClassification classifyAndEnforce(
             String sql, DbOperation operation, DatasourceDefinition datasource, boolean testRunIdPredicateDeclared, String seedTestRunIdColumn) {
+        rejectSideEffectingTimeFunction(sql);
         SqlClassification classification = SqlStatementClassifier.classify(sql);
         enforce(classification, operation, datasource, testRunIdPredicateDeclared);
         enforceSeedTagColumn(classification, sql, seedTestRunIdColumn);
@@ -114,6 +133,7 @@ final class DbWriteGuard {
      * @return the classification (its {@code writeSchema}/{@code writeTable} identify the target)
      */
     static SqlClassification classifyAndEnforceBusinessWrite(String sql, DatasourceDefinition datasource) {
+        rejectSideEffectingTimeFunction(sql);
         SqlClassification classification = SqlStatementClassifier.classify(sql);
         if (classification.isRejected()) {
             throw new StandTestException("SQL rejected (fail-closed): " + classification.detail());
@@ -152,6 +172,7 @@ final class DbWriteGuard {
      * @return the classification
      */
     static SqlClassification classifyAndEnforceCompensationDelete(String sql, DatasourceDefinition datasource) {
+        rejectSideEffectingTimeFunction(sql);
         SqlClassification classification = SqlStatementClassifier.classify(sql);
         if (classification.isRejected()) {
             throw new StandTestException("Compensation SQL rejected (fail-closed): " + classification.detail());

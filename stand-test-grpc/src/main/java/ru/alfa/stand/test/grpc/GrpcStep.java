@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import ru.alfa.stand.test.core.assertion.AssertionMatcher;
 import ru.alfa.stand.test.core.scenario.GenericStep;
 import ru.alfa.stand.test.core.scenario.ScenarioStep;
 
@@ -45,7 +46,9 @@ public final class GrpcStep {
     private String method;
     private String request;
     private String requestResource;
-    private boolean injectCorrelationId;
+    // Tri-state: null = unset (inject when the resolved target declares a METADATA correlation carrier —
+    // the safe default), TRUE = force-inject, FALSE = explicit opt-out.
+    private Boolean injectCorrelationId;
     private Long deadlineMillis;
 
     private GrpcStep(GrpcOperation operation, String target) {
@@ -134,13 +137,28 @@ public final class GrpcStep {
     }
 
     /**
-     * Requests injection of the SDK-owned correlation id into the outbound metadata, using the carrier
+     * Forces injection of the SDK-owned correlation id into the outbound metadata, using the carrier
      * configured for the target.
+     *
+     * <p>Injection is <strong>on by default</strong> whenever the resolved target declares a METADATA
+     * correlation carrier, so this call is only needed to be explicit; use {@link #injectCorrelationId(boolean)
+     * injectCorrelationId(false)} to opt out.
      *
      * @return this builder
      */
     public GrpcStep injectCorrelationId() {
-        this.injectCorrelationId = true;
+        return injectCorrelationId(true);
+    }
+
+    /**
+     * Explicitly enables ({@code true}) or opts out of ({@code false}) correlation-id injection, overriding
+     * the default (inject when the target declares a METADATA correlation carrier).
+     *
+     * @param inject whether to inject the correlation id
+     * @return this builder
+     */
+    public GrpcStep injectCorrelationId(boolean inject) {
+        this.injectCorrelationId = inject;
         return this;
     }
 
@@ -178,6 +196,76 @@ public final class GrpcStep {
      */
     public GrpcStep assertPath(String jsonPath, Object expectedValue) {
         this.assertions.add(new GrpcAssertion(jsonPath, expectedValue));
+        return this;
+    }
+
+    /**
+     * Asserts that the String value at the path contains the expected substring, or that the List value at
+     * the path contains an element equal to the expected value.
+     *
+     * @param jsonPath the JSONPath expression
+     * @param expectedValue the substring / element to look for (never null)
+     * @return this builder
+     */
+    public GrpcStep assertPathContains(String jsonPath, Object expectedValue) {
+        this.assertions.add(new GrpcAssertion(jsonPath, expectedValue, AssertionMatcher.CONTAINS));
+        return this;
+    }
+
+    /**
+     * Asserts that the String value at the path fully matches the regular expression.
+     *
+     * @param jsonPath the JSONPath expression
+     * @param regex the regular expression (validated before any IO)
+     * @return this builder
+     */
+    public GrpcStep assertPathMatches(String jsonPath, String regex) {
+        this.assertions.add(new GrpcAssertion(jsonPath, Objects.requireNonNull(regex, "regex must not be null"), AssertionMatcher.MATCHES));
+        return this;
+    }
+
+    /**
+     * Asserts that the path is present in the response (a JSON null counts as present).
+     *
+     * @param jsonPath the JSONPath expression
+     * @return this builder
+     */
+    public GrpcStep assertPathExists(String jsonPath) {
+        this.assertions.add(new GrpcAssertion(jsonPath, Boolean.TRUE, AssertionMatcher.EXISTS));
+        return this;
+    }
+
+    /**
+     * Asserts that the path is absent from the response.
+     *
+     * @param jsonPath the JSONPath expression
+     * @return this builder
+     */
+    public GrpcStep assertPathAbsent(String jsonPath) {
+        this.assertions.add(new GrpcAssertion(jsonPath, Boolean.FALSE, AssertionMatcher.EXISTS));
+        return this;
+    }
+
+    /**
+     * Asserts that the path is present and its value is not JSON null.
+     *
+     * @param jsonPath the JSONPath expression
+     * @return this builder
+     */
+    public GrpcStep assertPathNotNull(String jsonPath) {
+        this.assertions.add(new GrpcAssertion(jsonPath, Boolean.TRUE, AssertionMatcher.NOT_NULL));
+        return this;
+    }
+
+    /**
+     * Asserts that the path is present and its value is JSON null (for absence use
+     * {@link #assertPathAbsent}).
+     *
+     * @param jsonPath the JSONPath expression
+     * @return this builder
+     */
+    public GrpcStep assertPathIsNull(String jsonPath) {
+        this.assertions.add(new GrpcAssertion(jsonPath, Boolean.FALSE, AssertionMatcher.NOT_NULL));
         return this;
     }
 
@@ -225,7 +313,11 @@ public final class GrpcStep {
         parameters.put(GrpcStepParameters.METHOD_FULL_NAME, this.method);
         parameters.put(GrpcStepParameters.DEADLINE_MILLIS, this.deadlineMillis);
         parameters.put(GrpcStepParameters.METADATA, Map.copyOf(this.metadata));
-        parameters.put(GrpcStepParameters.INJECT_CORRELATION_ID, this.injectCorrelationId);
+        // Only emit the flag when explicitly set; its absence means "default" (inject when the target
+        // declares a METADATA correlation carrier), decided by the executor.
+        if (this.injectCorrelationId != null) {
+            parameters.put(GrpcStepParameters.INJECT_CORRELATION_ID, this.injectCorrelationId);
+        }
         parameters.put(GrpcStepParameters.ASSERTIONS, assertionMaps());
         parameters.put(GrpcStepParameters.CAPTURES, captureMaps());
         if (this.request != null) {
@@ -240,7 +332,11 @@ public final class GrpcStep {
     private List<Map<String, Object>> assertionMaps() {
         List<Map<String, Object>> list = new ArrayList<>();
         for (GrpcAssertion assertion : this.assertions) {
-            list.add(Map.of(GrpcStepParameters.JSON_PATH, assertion.jsonPath(), GrpcStepParameters.EXPECTED_VALUE, assertion.expectedValue()));
+            if (assertion.matcher() == AssertionMatcher.EQUALS) {
+                list.add(Map.of(GrpcStepParameters.JSON_PATH, assertion.jsonPath(), GrpcStepParameters.EXPECTED_VALUE, assertion.expectedValue()));
+            } else {
+                list.add(Map.of(GrpcStepParameters.JSON_PATH, assertion.jsonPath(), GrpcStepParameters.EXPECTED_VALUE, assertion.expectedValue(), GrpcStepParameters.MATCHER, assertion.matcher().name()));
+            }
         }
         return List.copyOf(list);
     }

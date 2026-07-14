@@ -16,11 +16,12 @@ blocks the workflow.
       value twins above) in the registry.
 - [ ] **No inline secrets** (`SECRET_IN_SOURCE`) — no header/metadata NAME matching
       `authorization|token|password|secret|api[-_]?key|cookie`; no VALUE shaped
-      `Bearer …`/`Basic …`; auth only via registry `auth:` refs. No CREDENTIAL value twins
-      (`user`/`password`/`username`/`token`/`sasl-jaas-config`) in generated artifacts — the
-      starter accepts them, kit policy keeps secrets `*-ref`-only; on the starter surface a
-      `${VAR}` placeholder inside a `*-ref` is also a finding (Spring resolves it into a VALUE
-      — starter refs are bare env-var NAMES).
+      `Bearer …`/`Basic …`; auth only via registry `auth:` (a `*-ref` NAME, or a `${VAR:default}`
+      value twin on the starter — the resolved secret then lives in the Spring Environment, so
+      prefer `*-ref`). A BARE inline secret VALUE (no `${}`) in a starter credential value field is a
+      finding; and a `${VAR}`/`${VAR:default}` placeholder inside a `*-ref` field is the
+      double-resolution trap (Spring resolves it into a VALUE, then the ref is misread as a NAME —
+      starter `*-ref` fields are bare env-var NAMES). Plain-JUnit has no value keys.
 - [ ] **No non-whitelisted environment** (`NON_WHITELISTED_ENVIRONMENT`) — scenario
       environment is a registry key; production is never declared in a test registry.
 - [ ] **No non-whitelisted datasource** (`NON_WHITELISTED_DATASOURCE`) — db steps name

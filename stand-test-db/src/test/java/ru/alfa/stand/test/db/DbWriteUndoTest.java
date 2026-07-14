@@ -270,6 +270,24 @@ class DbWriteUndoTest {
     }
 
     @Test
+    @DisplayName("db.write fails closed when identifiedBy is not the table's primary/unique key (arm-time metadata check)")
+    void write_identifiedByMustBeAUniqueKey() {
+        // 'status' is an inserted, :status-bound column, so it passes the capture checks — but it is not the
+        // table's primary key (id) nor any unique key, so the undo key is not provably unique and is refused.
+        ScenarioStep write = DbStep.write(DbTestSupport.DATASOURCE_ALIAS)
+                .sql("INSERT INTO test_data.orders(id, status) VALUES (:id, :status)")
+                .param("id", "u1")
+                .param("status", "NEW")
+                .identifiedBy("status")
+                .build();
+
+        assertThatThrownBy(() -> this.executor.execute(write, this.context))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("cannot arm a safe undo")
+                .hasMessageContaining("status");
+    }
+
+    @Test
     @DisplayName("an undo that would delete more than one row (non-unique identifiedBy) is FAILED, not a silent APPLIED, and deletes nothing extra")
     void undo_nonUniqueKey_isFailed() throws SQLException {
         try (java.sql.Statement ddl = this.keepAlive.createStatement()) {

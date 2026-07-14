@@ -122,10 +122,17 @@ YAML DSL ────────────────┘                    
   and is the whitelist enforcement point. Nuance: in the Spring starter path, non-secret ENDPOINT
   fields may instead carry Spring-resolved values via value twins (`base-url`/`url`/`target`/
   `bootstrap-servers`/`security-protocol`), wrapped internally as `SecretReferences.literal(...)` so
-  adapters resolve them verbatim; secrets are ALWAYS refs on every surface, and the literal marker is
-  rejected fail-closed in user configuration. Service credentials follow the same model: an optional
-  per-service `AuthConfig` (BASIC/BEARER refs) makes the REST executor inject `Authorization` at
-  execution time — the sanctioned path; inline auth headers in scenarios stay banned.
+  adapters resolve them verbatim. Secret credential fields (auth password/token, datasource password,
+  Kafka SASL) may use the same value-twin spelling — a Spring-resolved `${VAR:default}` is wrapped as a
+  `literal` — with a real consumer trade-off: the resolved secret then materialises in the Spring
+  Environment (actuator `/env`, logs) and any inline default lives in the config file, so the `*-ref`
+  spelling (a bare env-var NAME resolved lazily, never bound into the Environment) stays the choice when a
+  secret must appear nowhere but the variable. Two hard rules survive: the SDK-internal `literal://` marker
+  is rejected fail-closed in user config, and a `*-ref` field must be a bare NAME — never a `${...}`
+  placeholder (on the starter Spring collapses it before the SDK sees the ref, which is then misread as a
+  variable name — the double-resolution trap). Service credentials otherwise follow this value-twin/ref
+  model: an optional per-service `AuthConfig` (BASIC/BEARER) makes the REST executor inject
+  `Authorization` at execution time — the sanctioned path; inline auth headers in scenarios stay banned.
 - Value types are immutable `record`s with defensive copies (`List`/`Set`/`Map.copyOf`).
 
 ## Current state & where to work

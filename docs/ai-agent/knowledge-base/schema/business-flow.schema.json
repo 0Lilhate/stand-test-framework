@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stand-test.alfa.ru/schema/business-flow.schema.json",
+  "title": "stand-test KB ingestion - business flow candidate",
+  "description": "An extracted end-to-end business flow (trigger -> ordered cross-system steps -> expected result). SEMANTIC content with no curated home: it feeds stand-test-scenario-design (step order), never the strict 8-collection contract. Provenance and confidence are mandatory; every free-text field rejects URLs and inline secrets. File shape: { businessFlows: [ ... ] }.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["businessFlows"],
+  "properties": {
+    "documentId": { "$ref": "#/$defs/kebabId" },
+    "businessFlows": { "type": "array", "items": { "$ref": "#/$defs/businessFlow" } }
+  },
+  "$defs": {
+    "kebabId": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$", "minLength": 2, "maxLength": 64 },
+    "confidence": { "enum": ["high", "medium", "low"] },
+    "noUrl": { "if": { "type": "string" }, "then": { "not": { "pattern": "(://|[jJ][dD][bB][cC]:)" } } },
+    "secretShape": { "if": { "type": "string" }, "then": { "not": { "pattern": "([Bb]earer [A-Za-z0-9._-]{6}|[Bb]asic [A-Za-z0-9+/=]{8}|[Aa]uthorization\\s*[:=]|[Aa][Pp][Ii][-_]?[Kk][Ee][Yy]|[Xx]-[Aa][Pp][Ii]-[Kk][Ee][Yy]|[Pp]assword\\s*[:=]|[Pp]asswd\\s*[:=]|[Ss]ecret\\s*[:=]|AKIA[0-9A-Z]{12}|eyJ[A-Za-z0-9._-]{10})" } } },
+    "safeShort": { "type": "string", "maxLength": 200, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] },
+    "safeLong": { "type": "string", "maxLength": 500, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] },
+    "idArray": { "type": "array", "items": { "$ref": "#/$defs/kebabId" }, "uniqueItems": true, "maxItems": 100 },
+    "safeArray": { "type": "array", "items": { "$ref": "#/$defs/safeShort" }, "maxItems": 100 },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documentId", "documentName", "quote"],
+      "properties": {
+        "documentId": { "$ref": "#/$defs/kebabId" },
+        "documentName": { "type": "string", "minLength": 1, "maxLength": 300, "allOf": [ { "$ref": "#/$defs/noUrl" } ] },
+        "documentVersion": { "type": ["string", "null"], "maxLength": 40 },
+        "documentDate": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "page": { "type": ["integer", "null"], "minimum": 1 },
+        "section": { "type": ["string", "null"], "maxLength": 160 },
+        "heading": { "type": ["string", "null"], "maxLength": 200 },
+        "quote": { "type": "string", "minLength": 1, "maxLength": 600, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] },
+        "extractionNotes": { "type": ["string", "null"], "maxLength": 500, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] }
+      }
+    },
+    "businessFlow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "trigger", "steps", "source", "confidence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/kebabId" },
+        "title": { "$ref": "#/$defs/safeShort" },
+        "actors": { "$ref": "#/$defs/safeArray" },
+        "systems": { "$ref": "#/$defs/idArray" },
+        "trigger": { "$ref": "#/$defs/safeLong" },
+        "preconditions": { "$ref": "#/$defs/safeArray" },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["order", "action"],
+            "properties": {
+              "order": { "type": "integer", "minimum": 1 },
+              "actor": { "$ref": "#/$defs/safeShort" },
+              "action": { "$ref": "#/$defs/safeLong" },
+              "target": { "$ref": "#/$defs/safeShort" },
+              "expectedEffect": { "$ref": "#/$defs/safeLong" }
+            }
+          }
+        },
+        "expectedResult": { "$ref": "#/$defs/safeLong" },
+        "failureBehavior": { "$ref": "#/$defs/safeLong" },
+        "parallelism": { "$ref": "#/$defs/safeLong" },
+        "source": { "$ref": "#/$defs/source" },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "relatedArtifacts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "endpoints": { "$ref": "#/$defs/idArray" },
+            "kafkaTopics": { "$ref": "#/$defs/idArray" },
+            "dbTables": { "$ref": "#/$defs/idArray" },
+            "grpcMethods": { "$ref": "#/$defs/idArray" }
+          }
+        }
+      }
+    }
+  }
+}

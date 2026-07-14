@@ -79,9 +79,12 @@ public final class AllureReportingEventPublisher implements ReportingEventPublis
                 // itself stays with the JUnit/Allure integration.
                 stepUuids.remove();
             }
-        } catch (RuntimeException reportingFailure) {
+        } catch (Throwable reportingFailure) {
             // Reporting is a best-effort side-channel (plan §17): a rendering error must never change the
-            // test outcome. Swallowed; becomes a WARN log once SLF4J is wired.
+            // test outcome. Throwable (not just RuntimeException) is swallowed so an Error from a
+            // version-skewed allure-model (LinkageError/NoClassDefFoundError on the consumer classpath)
+            // cannot escape this sink and replace the primary test failure. Swallowed; becomes a WARN log
+            // once SLF4J is wired.
         }
     }
 
@@ -93,9 +96,11 @@ public final class AllureReportingEventPublisher implements ReportingEventPublis
             } else if (event.phase() == StepPhase.FINISHED) {
                 finishStep(event);
             }
-        } catch (RuntimeException reportingFailure) {
+        } catch (Throwable reportingFailure) {
             // Reporting is a best-effort side-channel (plan §17): a rendering error must never change the
-            // test outcome (and must never hide an SDK failure). Swallowed; becomes a WARN log later.
+            // test outcome (and must never hide an SDK failure). Throwable (not just RuntimeException) is
+            // swallowed so an Error from a version-skewed allure-model cannot escape this sink and replace
+            // the primary test failure. Swallowed; becomes a WARN log later.
         }
     }
 

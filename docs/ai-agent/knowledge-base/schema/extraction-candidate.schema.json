@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stand-test.alfa.ru/schema/extraction-candidate.schema.json",
+  "title": "stand-test KB ingestion - extraction candidate",
+  "description": "The general staging contract for one extracted candidate (service/endpoint/kafka-topic/datasource/db-table/db-probe/grpc-target and the semantic/unresolved kinds). PERMISSIVE and SEPARATE from stand-test-knowledge-base.schema.json: it carries provenance, confidence, review and partial/structured extraction the sterile curated KB must never hold. NEVER validate a candidate file with the strict umbrella schema - promotion lifts the projectable subset and re-validates THAT against the curated schema. Every free-text field rejects URLs (noUrl) and inline secrets (secretShape), so a candidate can never smuggle a live host or credential into version control. File shape: { candidates: [ ... ] }.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["candidates"],
+  "properties": {
+    "documentId": { "$ref": "#/$defs/kebabId" },
+    "candidates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/extractionCandidate" }
+    }
+  },
+  "$defs": {
+    "kebabId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "minLength": 2,
+      "maxLength": 64
+    },
+    "confidence": { "enum": ["high", "medium", "low"] },
+    "noUrl": { "if": { "type": "string" }, "then": { "not": { "pattern": "(://|[jJ][dD][bB][cC]:)" } } },
+    "secretShape": {
+      "description": "Rejects inline secrets in any free-text STRING field: Bearer/Basic values, api-key/secret-key, password:/passwd:, Authorization:, x-api-key, AWS keys (AKIA...), JWTs (eyJ...). Null-safe: only constrains strings.",
+      "if": { "type": "string" },
+      "then": { "not": { "pattern": "([Bb]earer [A-Za-z0-9._-]{6}|[Bb]asic [A-Za-z0-9+/=]{8}|[Aa]uthorization\\s*[:=]|[Aa][Pp][Ii][-_]?[Kk][Ee][Yy]|[Xx]-[Aa][Pp][Ii]-[Kk][Ee][Yy]|[Pp]assword\\s*[:=]|[Pp]asswd\\s*[:=]|[Ss]ecret\\s*[:=]|AKIA[0-9A-Z]{12}|eyJ[A-Za-z0-9._-]{10})" } }
+    },
+    "fieldName": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$" },
+    "qualifiedName": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$", "maxLength": 128 },
+    "httpPath": {
+      "type": "string",
+      "pattern": "^/([^/ \\t][^ \\t]*)?$",
+      "maxLength": 300,
+      "not": { "pattern": "(://|[jJ][dD][bB][cC]:)" }
+    },
+    "safeShort": { "type": "string", "maxLength": 200, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] },
+    "safeLong": { "type": "string", "maxLength": 500, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] },
+    "source": {
+      "description": "Mandatory provenance. documentId + documentName + quote required (the auditable backbone). Quote is a redacted verbatim snippet - URLs/hosts must be placeholdered and secrets stripped before it is committed; the true verbatim stays in the gitignored _source/.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documentId", "documentName", "quote"],
+      "properties": {
+        "documentId": { "$ref": "#/$defs/kebabId" },
+        "documentName": { "type": "string", "minLength": 1, "maxLength": 300, "allOf": [ { "$ref": "#/$defs/noUrl" } ] },
+        "documentVersion": { "type": ["string", "null"], "maxLength": 40 },
+        "documentDate": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "page": { "type": ["integer", "null"], "minimum": 1 },
+        "section": { "type": ["string", "null"], "maxLength": 160 },
+        "heading": { "type": ["string", "null"], "maxLength": 200 },
+        "quote": { "type": "string", "minLength": 1, "maxLength": 600, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] },
+        "extractionNotes": { "type": ["string", "null"], "maxLength": 500, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reviewer": { "type": ["string", "null"], "maxLength": 120 },
+        "decision": { "enum": ["pending", "approved", "rejected", "needs-info", null] },
+        "comment": { "type": ["string", "null"], "maxLength": 500, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] }
+      }
+    },
+    "extractionCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidateId", "candidateType", "status", "confidence", "source"],
+      "properties": {
+        "candidateId": { "$ref": "#/$defs/kebabId" },
+        "candidateType": { "enum": ["service", "endpoint", "kafka-topic", "datasource", "db-table", "db-probe", "grpc-target", "business-flow", "business-rule", "test-scenario", "unresolved"] },
+        "status": { "enum": ["new", "existing", "conflict", "needs-review", "approved", "rejected", "applied"] },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "source": { "$ref": "#/$defs/source" },
+        "normalized": {
+          "description": "The projectable identity of the candidate. On promotion this is the seed of the curated entry; provenance/confidence/review are stripped.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": { "$ref": "#/$defs/kebabId" },
+            "alias": { "$ref": "#/$defs/kebabId" },
+            "title": { "$ref": "#/$defs/safeShort" },
+            "description": { "$ref": "#/$defs/safeLong" }
+          }
+        },
+        "extracted": {
+          "description": "Optional structured, STERILE contract detail for the contract candidate kinds. No values that are secrets/URLs are expressible. Facts with no curated home (e.g. a bounded await timeout for endpoint, a db write/seed table) are recorded as unresolved/gaps, never invented here.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "method": { "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"] },
+            "path": { "$ref": "#/$defs/httpPath" },
+            "successStatus": { "type": "integer", "minimum": 100, "maximum": 599 },
+            "requiresAuth": { "type": "boolean" },
+            "requiredFields": { "type": "array", "items": { "$ref": "#/$defs/fieldName" }, "uniqueItems": true, "maxItems": 100 },
+            "serviceAlias": { "$ref": "#/$defs/kebabId" },
+            "topicAlias": { "$ref": "#/$defs/kebabId" },
+            "direction": { "enum": ["produced", "consumed"] },
+            "correlationHeader": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9-]{0,98}$" },
+            "datasourceAlias": { "$ref": "#/$defs/kebabId" },
+            "table": { "$ref": "#/$defs/qualifiedName" },
+            "tagColumn": { "$ref": "#/$defs/fieldName" },
+            "columns": { "type": "array", "items": { "$ref": "#/$defs/fieldName" }, "uniqueItems": true, "maxItems": 200 },
+            "grpcFullMethodName": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.]*/[A-Za-z][A-Za-z0-9_]*$", "maxLength": 200 }
+          }
+        },
+        "naturalKey": {
+          "description": "The category-specific dedup key (method+path / alias / table / fullMethodName). Conflict detection and promotion join on THIS, not on the derived candidateId, so a re-worded extraction of the same real thing does not duplicate.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "method": { "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"] },
+            "path": { "$ref": "#/$defs/httpPath" },
+            "alias": { "$ref": "#/$defs/kebabId" },
+            "serviceAlias": { "$ref": "#/$defs/kebabId" },
+            "table": { "$ref": "#/$defs/qualifiedName" },
+            "fullMethodName": { "type": "string", "maxLength": 200, "allOf": [ { "$ref": "#/$defs/noUrl" } ] }
+          }
+        },
+        "raw": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "text": { "type": "string", "maxLength": 2000, "allOf": [ { "$ref": "#/$defs/noUrl" }, { "$ref": "#/$defs/secretShape" } ] }
+          }
+        },
+        "review": { "$ref": "#/$defs/review" },
+        "promotionBlocked": { "enum": ["curated-collection-missing", "write-not-allowed", null] }
+      }
+    }
+  }
+}

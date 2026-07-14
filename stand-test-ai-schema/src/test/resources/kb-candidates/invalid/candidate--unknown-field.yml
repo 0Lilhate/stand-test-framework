@@ -1,0 +1,10 @@
+candidates:
+  - candidateId: create-payment
+    candidateType: endpoint
+    status: new
+    confidence: high
+    source:
+      documentId: payments-onboarding-spec-v3
+      documentName: "Payments Onboarding Functional Specification"
+      quote: "POST /api/payments creates a payment and returns 201."
+    madeUpField: "unknown fields are forbidden by additionalProperties:false"

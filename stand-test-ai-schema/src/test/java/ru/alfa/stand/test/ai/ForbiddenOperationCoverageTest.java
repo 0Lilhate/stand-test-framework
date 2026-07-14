@@ -14,13 +14,16 @@ class ForbiddenOperationCoverageTest {
      * (or an adapter) actually enforces them, and the generation rules must not under- or over-state
      * that. If enforcement moves, both the code and this table must change together.
      */
-    private static final Map<ForbiddenOperation, String> EXPECTED_LAYER_KEYWORD = Map.of(
-            ForbiddenOperation.THREAD_SLEEP, "runtime",
-            ForbiddenOperation.SECRET_IN_SOURCE, "runtime",
-            ForbiddenOperation.UNBOUNDED_TIMEOUT, "runtime",
-            ForbiddenOperation.DESTRUCTIVE_SQL_WITHOUT_ALLOW, "runtime",
-            ForbiddenOperation.NON_WHITELISTED_ENVIRONMENT, "runtime",
-            ForbiddenOperation.NON_WHITELISTED_DATASOURCE, "runtime");
+    private static final Map<ForbiddenOperation, String> EXPECTED_LAYER_KEYWORD = Map.ofEntries(
+            Map.entry(ForbiddenOperation.THREAD_SLEEP, "runtime"),
+            Map.entry(ForbiddenOperation.SECRET_IN_SOURCE, "runtime"),
+            Map.entry(ForbiddenOperation.UNBOUNDED_TIMEOUT, "runtime"),
+            Map.entry(ForbiddenOperation.DESTRUCTIVE_SQL_WITHOUT_ALLOW, "runtime"),
+            Map.entry(ForbiddenOperation.NON_WHITELISTED_ENVIRONMENT, "runtime"),
+            Map.entry(ForbiddenOperation.NON_WHITELISTED_DATASOURCE, "runtime"),
+            Map.entry(ForbiddenOperation.NON_WHITELISTED_SERVICE, "runtime"),
+            Map.entry(ForbiddenOperation.NON_WHITELISTED_TOPIC, "runtime"),
+            Map.entry(ForbiddenOperation.NON_WHITELISTED_GRPC_TARGET, "runtime"));
 
     @Test
     @DisplayName("every core ForbiddenOperation code is catalogued as a row of the forbidden-ops table")

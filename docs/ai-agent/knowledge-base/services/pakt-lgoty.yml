@@ -1,0 +1,40 @@
+# Curated services promoted from candidates/fs-pk-pakt-lgoty-2025-04-17 (ФС ПК ПАКТ.Льготы, v1.0.4).
+# Schema: ../schema/service.schema.json (strict curated umbrella; provenance/confidence stripped).
+#
+# SCOPE OF THIS PROMOTION (deliberately partial — honours "no invented contracts"):
+#   * Only the three HIGH-confidence, fully-resolved SERVICE IDENTITIES are promoted.
+#   * `environments: [ift]` is a RECORDED HUMAN ASSUMPTION (the ФС names a "тестовый стенд" but no env
+#     alias / base URL — see the source's unresolved-env note); the deployment binding was decided on
+#     promotion, not extracted from the document.
+#   * endpoints / kafkaTopics / datasources are NOT listed: their contracts (REST method+path, topic
+#     name+payload, DB schema) are still UNRESOLVED in the candidate set and are never guessed. kb-lookup
+#     therefore resolves these service aliases but still reports the individual endpoint/topic as missing.
+# Promotion ledger: ../candidates/promotion-log.yml ; human decision: ../candidates/fs-pk-pakt-lgoty-2025-04-17/review-decisions.yml
+services:
+  - id: pk-product-catalog
+    name: "ПК — Продуктовый каталог (Такса)"
+    description: "Модуль Таксы: внутренний REST-сервис обработки ЛТР/ИТР, операция обработки, журнал PACTPREFLog, Kafka-уведомление МУП."
+    domain: taksa
+    environments:
+      - ift
+    tags:
+      - taksa
+      - pk
+  - id: mup-subscription-module
+    name: "МУП — Модуль управления подписками (Такса)"
+    description: "Вызывает внутренний REST-сервис ПК; потребитель Kafka-уведомления о привязке ИТ к льготируемым индексам."
+    domain: taksa
+    environments:
+      - ift
+    tags:
+      - taksa
+      - mup
+  - id: pakt-lgoty
+    name: "ПАКТ.Льготы"
+    description: "Мастер-система льготных/индивидуальных тарифов Банка; источник ЛТР/ИТР, передаёт их в МУП."
+    domain: taksa
+    environments:
+      - ift
+    tags:
+      - taksa
+      - benefits

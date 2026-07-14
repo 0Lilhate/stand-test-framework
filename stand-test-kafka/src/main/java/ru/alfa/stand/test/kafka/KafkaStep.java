@@ -44,7 +44,9 @@ public final class KafkaStep {
     private String body;
     private String bodyResource;
     private String key;
-    private boolean injectCorrelationId;
+    // Tri-state (kafka.send only): null = unset (inject when the resolved topic declares a HEADER
+    // correlation carrier — the safe default), TRUE = force-inject, FALSE = explicit opt-out.
+    private Boolean injectCorrelationId;
     private boolean correlationIdFromContext;
     private Long timeoutMillis;
     private Long pollTimeoutMillis;
@@ -133,13 +135,28 @@ public final class KafkaStep {
     }
 
     /**
-     * Requests injection of the SDK-owned correlation id into the outbound message, using the carrier
+     * Forces injection of the SDK-owned correlation id into the outbound message, using the carrier
      * configured for the target topic ({@code kafka.send} only).
+     *
+     * <p>Injection is <strong>on by default</strong> whenever the resolved topic declares a HEADER
+     * correlation carrier, so this call is only needed to be explicit; use {@link #injectCorrelationId(boolean)
+     * injectCorrelationId(false)} to opt out.
      *
      * @return this builder
      */
     public KafkaStep injectCorrelationId() {
-        this.injectCorrelationId = true;
+        return injectCorrelationId(true);
+    }
+
+    /**
+     * Explicitly enables ({@code true}) or opts out of ({@code false}) correlation-id injection
+     * ({@code kafka.send} only), overriding the default (inject when the topic declares a HEADER carrier).
+     *
+     * @param inject whether to inject the correlation id
+     * @return this builder
+     */
+    public KafkaStep injectCorrelationId(boolean inject) {
+        this.injectCorrelationId = inject;
         return this;
     }
 
@@ -247,7 +264,7 @@ public final class KafkaStep {
     }
 
     private void validateExpect() {
-        if (this.body != null || this.bodyResource != null || this.injectCorrelationId) {
+        if (this.body != null || this.bodyResource != null || this.injectCorrelationId != null) {
             throw new IllegalStateException("body / bodyFromResource / injectCorrelationId apply to kafka.send, not kafka.expect");
         }
         // Parallel-safety (plan §15): an expect must select by a per-run-unique discriminator, else two
@@ -289,7 +306,11 @@ public final class KafkaStep {
             parameters.put(KafkaStepParameters.BODY_RESOURCE, this.bodyResource);
         }
         if (this.operation == KafkaOperation.SEND) {
-            parameters.put(KafkaStepParameters.INJECT_CORRELATION_ID, this.injectCorrelationId);
+            // Only emit the flag when explicitly set; its absence means "default" (inject when the topic
+            // declares a HEADER correlation carrier), decided by the executor.
+            if (this.injectCorrelationId != null) {
+                parameters.put(KafkaStepParameters.INJECT_CORRELATION_ID, this.injectCorrelationId);
+            }
         } else {
             parameters.put(KafkaStepParameters.CORRELATION_FROM_CONTEXT, this.correlationIdFromContext);
             parameters.put(KafkaStepParameters.ASSERTIONS, assertionMaps());

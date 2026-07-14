@@ -1,0 +1,32 @@
+# promotion-log.yml — append-only ledger of curated-KB promotions.
+# curatedId -> the source document + version + date it was last promoted from, and when.
+# (No JSON Schema by design — like glossary/review-decisions, this is a human/ops record, not a
+# schema-validated candidate; the candidate-validation test skips it by name.)
+promotions:
+  - curatedId: pk-product-catalog
+    curatedCollection: services
+    documentId: fs-pk-pakt-lgoty-2025-04-17
+    documentVersion: "1.0.4"
+    documentDate: "2025-04-17"
+    promotedAt: "2026-07-14"
+    confidence: high
+    note: "service identity only; environments:[ift] is a recorded promotion-time assumption (no env/base-url in source); endpoints/topics/db left unresolved (not invented)."
+  - curatedId: mup-subscription-module
+    curatedCollection: services
+    documentId: fs-pk-pakt-lgoty-2025-04-17
+    documentVersion: "1.0.4"
+    documentDate: "2025-04-17"
+    promotedAt: "2026-07-14"
+    confidence: high
+    note: "service identity only; environments:[ift] assumed; contracts unresolved."
+  - curatedId: pakt-lgoty
+    curatedCollection: services
+    documentId: fs-pk-pakt-lgoty-2025-04-17
+    documentVersion: "1.0.4"
+    documentDate: "2025-04-17"
+    promotedAt: "2026-07-14"
+    confidence: high
+    note: "master-system identity only; environments:[ift] assumed; contracts unresolved."
+# NOT promoted (blocked, stay in candidates/): tk-tariff-calculator (medium), dwh (low); every endpoint,
+# kafka-topic, datasource, db-table candidate (unresolved method/path/name/schema) — see the document's
+# unresolved.candidates.yml and review-decisions.yml.

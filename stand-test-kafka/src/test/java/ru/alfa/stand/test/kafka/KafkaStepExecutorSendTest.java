@@ -87,9 +87,21 @@ class KafkaStepExecutorSendTest {
     }
 
     @Test
-    @DisplayName("no correlation header is added when injection is not requested")
-    void noCorrelationWhenNotRequested() {
-        run(KafkaStep.send(KafkaTestSupport.REQUEST_ALIAS).body("{}").build(), context(new VariableStore()));
+    @DisplayName("correlation is injected by default when the topic declares a HEADER carrier; an explicit opt-out and a carrier-less topic both skip it")
+    void correlationDefaultOnAndOptOut() {
+        // Default-on: a HEADER-carrier topic injects even without an explicit builder call.
+        StepExecutionContext ctx = context(new VariableStore());
+        run(KafkaStep.send(KafkaTestSupport.REQUEST_ALIAS).body("{}").build(), ctx);
+        assertThat(header(this.producer.history().get(0), KafkaTestSupport.CORRELATION_HEADER))
+                .isEqualTo(ctx.scenarioContext().correlationId().value());
+
+        // Explicit opt-out: no header even though the topic declares a carrier.
+        run(KafkaStep.send(KafkaTestSupport.REQUEST_ALIAS).body("{}").injectCorrelationId(false).build(), context(new VariableStore()));
+        assertThat(header(this.producer.history().get(0), KafkaTestSupport.CORRELATION_HEADER)).isNull();
+
+        // No carrier declared: nothing to inject and no error.
+        EnvironmentRegistry noCarrier = KafkaTestSupport.registry(KafkaTestSupport.topicWithoutCorrelation(KafkaTestSupport.REQUEST_ALIAS, KafkaTestSupport.REQUEST_NAME));
+        run(KafkaStep.send(KafkaTestSupport.REQUEST_ALIAS).body("{}").build(), KafkaTestSupport.context(noCarrier, new VariableStore()));
         assertThat(header(this.producer.history().get(0), KafkaTestSupport.CORRELATION_HEADER)).isNull();
     }
 

@@ -1,0 +1,43 @@
+documentId: payments-onboarding-spec-v3
+generatedAt: "2026-07-13"
+conflicts:
+  - conflictId: endpoint-path-create-payment
+    type: endpoint-path-mismatch
+    category: endpoints
+    autoResolvable: false
+    whoDecides: human
+    status: unresolved
+    field: path
+    sides:
+      - side: existing-kb
+        value:
+          path: /api/payments
+        provenance:
+          source: curated-kb
+          kbFile: endpoints/payments-api.yml
+          kbEntryId: create-payment
+          lastPromotedFrom:
+            documentId: payments-onboarding-spec-v2
+            documentVersion: "2.0"
+            documentDate: "2025-11-02"
+      - side: candidate
+        value:
+          path: /api/v2/payments
+        provenance:
+          documentId: payments-onboarding-spec-v3
+          documentName: "Payments Onboarding Functional Specification"
+          documentVersion: "3.1"
+          documentDate: "2026-05-20"
+          page: 14
+          section: "4.2"
+          heading: "Create payment"
+          quote: "The create-payment operation is exposed under /api/v2/payments."
+    suggestedResolution:
+      hint: prefer-candidate
+      rationale: "Candidate documentDate is newer; a v1 to v2 path bump is likely intentional."
+      confidence: medium
+    resolution:
+      decidedBy: null
+      decidedAt: null
+      chosenSide: null
+      note: null

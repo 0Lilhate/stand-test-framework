@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stand-test.alfa.ru/schema/source-document.schema.json",
+  "title": "stand-test KB ingestion - source document",
+  "description": "One ingested unstructured specification (docx/pdf/markdown/txt/html). This is STAGING metadata, NEVER routed through stand-test-knowledge-base.schema.json. It records the provenance root and a re-ingest hash. It carries no secret values and no URLs - sourcePath is a repo-relative path under the gitignored _source/ tree, not a URL. File shape: { document: {...} }.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["document"],
+  "properties": {
+    "document": { "$ref": "#/$defs/sourceDocument" }
+  },
+  "$defs": {
+    "kebabId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "minLength": 2,
+      "maxLength": 64
+    },
+    "isoDate": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "noUrl": {
+      "description": "No URLs, no JDBC strings - even in identity/label fields. Null-safe: only constrains strings.",
+      "if": { "type": "string" },
+      "then": { "not": { "pattern": "(://|[jJ][dD][bB][cC]:)" } }
+    },
+    "sourceDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documentId", "documentName", "documentType", "status"],
+      "properties": {
+        "documentId": {
+          "description": "Stable kebab-case id, mechanically derived from the file name/title. Also the candidates/<documentId>/ directory name. The same document re-derives the same id.",
+          "$ref": "#/$defs/kebabId"
+        },
+        "documentName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "allOf": [ { "$ref": "#/$defs/noUrl" } ]
+        },
+        "documentType": { "enum": ["docx", "pdf", "markdown", "txt", "html", "unknown"] },
+        "documentVersion": { "type": ["string", "null"], "maxLength": 40 },
+        "documentDate": { "$ref": "#/$defs/isoDate" },
+        "sourcePath": {
+          "description": "Repo-relative path to the original binary under the gitignored candidates/<documentId>/_source/raw/ tree. Never a URL/JDBC string.",
+          "type": ["string", "null"],
+          "maxLength": 300,
+          "allOf": [ { "$ref": "#/$defs/noUrl" } ]
+        },
+        "sourceHash": {
+          "description": "sha256 of the exact source the extraction ran against - used to detect a repeated ingest of the same bytes.",
+          "type": ["string", "null"],
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "domain": { "oneOf": [ { "$ref": "#/$defs/kebabId" }, { "type": "null" } ] },
+        "systems": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/kebabId" },
+          "uniqueItems": true,
+          "maxItems": 50
+        },
+        "relatedDocuments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/kebabId" },
+          "uniqueItems": true,
+          "maxItems": 50
+        },
+        "ingestedAt": { "$ref": "#/$defs/isoDate" },
+        "ingestedBy": {
+          "type": ["string", "null"],
+          "maxLength": 120,
+          "allOf": [ { "$ref": "#/$defs/noUrl" } ]
+        },
+        "status": { "enum": ["parsed", "candidates_created", "reviewed", "applied", "rejected"] }
+      }
+    }
+  }
+}

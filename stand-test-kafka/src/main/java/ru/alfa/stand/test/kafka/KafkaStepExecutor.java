@@ -107,6 +107,20 @@ public final class KafkaStepExecutor implements StepExecutor {
     }
 
     /**
+     * Creates an executor with a custom {@link KafkaClientFactory} (default environment reference resolver
+     * and a system-backed awaiter) — a sanctioned test-double seam for driving {@code kafka.send}/
+     * {@code kafka.expect} against an in-JVM broker double (an embedded broker or the Apache
+     * {@code MockProducer}/{@code MockConsumer}) with NO real broker, exactly as the SDK's own tests and the
+     * offline example do. The factory only creates clients; all SDK logic (alias resolution, correlation,
+     * per-run selection, assertions) still runs in the executor, so this is not a raw-client bypass.
+     *
+     * @param clientFactory the Kafka client factory (e.g. an in-JVM / mock double)
+     */
+    public KafkaStepExecutor(KafkaClientFactory clientFactory) {
+        this(clientFactory, new EnvironmentReferenceResolver(), Awaiter.create());
+    }
+
+    /**
      * Creates an executor with explicit collaborators (for tests).
      *
      * @param clientFactory the Kafka client factory
@@ -224,7 +238,11 @@ public final class KafkaStepExecutor implements StepExecutor {
         ResolvedKafkaCluster cluster = resolveClusterReferences(cluster(environment, topic, context));
         String groupId = "stand-test-" + context.scenarioContext().testRunId().value() + "-" + topicAlias;
         Consumer<String, String> consumer = this.clientFactory.createConsumer(cluster, groupId);
-        ArmedConsumer armed = new ArmedConsumer(consumer, topicAlias, topic.name());
+        // The topic's HEADER correlation carrier (if any) lets the ArmedConsumer evict other runs' records
+        // from a busy shared topic; a topic with no HEADER carrier gets no eviction (null header name).
+        CorrelationConfig topicCorrelation = topic.correlation();
+        String correlationHeaderName = (topicCorrelation != null && topicCorrelation.source() == CorrelationSource.HEADER) ? topicCorrelation.name() : null;
+        ArmedConsumer armed = new ArmedConsumer(consumer, topicAlias, topic.name(), correlationHeaderName, context.scenarioContext().correlationId().value());
         // Register before arming, so a failure during positioning still hands the consumer to the
         // runner's ResourceScope.closeAll() and never leaks it.
         scope.register(CONSUMER_KEY_PREFIX + topicAlias, armed);
@@ -285,11 +303,17 @@ public final class KafkaStepExecutor implements StepExecutor {
     }
 
     private static void injectCorrelationId(Map<String, Object> parameters, TopicDefinition topic, String topicAlias, Map<String, String> headers, StepExecutionContext context) {
-        if (!KafkaStepParameters.flag(parameters, KafkaStepParameters.INJECT_CORRELATION_ID)) {
+        CorrelationConfig correlation = topic.correlation();
+        boolean hasHeaderCarrier = correlation != null && correlation.source() == CorrelationSource.HEADER;
+        // Default-on: inject when the topic declares a HEADER carrier, unless the step opted in/out
+        // explicitly. The SDK owns correlationId (plan §8), so end-to-end traceability is the safe default
+        // rather than a builder call an AI author can silently forget.
+        boolean shouldInject = KafkaStepParameters.injectCorrelationIdFlag(parameters).orElse(hasHeaderCarrier);
+        if (!shouldInject) {
             return;
         }
-        CorrelationConfig correlation = topic.correlation();
-        if (correlation == null || correlation.source() != CorrelationSource.HEADER) {
+        if (!hasHeaderCarrier) {
+            // Only reachable when the step forced injection on a topic that declares no HEADER carrier.
             throw new StandTestException("Correlation id injection was requested for topic '" + topicAlias + "', but only the HEADER carrier is implemented (KEY/PAYLOAD_FIELD are a later sub-iteration)");
         }
         headers.put(correlation.name(), context.scenarioContext().correlationId().value());

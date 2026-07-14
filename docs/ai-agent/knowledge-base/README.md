@@ -38,6 +38,7 @@ Every KB file is a YAML document with **exactly one collection key** validated b
 | `kafka/` | `kafkaTopics` | topic contract: direction, HEADER correlation, equals-only assertions, timeout | `schema/kafka-topic.schema.json` |
 | `db/` | `datasources` | datasource whitelist entry: access mode, schema whitelist | `schema/datasource.schema.json` |
 | `db/` | `dbProbes` | sanctioned single-value `select` probes with named `:params` | `schema/db-probe.schema.json` |
+| `db/` | `dbTables` | table contract: schema-qualified name, columns, primary key, testRunId tag column | `schema/db-table.schema.json` |
 | `grpc/` | `grpcTargets` | target + unary methods, METADATA correlation, mandatory deadline | `schema/grpc-target.schema.json` |
 | `environments/` | `environments` | env-var **references** + real per-env topic names | `schema/environment.schema.json` |
 | `mappings/` | `testCaseMappings` | traceability: case → matched entries → generated test | `schema/test-case-mapping.schema.json` |

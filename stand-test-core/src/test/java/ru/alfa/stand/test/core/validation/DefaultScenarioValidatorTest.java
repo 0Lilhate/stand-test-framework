@@ -10,6 +10,8 @@ import ru.alfa.stand.test.core.environment.DatasourceDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
+import ru.alfa.stand.test.core.environment.ServiceEndpointDefinition;
+import ru.alfa.stand.test.core.environment.TopicDefinition;
 import ru.alfa.stand.test.core.identifier.ScenarioId;
 import ru.alfa.stand.test.core.scenario.GenericStep;
 import ru.alfa.stand.test.core.scenario.Scenario;
@@ -294,6 +296,39 @@ class DefaultScenarioValidatorTest {
     }
 
     @Test
+    @DisplayName("guardrail: a non-whitelisted service/topic/grpc-target alias is rejected pre-flight")
+    void guardrail_nonWhitelistedAliases_rejected() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(new GenericStep("s1", "rest.get", "", Map.of(StepParameterKeys.SERVICE, "unknown-service", StepParameterKeys.PATH, "/api")))
+                .step(new GenericStep("s2", "kafka.expect", "", Map.of(StepParameterKeys.TOPIC, "unknown-topic", StepParameterKeys.TIMEOUT_MILLIS, 1_000)))
+                .step(new GenericStep("s3", "grpc.unary", "", Map.of(StepParameterKeys.TARGET, "unknown-target", StepParameterKeys.METHOD_FULL_NAME, "pkg.Svc/M", StepParameterKeys.DEADLINE_MILLIS, 1_000)))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, mainDbRegistry());
+
+        assertThat(result.errors()).extracting(ValidationIssue::code)
+                .contains(
+                        ForbiddenOperation.NON_WHITELISTED_SERVICE.code(),
+                        ForbiddenOperation.NON_WHITELISTED_TOPIC.code(),
+                        ForbiddenOperation.NON_WHITELISTED_GRPC_TARGET.code());
+    }
+
+    @Test
+    @DisplayName("guardrail: whitelisted service/topic aliases pass the pre-flight whitelist")
+    void guardrail_whitelistedAliases_pass() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(restStep("s1", Map.of("Accept", "application/json")))
+                .step(timedStep("s2", StepParameterKeys.TIMEOUT_MILLIS, 30_000L))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, mainDbRegistry());
+
+        assertThat(result.isValid()).isTrue();
+    }
+
+    @Test
     @DisplayName("the structural-only validate ignores the whitelist (no registry)")
     void structuralValidate_ignoresWhitelist() {
         Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
@@ -311,8 +346,13 @@ class DefaultScenarioValidatorTest {
     private static EnvironmentRegistry mainDbRegistry() {
         DatasourceDefinition datasource = new DatasourceDefinition(
                 "mainDb", "MAIN_DB_URL", "MAIN_DB_USER", "MAIN_DB_PASSWORD", Set.of("public"), true);
+        // Whitelist the aliases the rest/kafka helper steps use, so the pre-flight alias whitelist
+        // (NON_WHITELISTED_SERVICE/TOPIC) does not flag them and the value-level guardrail assertions are
+        // exercised in isolation.
+        ServiceEndpointDefinition service = new ServiceEndpointDefinition("client-service", "CLIENT_SERVICE_URL", null, null);
+        TopicDefinition topic = new TopicDefinition("response-topic", "response.topic.physical", null, null);
         EnvironmentDefinition environment = new EnvironmentDefinition(
-                "ift", Map.of(), Map.of(), Map.of("mainDb", datasource), Map.of());
+                "ift", Map.of("client-service", service), Map.of("response-topic", topic), Map.of("mainDb", datasource), Map.of());
         return new InMemoryEnvironmentRegistry(Map.of("ift", environment));
     }
 

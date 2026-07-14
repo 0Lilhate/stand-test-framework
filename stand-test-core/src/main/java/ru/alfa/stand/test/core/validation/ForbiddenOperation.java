@@ -33,6 +33,15 @@ public enum ForbiddenOperation {
     /** Connecting to a datasource that is not whitelisted. */
     NON_WHITELISTED_DATASOURCE("NON_WHITELISTED_DATASOURCE", "Connecting to a datasource that is not whitelisted"),
 
+    /** Calling a REST service alias that is not whitelisted in the environment. */
+    NON_WHITELISTED_SERVICE("NON_WHITELISTED_SERVICE", "Calling a service alias that is not whitelisted"),
+
+    /** Using a Kafka topic alias that is not whitelisted in the environment. */
+    NON_WHITELISTED_TOPIC("NON_WHITELISTED_TOPIC", "Using a topic alias that is not whitelisted"),
+
+    /** Calling a gRPC target alias that is not whitelisted in the environment. */
+    NON_WHITELISTED_GRPC_TARGET("NON_WHITELISTED_GRPC_TARGET", "Calling a gRPC target alias that is not whitelisted"),
+
     /** Destructive SQL without an explicit write/destructive allow flag. */
     DESTRUCTIVE_SQL_WITHOUT_ALLOW("DESTRUCTIVE_SQL_WITHOUT_ALLOW", "Destructive SQL without an explicit write or destructive allow flag"),
 

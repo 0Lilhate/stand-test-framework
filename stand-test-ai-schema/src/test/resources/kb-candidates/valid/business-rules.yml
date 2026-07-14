@@ -1,0 +1,23 @@
+documentId: payments-onboarding-spec-v3
+businessRules:
+  - id: amount-limit-rule
+    title: "Reject payments over the account limit"
+    condition: "If the amount is greater than the account limit"
+    action: "Reject the payment with status REJECTED and code LIMIT_EXCEEDED"
+    exceptions: ["Privileged accounts bypass the limit check"]
+    priority: high
+    appliesTo:
+      systems: [payments-api]
+      operations: ["create payment"]
+      entities: ["payment", "account"]
+    testImplications:
+      positiveCases: ["Amount below the limit is accepted"]
+      negativeCases: ["Amount above the limit returns REJECTED with LIMIT_EXCEEDED"]
+    source:
+      documentId: payments-onboarding-spec-v3
+      documentName: "Payments Onboarding Functional Specification"
+      page: 22
+      section: "6.2"
+      heading: "Limits"
+      quote: "If the amount exceeds the account limit the payment is rejected with LIMIT_EXCEEDED."
+    confidence: high

@@ -85,6 +85,17 @@ public final class KafkaStepParameters {
         return Boolean.TRUE.equals(parameters.get(key));
     }
 
+    /**
+     * The explicit correlation-injection choice, if the {@code kafka.send} step set one:
+     * {@code Optional.of(true)} to force injection, {@code Optional.of(false)} to opt out,
+     * {@code Optional.empty()} when unset (the executor then defaults to injecting when the topic declares a
+     * HEADER correlation carrier).
+     */
+    static Optional<Boolean> injectCorrelationIdFlag(Map<String, Object> parameters) {
+        Object value = parameters.get(INJECT_CORRELATION_ID);
+        return (value instanceof Boolean flag) ? Optional.of(flag) : Optional.empty();
+    }
+
     static long positiveMillis(Map<String, Object> parameters, String key, long defaultValue) {
         Object value = parameters.get(key);
         if (value == null) {

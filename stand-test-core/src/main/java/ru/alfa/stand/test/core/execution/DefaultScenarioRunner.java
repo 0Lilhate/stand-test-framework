@@ -497,9 +497,12 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
     private void publish(ScenarioEvent event) {
         try {
             reportingEventPublisher.publish(event);
-        } catch (RuntimeException reportingFailure) {
+        } catch (Throwable reportingFailure) {
             // Reporting is a best-effort side-channel (plan §17): a publisher failure must never change
-            // the test outcome. Swallowed here, but logged at WARN.
+            // the test outcome. Throwable (not just RuntimeException) is swallowed — exactly as
+            // closeQuietly does — so an Error from a version-skewed reporting sink (e.g. a LinkageError /
+            // NoClassDefFoundError from a mismatched allure-model on the consumer classpath) cannot escape
+            // and replace the primary test failure the runner is about to throw. Logged at WARN.
             LOG.warn("Reporting publisher failed for a scenario event (best-effort, ignored)", reportingFailure);
         }
     }
@@ -507,9 +510,12 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
     private void publish(StepEvent event) {
         try {
             reportingEventPublisher.publish(event);
-        } catch (RuntimeException reportingFailure) {
+        } catch (Throwable reportingFailure) {
             // Reporting is a best-effort side-channel (plan §17): a publisher failure must never change
-            // the test outcome. Swallowed here, but logged at WARN.
+            // the test outcome. Throwable (not just RuntimeException) is swallowed — exactly as
+            // closeQuietly does — so an Error from a version-skewed reporting sink (e.g. a LinkageError /
+            // NoClassDefFoundError from a mismatched allure-model on the consumer classpath) cannot escape
+            // and replace the primary test failure the runner is about to throw. Logged at WARN.
             LOG.warn("Reporting publisher failed for a step event (best-effort, ignored)", reportingFailure);
         }
     }
