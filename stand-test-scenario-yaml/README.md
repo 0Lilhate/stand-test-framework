@@ -26,6 +26,8 @@ Full design and the surface→internal mapping: `docs/arch/stand-test-scenario-y
 
 REST steps accept `assert` in two forms: the map shorthand `{"$.path": expectedValue}` (equals) and the
 list form `[{path: "$.x", contains: "v"}, ...]` with one matcher per item
-(`equals`/`contains`/`exists`/`notNull`/`matches`) — kafka/grpc accept the map form only (their executors
-run equals). `rest.expectEventually` (GET-polling) takes the usual REST fields minus `body`, plus
+(`equals`/`contains`/`exists`/`notNull`/`matches`). `grpc.unary` accepts both forms too (it shares the same
+`assertionsWithMatchers` translation, and is reachable from the AI surface only — the given/then surface
+does not dispatch `grpc.*`); **kafka accepts the map form only**, since its executor runs equals.
+`rest.expectEventually` (GET-polling) takes the usual REST fields minus `body`, plus
 `timeout`/`pollInterval` and at least one of `expectStatus`/`assert`.

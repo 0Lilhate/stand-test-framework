@@ -1,54 +1,57 @@
 # stand-test-sdk
 
-An internal Java **test SDK** for writing integration/e2e autotests against **real DEV/IFT stands**.
-It is a thin facade over mature tools (WebClient, `kafka-clients`, JDBC, gRPC, JUnit 5, Allure) that
-gives every team one consistent way to describe a scenario, wait for asynchronous effects (no
-`Thread.sleep`), correlate calls (`scenarioId`/`testRunId`/`correlationId` are SDK-owned) and report
-results — plus a constrained declarative format safe for AI-generated tests.
+Внутренний Java **test SDK** для написания интеграционных/e2e-автотестов против **реальных стендов
+DEV/IFT**. Это тонкий фасад над зрелыми инструментами (WebClient, `kafka-clients`, JDBC, gRPC, JUnit 5,
+Allure), который даёт каждой команде один согласованный способ описать сценарий, дождаться асинхронных
+эффектов (без `Thread.sleep`), скоррелировать вызовы (`scenarioId`/`testRunId`/`correlationId` принадлежат
+SDK) и отчитаться о результатах — плюс ограниченный декларативный формат, безопасный для AI-генерации
+тестов.
 
-Both DSL inputs converge on one immutable model; only that model is executed:
+Оба входных DSL сходятся в одну immutable-модель; исполняется только она:
 
 ```
-Java DSL (lazy builder) ─┐
-                         ├─▶ Scenario Model ─▶ ScenarioValidator ─▶ ScenarioRunner ─▶ StepExecutor SPI ─▶ adapters ─▶ real DEV/IFT stand
-YAML DSL ────────────────┘
+Java DSL (ленивый билдер) ─┐
+                           ├─▶ Scenario Model ─▶ ScenarioValidator ─▶ ScenarioRunner ─▶ StepExecutor SPI ─▶ адаптеры ─▶ реальный стенд DEV/IFT
+YAML DSL ──────────────────┘
 ```
 
-The architectural source of truth is [docs/arch/stand-test-sdk-implementation-plan.md](docs/arch/stand-test-sdk-implementation-plan.md).
+Архитектурный источник истины — [docs/arch/stand-test-sdk-implementation-plan.md](docs/arch/stand-test-sdk-implementation-plan.md).
+Компактный обзор устройства библиотеки для контрибьюторов (с диаграммами) —
+[docs/arch/architecture-overview.md](docs/arch/architecture-overview.md).
 
-## Modules
+## Модули
 
-| Module | What it is |
-|--------|------------|
-| [stand-test-core](stand-test-core/README.md) | Scenario model, SPI, validation, guardrails, result/event models — JDK-only, no adapter deps |
-| [stand-test-await](stand-test-await/README.md) | The single await mechanism (deterministic polling, injectable time source) |
-| [stand-test-junit](stand-test-junit/README.md) | `@StandTest` JUnit 5 extension — injects a `StandClient` assembled via `ServiceLoader` |
-| [stand-test-rest](stand-test-rest/README.md) | REST steps (`RestStep`), correlation header injection, JSON assertions/captures |
-| [stand-test-kafka](stand-test-kafka/README.md) | Kafka steps (`kafka.send`/`kafka.expect`), header correlation, bounded clients |
-| [stand-test-db](stand-test-db/README.md) | DB probe/assert steps with fail-closed SQL write guard |
-| [stand-test-grpc](stand-test-grpc/README.md) | gRPC unary steps via server reflection + `DynamicMessage`, mandatory deadline |
-| [stand-test-allure](stand-test-allure/README.md) | Maps SDK reporting events to Allure (steps, labels, parameters, attachments) |
-| [stand-test-config](stand-test-config/README.md) | File-based `EnvironmentRegistry` (`stand-test-environments.yml`) — the SPI provider for plain JUnit |
-| [stand-test-spring-boot-starter](stand-test-spring-boot-starter/README.md) | Boot 3 auto-configuration: `@Autowired StandClient`, environments from `application.yml` |
-| [stand-test-scenario-yaml](stand-test-scenario-yaml/README.md) | YAML DSL (given/then and AI steps/type surfaces) over the same model |
-| [stand-test-ai-schema](stand-test-ai-schema/README.md) | JSON Schema + generation rules for safe AI-generated scenarios |
-| [stand-test-bom](stand-test-bom/README.md) | `java-platform` BOM — version alignment for consumers |
-| [stand-test-example](stand-test-example/README.md) | Test-only showcase on offline doubles (not published) — the living quick start |
+| Модуль | Что это |
+|--------|---------|
+| [stand-test-core](stand-test-core/README.md) | Модель сценария, SPI, валидация, guardrails, модели результатов/событий — только JDK, без зависимостей на адаптеры |
+| [stand-test-await](stand-test-await/README.md) | Единый механизм ожидания (детерминированный поллинг, инъецируемый источник времени) |
+| [stand-test-junit](stand-test-junit/README.md) | JUnit 5 extension `@StandTest` — инжектит `StandClient`, собранный через `ServiceLoader` |
+| [stand-test-rest](stand-test-rest/README.md) | REST-шаги (`RestStep`), инъекция correlation-заголовка, JSON-ассерты и captures |
+| [stand-test-kafka](stand-test-kafka/README.md) | Kafka-шаги (`kafka.send`/`kafka.expect`), корреляция по заголовку, ограниченные клиенты |
+| [stand-test-db](stand-test-db/README.md) | DB-шаги проверки/ассертов с fail-closed SQL write-guard |
+| [stand-test-grpc](stand-test-grpc/README.md) | gRPC unary-шаги через server reflection + `DynamicMessage`, обязательный deadline, полный набор матчеров |
+| [stand-test-allure](stand-test-allure/README.md) | Маппит reporting-события SDK в Allure (шаги, labels, параметры, вложения) |
+| [stand-test-config](stand-test-config/README.md) | Файловый `EnvironmentRegistry` (`stand-test-environments.yml`) — SPI-провайдер для plain JUnit |
+| [stand-test-spring-boot-starter](stand-test-spring-boot-starter/README.md) | Auto-configuration для Boot 3: `@Autowired StandClient`, окружения из `application.yml` |
+| [stand-test-scenario-yaml](stand-test-scenario-yaml/README.md) | YAML DSL (поверхности given/then и AI steps/type) над той же моделью |
+| [stand-test-ai-schema](stand-test-ai-schema/README.md) | JSON Schema + правила генерации для безопасных AI-сценариев |
+| [stand-test-bom](stand-test-bom/README.md) | BOM (`java-platform`) — выравнивание версий для потребителей |
+| [stand-test-example](stand-test-example/README.md) | Test-only витрина на offline-двойниках (не публикуется) — живой quick start |
 
-## Quick start (plain JUnit, no Spring)
+## Быстрый старт (plain JUnit, без Spring)
 
-**1. Add the dependencies** (all modules share one version via the BOM):
+**1. Добавьте зависимости** (все модули получают одну версию через BOM):
 
 ```kotlin
 testImplementation(platform("ru.alfa.stand.test:stand-test-bom:<version>"))
 testImplementation("ru.alfa.stand.test:stand-test-junit")
-testImplementation("ru.alfa.stand.test:stand-test-rest")    // + -kafka / -db / -grpc as needed
-testImplementation("ru.alfa.stand.test:stand-test-config")  // file-based environment registry
-testImplementation("ru.alfa.stand.test:stand-test-allure")  // optional: Allure reporting
+testImplementation("ru.alfa.stand.test:stand-test-rest")    // + -kafka / -db / -grpc по необходимости
+testImplementation("ru.alfa.stand.test:stand-test-config")  // файловый реестр окружений
+testImplementation("ru.alfa.stand.test:stand-test-allure")  // опционально: отчётность в Allure
 ```
 
-**2. Describe the stand** in `src/test/resources/stand-test-environments.yml`. Every `*-ref` is an
-**environment-variable name, never a value** — endpoints and secrets stay out of source:
+**2. Опишите стенд** в `src/test/resources/stand-test-environments.yml`. Каждый `*-ref` — это **имя
+переменной окружения, никогда не значение**: endpoints и секреты не попадают в исходники:
 
 ```yaml
 environments:
@@ -57,7 +60,7 @@ environments:
       client-service:
         base-url-ref: CLIENT_SERVICE_URL
         correlation: { source: HEADER, name: X-Correlation-Id }
-        # optional service auth — references only; the SDK injects the Authorization header itself:
+        # опциональная авторизация сервиса — только ссылки; заголовок Authorization SDK проставит сам:
         # auth: { scheme: BASIC, username-ref: CLIENT_USER, password-ref: CLIENT_PASSWORD }
     datasources:
       main-db:
@@ -68,8 +71,8 @@ environments:
         write-allowed: true
 ```
 
-**3. Write the first test.** `@StandTest` injects a `StandClient` assembled from the adapters on the
-classpath — no wiring code:
+**3. Напишите первый тест.** `@StandTest` инжектит `StandClient`, собранный из адаптеров, найденных на
+classpath — никакого кода проводки:
 
 ```java
 @StandTest
@@ -102,154 +105,159 @@ class PaymentFlowTest {
 }
 ```
 
-Assertion mismatches surface as `StandTestAssertionError` (an `AssertionError` — a native JUnit
-failure); infrastructure/config problems as `StandTestException`. Run the test with the referenced
-environment variables set (`CLIENT_SERVICE_URL`, `MAIN_DB_URL`, …).
+Несошедшиеся ассерты приходят как `StandTestAssertionError` (это `AssertionError` — нативное падение для
+JUnit); проблемы инфраструктуры/конфигурации — как `StandTestException`. Запускайте тест с выставленными
+переменными окружения, на которые ссылается конфиг (`CLIENT_SERVICE_URL`, `MAIN_DB_URL`, …).
 
-## Quick start (Spring Boot)
+## Быстрый старт (Spring Boot)
 
-Add `stand-test-spring-boot-starter` plus the adapters you use, declare the environments under
-`stand.test.environments.*` in `application.yml`, and `@Autowired StandClient` — see the
-[starter README](stand-test-spring-boot-starter/README.md) for the full `application.yml` example,
-bean override rules and troubleshooting. `stand.test.enabled: false` switches the whole
-auto-configuration off. Value fields also accept real Spring placeholders via value twins
-(`base-url: ${CLIENT_SERVICE_URL:}` instead of `base-url-ref: CLIENT_SERVICE_URL`), including secret
-credentials (`password: ${TKS_PASSWORD:pwddev3}`) — but a secret twin materialises the resolved value
-in the Spring Environment and puts the default in the file, so prefer the bare
-`password-ref: TKS_PASSWORD` spelling for secrets. Never put a `${...}` placeholder inside a `*-ref`
-field: Spring collapses it and the ref is then misread as a variable name (the double-resolution trap).
-See "Endpoint values via Spring placeholders" in the starter README.
+Добавьте `stand-test-spring-boot-starter` плюс нужные адаптеры, объявите окружения под
+`stand.test.environments.*` в `application.yml` и получите `@Autowired StandClient` — полный пример
+`application.yml`, правила переопределения бинов и troubleshooting смотрите в
+[README стартера](stand-test-spring-boot-starter/README.md). `stand.test.enabled: false` выключает всю
+auto-configuration целиком.
 
-## AI-generated scenarios
+Value-поля также принимают настоящие Spring-плейсхолдеры через value-twins
+(`base-url: ${CLIENT_SERVICE_URL:}` вместо `base-url-ref: CLIENT_SERVICE_URL`), включая секретные
+креденшелы (`password: ${TKS_PASSWORD:pwddev3}`). Но у секретного twin'а есть цена: раскрытое значение
+материализуется в Spring Environment, а default остаётся в файле — поэтому для секретов предпочтительно
+голое написание `password-ref: TKS_PASSWORD`. **Никогда не кладите плейсхолдер `${...}` внутрь `*-ref`-поля**:
+Spring схлопнет его, и ref будет прочитан как имя переменной (ловушка двойного резолва). См. раздел
+«Endpoint values via Spring placeholders» в README стартера.
 
-`stand-test-ai-schema` ships the JSON Schema and the
-[generation rules](stand-test-ai-schema/src/main/resources/ai/stand-test-ai-generation-rules.md) an
-LLM needs to produce safe declarative scenarios; `stand-test-scenario-yaml` parses that format into
-the same validated model. Guardrails (whitelisted environments only, no raw URLs, no inline secrets,
-no destructive SQL, bounded timeouts) derive from the single `ForbiddenOperation` source of truth and
-are re-enforced at runtime by the validator.
+## AI-генерируемые сценарии
 
-### AI-agent authoring kit
+`stand-test-ai-schema` поставляет JSON Schema и
+[правила генерации](stand-test-ai-schema/src/main/resources/ai/stand-test-ai-generation-rules.md), которые
+нужны LLM, чтобы производить безопасные декларативные сценарии; `stand-test-scenario-yaml` парсит этот
+формат в ту же валидированную модель. Guardrails (только whitelisted-окружения, никаких сырых URL, никаких
+инлайн-секретов, никакого деструктивного SQL, ограниченные таймауты) выводятся из единственного источника
+истины `ForbiddenOperation` и переenforce'атся в рантайме валидатором.
 
-For turning a plain-text business case into a complete, safe Java autotest with an AI agent (Claude
-Code), see the deployable authoring bundle under [`docs/ai-agent/`](docs/ai-agent/README.md): a copyable
-`.claude/` set of skills and slash commands (case analysis → knowledge-base lookup → environment mapping
-→ scenario design → Java/YAML authoring → fixtures → safety review → test review → debugging), the
-**knowledge-base contract** ([`docs/ai-agent/knowledge-base/`](docs/ai-agent/knowledge-base/README.md) —
-strict JSON schemas + worked examples for services/endpoints/topics/datasources/gRPC targets/environments),
-and a spec-ingestion pipeline (unstructured spec → schema-valid KB candidates → review → apply). Start
-with [`docs/ai-agent/README.md`](docs/ai-agent/README.md) (bundle install) and the RU worked walkthrough
-in [`docs/ai-agent/usage-guide.md`](docs/ai-agent/usage-guide.md).
+### Кит для AI-агента
 
-## Parallel execution
+Чтобы превратить бизнес-кейс в виде обычного текста в полноценный безопасный Java-автотест силами
+AI-агента (Claude Code), см. разворачиваемый бандл в [`docs/ai-agent/`](docs/ai-agent/README.md): копируемый
+набор `.claude/` со скиллами и слэш-командами (анализ кейса → поиск в базе знаний → маппинг окружения →
+дизайн сценария → авторинг Java/YAML → фикстуры → safety review → review теста → отладка),
+**контракт базы знаний** ([`docs/ai-agent/knowledge-base/`](docs/ai-agent/knowledge-base/README.md) —
+строгие JSON-схемы + разобранные примеры для сервисов/эндпоинтов/топиков/датасорсов/gRPC-таргетов/окружений)
+и пайплайн загрузки спецификаций (неструктурированная спека → schema-valid KB-кандидаты → review → apply).
+Начните с [`docs/ai-agent/README.md`](docs/ai-agent/README.md) (установка бандла) и разобранного примера
+на русском в [`docs/ai-agent/usage-guide.md`](docs/ai-agent/usage-guide.md).
 
-The SDK is built to run scenarios **concurrently in one JVM** without flakiness: every run gets a unique
-`testRunId` and `correlationId`, its own `VariableStore`, and a unique Kafka consumer group; the single
-`DefaultScenarioRunner` keeps all per-run state thread-confined, so one cached `StandClient` is safely shared
-across test threads (plan §15).
+## Параллельное выполнение
 
-**Enable it** by placing a `junit-platform.properties` at your `src/test/resources` root:
+SDK построен так, чтобы гонять сценарии **параллельно в одной JVM** без флаки: каждый прогон получает
+уникальные `testRunId` и `correlationId`, собственный `VariableStore` и уникальную Kafka consumer group;
+единственный `DefaultScenarioRunner` держит всё per-run состояние thread-confined, поэтому один
+закэшированный `StandClient` безопасно разделяется тестовыми потоками (план §15).
+
+**Включается** размещением `junit-platform.properties` в корне `src/test/resources`:
 
 ```properties
 junit.jupiter.execution.parallel.enabled=true
-junit.jupiter.execution.parallel.mode.classes.default=concurrent   # classes run concurrently
-junit.jupiter.execution.parallel.mode.default=same_thread          # methods within a class stay serial
+junit.jupiter.execution.parallel.mode.classes.default=concurrent   # классы гоняются параллельно
+junit.jupiter.execution.parallel.mode.default=same_thread          # методы внутри класса — последовательно
 junit.jupiter.execution.parallel.config.strategy=dynamic
 junit.jupiter.execution.parallel.config.dynamic.factor=0.5
 ```
 
-This is the recommended model: **classes parallel, methods serial** — matching the SDK invariant *one
-scenario run = one thread* (parallelise scenarios/classes, never the steps of one scenario). It is **in-JVM
-only**: keep Gradle `maxParallelForks=1`, since separate JVMs would race any fixed ports and shared external
-state. `stand-test-example` ships exactly this configuration as the reference.
+Это рекомендуемая модель: **классы параллельно, методы последовательно** — она соответствует инварианту SDK
+*один прогон сценария = один поток* (параллелить сценарии/классы, но никогда шаги одного сценария). Модель
+работает **только внутри одной JVM**: держите Gradle `maxParallelForks=1`, поскольку отдельные JVM гоняли бы
+наперегонки фиксированные порты и общее внешнее состояние. `stand-test-example` поставляется ровно с такой
+конфигурацией как референс.
 
-**What is parallel-safe** — a scenario is safe by construction when it relies on per-run isolation:
-- **DB:** a `db.seed` INSERT must tag its rows with the reserved `:testRunId` bind **and declare the tag
-  column** with `taggedByTestRunId("test_run_id")` — the same column its `db.cleanup` filters via
-  `whereTestRunId("test_run_id")`. The write-guard **verifies the declared column actually appears in the
-  INSERT column list** (not merely that `:testRunId` is mentioned somewhere), so a seed that tags a
-  non-reaped column is refused before any IO; derive any fixed primary key from a per-run value
-  (`id = "order-${testRunId}"`). `db.cleanup` must scope its DELETE with `whereTestRunId(...)`.
-- **Kafka:** a `kafka.expect` must select by a per-run **unique** discriminator — `correlationIdFromContext()`
-  (the SDK-owned unique id) or a `key(...)` that is per-run-derived (**contains a `${...}` placeholder** such
-  as `${testRunId}`). Enforced fail-closed at build time and at runtime (before arming a consumer): an
-  undiscriminated expect, or a **constant** key that two concurrent runs would both match on a shared topic,
-  is rejected. A constant key is allowed only alongside `correlationIdFromContext()`, where it merely narrows
-  among the run's own correlated messages.
-- **REST/gRPC:** the SDK injects the per-run `correlationId` per call; scope any server-side entity you create
-  with `${testRunId}`/`${correlationId}` in the request body/fixture.
+**Что параллельно-безопасно** — сценарий безопасен by construction, когда опирается на per-run изоляцию:
+- **DB:** INSERT в `db.seed` обязан помечать свои строки зарезервированным биндом `:testRunId` **и объявлять
+  колонку-тег** через `taggedByTestRunId("test_run_id")` — ту же колонку, по которой фильтрует его
+  `db.cleanup` через `whereTestRunId("test_run_id")`. Write-guard **проверяет, что объявленная колонка
+  действительно присутствует в списке колонок INSERT** (а не просто что `:testRunId` где-то упомянут), поэтому
+  seed, помечающий неубираемую колонку, отвергается до любого IO; выводите любой фиксированный первичный ключ
+  из per-run значения (`id = "order-${testRunId}"`). `db.cleanup` обязан скоупить свой DELETE через
+  `whereTestRunId(...)`.
+- **Kafka:** `kafka.expect` обязан выбирать по per-run **уникальному** дискриминатору —
+  `correlationIdFromContext()` (уникальный id, принадлежащий SDK) или `key(...)`, выведенный из per-run
+  значения (**содержит плейсхолдер `${...}`**, например `${testRunId}`). Enforce'ится fail-closed и на этапе
+  сборки, и в рантайме (перед вооружением consumer'а): expect без дискриминатора либо **константный** ключ,
+  на который в общем топике матчились бы оба параллельных прогона, отвергается. Константный ключ допустим
+  только вместе с `correlationIdFromContext()`, где он лишь сужает выборку среди собственных
+  скоррелированных сообщений прогона.
+- **REST/gRPC:** SDK инжектит per-run `correlationId` в каждый вызов; скоупьте любую создаваемую на стороне
+  сервера сущность через `${testRunId}`/`${correlationId}` в теле запроса или фикстуре.
 
-**Marking tests serial** — for the rare test that cannot be isolated by `testRunId` (a fixed port, a shared
-file, a process-wide singleton), opt out with the meta-annotations in `stand-test-junit` — thin facades over
-JUnit's own:
+**Как пометить тест последовательным** — для редкого теста, который нельзя изолировать через `testRunId`
+(фиксированный порт, общий файл, process-wide синглтон), откажитесь от параллельности мета-аннотациями из
+`stand-test-junit` — тонкими фасадами над JUnit'овыми:
 
-| Annotation | Maps to | Use for |
+| Аннотация | Во что разворачивается | Для чего |
 |---|---|---|
-| `@StandParallelSafe` | `@Execution(CONCURRENT)` | explicit "safe to run concurrently" marker |
-| `@StandSerial` | `@Execution(SAME_THREAD)` | serialise the methods of one class |
-| `@StandIsolated` | `@Isolated` | run this class alone (nothing else concurrent) |
+| `@StandParallelSafe` | `@Execution(CONCURRENT)` | явная пометка «безопасно гонять параллельно» |
+| `@StandSerial` | `@Execution(SAME_THREAD)` | сериализовать методы одного класса |
+| `@StandIsolated` | `@Isolated` | гонять класс в одиночку (ничего параллельно) |
 
-For mutual exclusion between only the tests that share one named resource (e.g. two classes binding the same
-port), use JUnit's native `@ResourceLock("<alias>")` directly.
+Для взаимного исключения только между тестами, делящими один именованный ресурс (например, два класса
+занимают один порт), используйте нативный JUnit'овый `@ResourceLock("<alias>")` напрямую.
 
-**Risks against real DEV/IFT stands** — a shared stand is contended by definition. Data isolation depends on
-every write/read being `testRunId`-scoped and every Kafka expect being correlation-filtered (the guardrails
-above enforce the write/expect side; scope your reads too). Recommended pilot: start with unit/example and
-in-memory tests, then opt in adapter tests, then a small parallel factor against a stand, watching for
-timeout diagnostics before widening `dynamic.factor`.
+**Риски против реальных стендов DEV/IFT** — общий стенд по определению находится под конкуренцией. Изоляция
+данных держится на том, что каждая запись/чтение скоуплены по `testRunId`, а каждый Kafka expect
+отфильтрован по корреляции (guardrails выше enforce'ят сторону записи/expect'а; скоупьте и свои чтения).
+Рекомендуемый пилот: начните с unit/example и in-memory тестов, затем включите тесты адаптеров, затем
+небольшой фактор параллельности против стенда, следя за диагностикой таймаутов, прежде чем поднимать
+`dynamic.factor`.
 
-## Logging
+## Логирование
 
-The SDK logs through **SLF4J** and ships **only the facade** (`slf4j-api`) — you supply the binding
-(Logback via Spring Boot, `slf4j-simple`, etc.) and control levels/format, so there is no
-multiple-bindings clash.
+SDK логирует через **SLF4J** и поставляет **только фасад** (`slf4j-api`) — биндинг предоставляете вы
+(Logback через Spring Boot, `slf4j-simple` и т. п.) и сами управляете уровнями/форматом, поэтому конфликта
+multiple-bindings не возникает.
 
-Every run stamps correlation ids into the **MDC** so each log line — the SDK's, the adapters', and your
-own test-thread code during the run — carries them:
+Каждый прогон штампует correlation-идентификаторы в **MDC**, поэтому их несёт каждая строка лога — и SDK, и
+адаптеров, и вашего собственного кода в тестовом потоке во время прогона:
 
-| MDC key | scope | example |
+| Ключ MDC | Область | Пример |
 |---|---|---|
-| `scenarioId` / `testRunId` / `correlationId` / `environment` | whole run | `full-framework-example` / uuid / uuid / `ift` |
-| `stepId` / `stepType` / `stepIndex` | current step | `create-request` / `rest.post` / `1` |
+| `scenarioId` / `testRunId` / `correlationId` / `environment` | весь прогон | `full-framework-example` / uuid / uuid / `ift` |
+| `stepId` / `stepType` / `stepIndex` | текущий шаг | `create-request` / `rest.post` / `1` |
 
-Levels: **INFO** — scenario start/finish; **DEBUG** — per-step start/success (+ duration) and per-adapter
-request/response/await traces; **WARN** — a failed assertion (`FAILED`/`TIMEOUT`) and best-effort hiccups
-(resource close, a throwing reporting publisher); **ERROR** — an infrastructure/unexpected step failure
-(`BROKEN`). A failure names the step the same way in the log and in the thrown exception:
-`Step [2/6] 'seed-order' (db.seed) FAILED: <reason>`. Adapter DEBUG traces are **metadata only** — never
-request/response bodies, headers/`Authorization`, message keys/values, SQL text or bound values, or secret
-references.
+Уровни: **INFO** — старт/финиш сценария; **DEBUG** — старт/успех каждого шага (+ длительность) и трейсы
+запросов/ответов/ожиданий по адаптерам; **WARN** — несошедшийся ассерт (`FAILED`/`TIMEOUT`) и best-effort
+заминки (закрытие ресурса, бросающий reporting-публишер); **ERROR** — инфраструктурный/неожиданный сбой шага
+(`BROKEN`). Сбой называет шаг одинаково в логе и в брошенном исключении:
+`Step [2/6] 'seed-order' (db.seed) FAILED: <reason>`. DEBUG-трейсы адаптеров содержат **только метаданные** —
+никогда тела запросов/ответов, заголовки/`Authorization`, ключи/значения сообщений, текст SQL или связанные
+значения, ссылки на секреты.
 
-A ready-to-copy consumer config lives at
+Готовая к копированию конфигурация для потребителя лежит в
 [`stand-test-example/src/test/resources/logback-test.xml`](stand-test-example/src/test/resources/logback-test.xml)
-(pattern with `%X{scenarioId}`/`%X{stepId}`, `ru.alfa.stand.test` at DEBUG). Run
-`./gradlew :stand-test-example:test` to see the correlated output for a full REST→DB→gRPC scenario.
+(паттерн с `%X{scenarioId}`/`%X{stepId}`, `ru.alfa.stand.test` на уровне DEBUG). Запустите
+`./gradlew :stand-test-example:test`, чтобы увидеть скоррелированный вывод полного сценария REST→DB→gRPC.
 
-## Build
+## Сборка
 
 ```bash
-./gradlew build                # compile + checkstyle (zero-tolerance) + tests + JaCoCo 80% gate
-./gradlew publishToMavenLocal  # local publish of all modules + BOM
+./gradlew build                # компиляция + checkstyle (zero-tolerance) + тесты + гейт JaCoCo 80%
+./gradlew publishToMavenLocal  # локальная публикация всех модулей + BOM
 ```
 
-Toolchain is Java 24, bytecode targets **Java 17** (`--release 17`) — artifacts load on consumer
-JDK 17/21/24. Publishing to the internal repository is parameterized via `standTestPublish*`
-properties / `STAND_TEST_PUBLISH_*` env vars — see [docs/publishing.md](docs/publishing.md).
+Toolchain — Java 24, байткод таргетит **Java 17** (`--release 17`) — артефакты грузятся на потребительских
+JDK 17/21/24. Публикация во внутренний репозиторий параметризована через свойства `standTestPublish*` /
+переменные окружения `STAND_TEST_PUBLISH_*` — см. [docs/publishing.md](docs/publishing.md).
 
-## Known limitations
+## Известные ограничения
 
-- gRPC supports **unary** calls only (server reflection + `DynamicMessage`).
-- REST assertions execute all five matchers (`equals`/`contains`/`exists`/`notNull`/`matches`) and
-  `rest.expectEventually` GET-polls until expectations hold; Kafka/gRPC assertions are still
-  `equals`-only.
-- The Kafka example in `stand-test-example` needs a real broker and is tagged
-  `requires-broker` (excluded from the default run); all module unit tests run offline.
-- A first publish to the internal Nexus/Artifactory has not happened yet (repository URL pending).
-- Scenarios run only against environments declared in the registry — there is no escape hatch by
-  design.
+- gRPC поддерживает **только unary**-вызовы (server reflection + `DynamicMessage`).
+- Ассерты REST и gRPC исполняют все пять матчеров (`equals`/`contains`/`exists`/`notNull`/`matches`);
+  `rest.expectEventually` поллит GET'ом, пока ожидания не сойдутся. **Ассерты Kafka — только `equals`**:
+  `kafka.expect` сравнивает на равенство и отвергает любой другой матчер.
+- Kafka-пример в `stand-test-example` требует реального брокера и помечен тегом `requires-broker`
+  (исключён из прогона по умолчанию); все unit-тесты модулей гоняются офлайн.
+- Первой публикации во внутренний Nexus/Artifactory ещё не было (URL репозитория в ожидании).
+- Сценарии выполняются только против окружений, объявленных в реестре — escape-hatch'а нет by design.
 
-## Where to look next
+## Куда смотреть дальше
 
-`stand-test-example` is the living, compiling showcase: REST → DB → gRPC composition, correlation
-propagation, per-run variable isolation, await on a fake time source, Allure output and failure
-semantics — all on offline doubles.
+`stand-test-example` — живая, компилирующаяся витрина: композиция REST → DB → gRPC, проброс корреляции,
+per-run изоляция переменных, ожидание на фейковом источнике времени, вывод в Allure и семантика сбоев — всё
+на offline-двойниках.

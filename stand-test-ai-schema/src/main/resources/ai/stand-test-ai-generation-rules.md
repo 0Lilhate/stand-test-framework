@@ -63,12 +63,12 @@ These are provided by the SDK and may be referenced with `${...}`:
 ## Assertions
 
 Assertions attach to `kafka.expect`, `rest.get`/`rest.post`/`rest.expectEventually` (over the response
-body), and, as a draft, `grpc.unary`, as `assert: [ { "path": "$.x", "equals": ... } ]`. Each targets a
+body) and `grpc.unary`, as `assert: [ { "path": "$.x", "equals": ... } ]`. Each targets a
 `path` (JSONPath). **REST steps and `grpc.unary` execute all five matchers**: `equals` (type-aware equality),
 `contains` (substring of a String value / element of a List value), `exists` (path presence — JSON null
 counts as present; `exists: false` asserts absence), `notNull` (the present value is/is not JSON null)
-and `matches` (full regex match over a String value). `kafka.expect`/`grpc.unary` still execute
-`equals` only — the parser rejects the others there (see *Schema vs runtime* below). Use **definite**
+and `matches` (full regex match over a String value). **`kafka.expect` executes `equals` only** — the
+parser rejects the others there (see *Schema vs runtime* below). Use **definite**
 JSONPaths with `exists`/`notNull` (`$..x`/`[*]` return a possibly-empty list, which reads as "present").
 Keep `matches` regexes simple — they run in the test JVM. No expression language, no
 script/Java/Groovy/JS matchers.

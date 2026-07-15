@@ -38,9 +38,10 @@ cp -R <sdk-repo>/docs/ai-agent/knowledge-base/schema knowledge-base/schema
 
 ```text
 /stand-test-kb-update
-source: specs/tks-client-pckg-v10.yaml
+source: http://tksdev3mock1:8080/swagger-ui/index.html#/
 sourceType: openapi
 mode: dry-run
+
 ```
 
 Агент распарсит спеку и **механически** выведет кандидатов в KB. Правила деривации на этом примере:

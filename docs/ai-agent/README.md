@@ -1,9 +1,9 @@
 # AI-Agent Authoring Kit for stand-test-sdk
 
-This directory ships a **deployable `.claude/` bundle** that lets an AI agent (Claude Code)
-convert a plain-text business test case into a correct, safe automated test built on
-`stand-test-sdk`. Nothing here is runtime code — the SDK itself is never modified by these
-assets.
+This directory ships a **deployable agent bundle** — as `.claude/` (Claude Code) and `.opencode/`
+(opencode), same assets — that lets an AI agent convert a plain-text business test case into a
+correct, safe automated test built on `stand-test-sdk`. Nothing here is runtime code — the SDK
+itself is never modified by these assets.
 
 ## Final layout (what a consumer project gets)
 
@@ -15,22 +15,29 @@ docs/ai-agent/
                        to knowledge-base/ and replace examples with real entries)
     README.md, schema/*.schema.json,
     services/ endpoints/ kafka/ db/ grpc/ environments/ mappings/   (example-*.yml + README each)
+    candidates/      ← staging area written by spec ingestion; never the curated KB
   .claude/           ← THE BUNDLE — copy its contents into the consumer repo's .claude/
-    skills/          ← 12 self-contained skills, each with its templates/checklists/examples
+    skills/          ← 16 self-contained skills, each with its templates/checklists/examples
       stand-test-case-analysis/        SKILL.md + test-case-analysis-template.md + example-text-case.md
       stand-test-kb-lookup/            SKILL.md + kb-lookup-result-template.yml + example-kb-lookup-result.yml
       stand-test-kb-update/            SKILL.md + kb-update-report-template.md + kb-entry-review-checklist.md
+      stand-test-spec-ingestion/       SKILL.md + unstructured-spec-ingestion-checklist.md + extraction-report-template.md + source-document-template.yml
+      stand-test-spec-extraction/      SKILL.md + business-flow-candidate-template.yml + business-rule-candidate-template.yml
+                                       + test-scenario-candidate-template.yml + unresolved-item-template.yml
+      stand-test-kb-candidate-review/  SKILL.md + kb-candidate-review-checklist.md + conflict-item-template.yml
+      stand-test-kb-candidate-apply/   SKILL.md
       stand-test-env-generation/       SKILL.md + env-generation-report-template.md + application-yml-generation-checklist.md
       stand-test-scenario-design/      SKILL.md + scenario-design-template.md + before-generating-checklist.md + example-scenario-design.md
       stand-test-yaml-authoring/       SKILL.md + yaml-scenario-template.yaml + example-generated.yaml
-      stand-test-java-dsl-authoring/   SKILL.md + java-test-template.java + sdk-boundary-checklist.md + example-generated.java
+      stand-test-java-dsl-authoring/   SKILL.md + java-test-template.java + sdk-boundary-checklist.md
+                                       + example-generated.java + example-provisioned-prelude.java
       stand-test-fixture-authoring/    SKILL.md + fixture-template.json
       stand-test-environment-mapping/  SKILL.md
       stand-test-safety-review/        SKILL.md + safety-checklist.md + safety-review-template.md
       stand-test-test-review/          SKILL.md + review-checklist.md + flakiness-checklist.md
                                        + generated-test-review-template.md + before-committing-checklist.md + example-review.md
       stand-test-debugging/            SKILL.md + debugging-report-template.md
-    commands/        ← 9 workflows as slash commands
+    commands/        ← 12 workflows as slash commands
       stand-test-generate-java-test.md /stand-test-generate-java-test — TEXT CASE → VALIDATED TEST (umbrella, start here)
       stand-test-design.md      /stand-test-design   — text case → KB lookup → scenario design
       stand-test-yaml.md        /stand-test-yaml     — design → AI-format scenario (+ gates)
@@ -38,20 +45,32 @@ docs/ai-agent/
       stand-test-validate.md    /stand-test-validate — final readiness gate before commit
       stand-test-review-generated-test.md /stand-test-review-generated-test — existing test → KB-alignment + review
       stand-test-kb-update.md   /stand-test-kb-update — spec (OpenAPI/proto/SQL/...) → KB entries
+      stand-test-ingest-spec.md /stand-test-ingest-spec — unstructured spec (PDF/DOCX/ФС/ТЗ) → KB candidates
+      stand-test-review-kb-candidates.md /stand-test-review-kb-candidates — staged candidates → review report (human gate)
+      stand-test-apply-kb-candidates.md  /stand-test-apply-kb-candidates  — approved candidates → curated KB
       stand-test-generate-env.md /stand-test-generate-env — KB → registry config (yml/application.yml)
       stand-test-debug.md       /stand-test-debug    — failed test → debugging report
     rules/
       stand-test-guardrails.md  ← non-negotiable constraints (mirrors ForbiddenOperation)
+    workflows/       ← 2 multi-command pipeline docs (not auto-loaded; referenced by the KB commands)
+      ingest-unstructured-spec-to-kb.md    document → staged candidates
+      review-and-apply-kb-candidates.md    candidates → human review → curated write
+  .opencode/         ← THE SAME BUNDLE for opencode — identical skills/commands/rules/workflows, plus
+      AGENTS.md      ← agent manual (load model, pipeline, gates); loaded via opencode.json `instructions`
+      opencode.json  ← model, permissions, MCP servers; must sit NEXT TO `.opencode/`, not inside it
 ```
 
 Each skill directory is self-contained: its SKILL.md references the colocated template,
-checklists and worked example by relative path, so the bundle works wherever `.claude/` lives.
+checklists and worked example by relative path, so the bundle works wherever it lives.
 
 ## Installation into a consumer project (e.g. QA_TEST)
 
 1. Copy the bundle contents into the consumer repo:
    `cp -R docs/ai-agent/.claude/* <consumer-repo>/.claude/`
    (merge with an existing `.claude/`; nothing here collides with generic skills).
+   For opencode: `cp -R docs/ai-agent/.opencode/* <consumer-repo>/.opencode/`, then move
+   `opencode.json` up to `<consumer-repo>/` — its `instructions` paths (`.opencode/AGENTS.md`,
+   `.opencode/rules/**/*.md`) resolve from the directory that contains `.opencode/`.
 2. Verify the consumer project has: the SDK modules on the test classpath (BOM + junit or
    starter + adapters + config/allure) and its environment registry
    (`stand-test-environments.yml` or `application.yml` `stand.test.environments.*`).
@@ -108,7 +127,7 @@ The JSON Schema accepts slightly more than the runtime executes ("schema ⊇ exe
 | `kafka.send` | `payload.fixture` only; `correlation: {inject: true}` |
 | `kafka.expect` | `timeout` + `assert` required; **equals-only**; `correlation: {fromContext: true}` |
 | `db.expectEventually` | SELECT-only; `expect.singleValue` only (`rowExists` rejected) |
-| `grpc.unary` | `timeout` required; `request.fixture` only; **equals-only**; `expect.status` rejected |
+| `grpc.unary` | `timeout` required; `request.fixture` only; all five matchers; `expect.status` rejected (a non-OK status is an infra failure) |
 
 Not in the AI format at all: `db.query`/`db.seed`/`db.cleanup`, `rest.put`/`rest.delete`,
 gRPC custom metadata. Source of truth: `ai/stand-test-ai-generation-rules.md` +

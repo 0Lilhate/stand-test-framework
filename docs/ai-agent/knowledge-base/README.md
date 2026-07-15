@@ -62,8 +62,8 @@ The KB mirrors the `EnvironmentRegistry` model — on any conflict **the SDK win
 
 - correlation header / auth identity are **per service** (registry `correlation:`/`auth:`), not per
   endpoint; two identities against one service = two service entries;
-- Kafka correlation is HEADER-only; Kafka/gRPC assertions are **equals-only** (the schema cannot
-  express what the adapters cannot check);
+- Kafka correlation is HEADER-only; **Kafka** assertions are **equals-only** (the schema cannot
+  express what the adapter cannot check) — REST and `grpc.unary` run the full matcher set;
 - real topic names are per-environment `actualName` values → the registry's literal `name:` field;
 - environment entries hold `*Ref` names that `/stand-test-generate-env` renders into
   `stand-test-environments.yml` (refs-only) or `application.yml` `stand.test.environments.*`;

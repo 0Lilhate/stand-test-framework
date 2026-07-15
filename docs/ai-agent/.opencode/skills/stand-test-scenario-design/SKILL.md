@@ -1,0 +1,170 @@
+---
+name: stand-test-scenario-design
+description: Turn a stand-test case analysis into a technical scenario design (scenario id, step order and types, captures, assertions, awaits, correlation, test-data and cleanup strategy, Java-DSL vs AI-format track choice). Use after stand-test-case-analysis and before any authoring.
+---
+
+# Skill: stand-test-scenario-design
+
+Convert a `TestCaseAnalysis.md` into a technical scenario design — the exact step list an
+authoring skill will implement. **Still no code generation here.**
+
+## When to use
+
+After `stand-test-case-analysis`, `stand-test-kb-lookup` and `stand-test-environment-mapping`
+have run and blocking missing-info items (including KB `missing` rows) are resolved (or
+explicitly assumed).
+
+## Input
+
+- `TestCaseAnalysis.md`.
+- `KnowledgeBaseLookupResult` (from `stand-test-kb-lookup`, when the project keeps a KB) —
+  the source for every contract detail: paths, response fields, message schemas, DB probes,
+  gRPC methods. A detail present in neither the lookup result, nor the case text, nor the
+  recorded assumptions must NOT appear in the design.
+- Environment mapping report (which aliases exist, their `correlation:`/`auth:`/`write-allowed`
+  properties).
+
+## Output
+
+`ScenarioDesign.md` following
+[`scenario-design-template.md`](../stand-test-scenario-design/scenario-design-template.md).
+
+## Design decisions to make (in order)
+
+1. **Scenario id** — kebab-case, stable, business-meaningful (`order-status-projection`).
+   Matches `^[A-Za-z0-9][A-Za-z0-9._-]*$`.
+2. **Environment** — a registry key, verbatim (e.g. `ift`). Never a URL.
+3. **Tags** — `integration` plus domain tags; they become Allure labels.
+4. **Track** — Java DSL (default) vs AI JSON/YAML. Choose AI format **only if every step** fits
+   the executable subset (see the per-type crib in ../stand-test-yaml-authoring/SKILL.md). Any `db.seed`/`db.cleanup`/`rest.put`/
+   `rest.delete`/gRPC-custom-metadata/non-equals-outside-REST/negative-path requirement ⇒
+   Java DSL. A computed per-run value (current/future date etc., rule 11) also ⇒ Java DSL —
+   fixtures resolve only `${var}` placeholders, there are no value generators on the AI surface. (Non-secret custom HTTP headers are fine in the AI format on `rest.*` steps;
+   secret-bearing header names are banned in both tracks.)
+5. **Step order** — `provision → verify-preconditions → seed → trigger → awaits/asserts → cleanup`,
+   all inside ONE scenario:
+   - *provision* = a chain of KB-attested create-API steps that build up the TEST-OWNABLE entities
+     the trigger needs (open ЮЛ→capture pin → open+fund account→capture id → connect package→capture
+     deal id); every downstream step references the `${capture}`, never a case literal. Use only
+     create-endpoints curated in the KB; if none exists, the precondition is blocking (rule 11 /
+     case-analysis item 7) — NOT a fabricated step and NOT a hardcoded pointer.
+   - *verify-preconditions* = a read-probe (`db.expectEventually`) that a SHARED stateful catalog
+     row the SUT will resolve (an approved ТУ matching the index versions) is present BEFORE the
+     trigger — turns an opaque downstream SUT error (`не найдена ТУ …`) into a fast, actionable
+     "precondition unmet". Such shared rows are provisioned out-of-band (boundary rule), never
+     seeded by the test.
+   - Kafka `expect` consumers are armed in the runner's prepare phase **before any step runs**,
+     so the trigger and the `kafka.expect` must live in the same scenario.
+   - Steps run sequentially on one thread and share one per-run DB connection. This is the SDK's
+     "one scenario run = one thread" invariant: SCENARIOS/test-classes parallelise (the consumer
+     runs classes concurrently), but the steps of one scenario never do. Distinct runs get distinct
+     `testRunId`/`correlationId`/`VariableStore`/DB connection/Kafka group — so a design that scopes
+     all test data by `${testRunId}` is parallel-safe by construction.
+6. **Step ids** — explicit, unique, kebab-case (`create-order`, `await-order-event`).
+   Duplicate ids fail validation at run time; default derived ids collide on repeated
+   method+path / operation+datasource / `UNARY <target>`.
+7. **Variables & captures** — table of `variableName ← producing step ← JSONPath/column`,
+   plus where each `${variableName}` is consumed. Built-ins available without capture:
+   `${scenarioId}`, `${testRunId}`, `${correlationId}`, `${environment}`.
+   Syntax is `${name}` — **not** `{{name}}`; no defaults, no expressions, no escaping.
+8. **Assertions** — per step, with matcher:
+   - REST: `EQUALS` (default), `CONTAINS`, `MATCHES` (full-string regex), `EXISTS` (true/false;
+     JSON `null` counts as present), `NOT_NULL` (true/false).
+   - Kafka / gRPC / DB: equals only. Numbers compare by value (`100` == `100.0`), strings never
+     coerce (`"100"` != `100`).
+   - Use definite JSONPaths with presence matchers (no `$..x`, no `[*]`).
+9. **Awaits** — every async check is an `expectEventually`/`expect` step with an explicit
+   timeout. Pick the smallest realistic SLA; cap 1h (AI grammar: ≤99999ms / ≤999s / ≤60m).
+   Never design a sleep or a manual retry loop.
+10. **Correlation strategy** — SDK-owned:
+    - Trigger step: `.injectCorrelationId()` / `correlation: {inject: true}` — requires the
+      alias to declare `correlation: {source: HEADER|METADATA, name: ...}` in the registry
+      (HEADER for REST/Kafka topics, METADATA for gRPC; Kafka is HEADER-only — KEY/
+      PAYLOAD_FIELD carriers throw).
+    - Consumer step: `kafka.expect` + `correlationIdFromContext` / `correlation: {fromContext: true}`
+      — a per-run-UNIQUE discriminator is mandatory (the executor refuses an undiscriminated expect
+      at run time). If a `.key(...)` narrows selection it must be per-run-derived (`${testRunId}`);
+      a constant key is allowed only alongside `correlationIdFromContext`.
+    - Never fabricate a correlation value. The header/metadata NAME comes from the registry,
+      not from the SDK.
+11. **Test data strategy** — all created identifiers derive from `${testRunId}` or are captured
+    from responses. Prefer creating preconditions through the system's API over `db.seed`.
+    If seeding: `INSERT` into a schema-qualified whitelisted table with a `test_run_id` column
+    bound to the reserved `:testRunId` bind. When the case NEEDS write preconditions — design
+    them, do not dodge into assumptions: the full when/preconditions/shape/boundary rule is
+    guardrails §"DB write logic" (write-allowed + allowed-schemas verified, else blocking).
+    **Classify EVERY request/payload field** (KB `valueHints` first, field semantics second):
+    - *run-unique* (identifiers, external ids, idempotency keys) → `<prefix>-${testRunId}` or a
+      capture — NEVER a literal that repeats across runs;
+    - *current/future/past-date* → computed in plain Java before the builder (`java.time`),
+      never a hardcoded calendar date — a literal "2026-07-08" is stale tomorrow. The AI format
+      cannot express computed values ⇒ such a field FORCES the Java DSL track (see rule 4);
+    - *entity-instance-handle* (a value that identifies ONE specific stateful row the SUT resolves
+      at run time — client id, pinEQ, account id/number, deal/contract id, an approved-ТУ instance)
+      → NEVER `constant`, NEVER a literal copied from the case (a copied instance id is not
+      `testRunId`-isolated, couples the run to out-of-band state, and 404s / collides — the observed
+      `не найдена ТУ подходящая по версиям индексов`). Split by ownership:
+        · *test-ownable* (client/account/deal/pin the SUT does NOT itself mint) → provision it
+          in-scenario through a KB-attested create-endpoint and CAPTURE its system id into `${var}`,
+          or — when no create-endpoint is curated — `db.seed` into a write-allowed whitelisted schema
+          (tagged by `:testRunId`, guardrails §"DB write logic"); STOP with blocking missing
+          information (case-analysis item 7) ONLY when NEITHER a create-endpoint nor a seedable
+          write-allowed schema exists — never a case literal, never a DBA-runbook substitute;
+        · *shared stateful catalog row* (an approved ТУ / tariff template the SUT resolves) → the
+          boundary rule FORBIDS the test to seed it (it is the system's business row); it is
+          provisioned out-of-band and VERIFIED with a read-probe (`db.expectEventually` BEFORE the
+          trigger, rule 5) so its absence fails fast; if it cannot be established at all, escalate —
+          do NOT downgrade to a hardcoded pointer;
+    - *constant* (business codes, amounts, enum values, AND reference/dictionary CODES that name a
+      catalog TYPE not one stateful row — service/ПУ/branch/currency codes) → verbatim from the
+      case/KB. A CODE (`PRICEASAVE`, `PU_NWA`, branch `2932`) is a constant; an instance ID is an
+      entity-instance-handle (above), not a constant. A literal quoted only as an EXPECTED assertion
+      value (a returned code/hash the test checks) stays a constant too — it is not wired into the
+      trigger as a handle;
+    - unknown semantics → recorded assumption, or blocking missing information when the value
+      changes the test's meaning.
+    The design's step table documents the class of every non-constant field, and for every
+    entity-instance-handle names its provisioning step + capture (test-ownable), its read-probe
+    (shared catalog row), or the blocking escalation.
+12. **Cleanup strategy** — one `db.cleanup` per seeded table:
+    `DELETE FROM <schema>.<table>` (no WHERE!) + `whereTestRunId("<column>")`, and the paired
+    `db.seed` DECLARES the SAME column with `taggedByTestRunId("<column>")` (the write-guard fails
+    closed at run time unless that column is in the seed's INSERT column list bound to `:testRunId`).
+    Document the residual-data risk: cleanup does not run if an earlier step fails (runner
+    short-circuits), so rows must be harmless to leave behind and identifiable by `test_run_id`.
+13. **Parallel-isolation strategy** — the design defaults to parallel-safe (all test data scoped by
+    `${testRunId}`, Kafka expects discriminated, no shared static/instance state; the class needs NO
+    parallel annotation and runs concurrently under the consumer's config). Call for `@StandIsolated`
+    / `@ResourceLock("<alias>")` in the design ONLY when a step touches a resource that cannot be
+    `testRunId`-isolated — a fixed port, a shared file, a process-wide singleton, or a
+    non-`testRunId`-scopable external job.
+
+## Forbidden in this skill
+
+- Emitting YAML/JSON/Java (that is the authoring skills' job).
+- Designing steps around SDK bypasses (raw clients, sleeps, eager IO).
+- Designing writes to datasources without `write-allowed: true` + schema whitelist evidence.
+
+## Checklist before handing off
+
+- [ ] Track chosen with justification; if AI format — every step verified against the
+      executable subset.
+- [ ] Every contract detail in the step table (path, JSONPath/field, table/column, SQL,
+      gRPC method) cites its source: KB entry id, case-text value, or a recorded assumption.
+- [ ] Step table complete: id, type, alias, purpose, timeout (async), assertions, captures.
+- [ ] Every `${var}` consumed is produced earlier (or is a built-in).
+- [ ] Correlation source verified against the registry for every inject/fromContext step.
+- [ ] Cleanup present for every seed; the seed's `taggedByTestRunId` column == the cleanup's
+      `whereTestRunId` column; both scoped by `testRunId`.
+- [ ] Every entity-instance-handle is provisioned+captured (test-ownable) or read-probe-verified
+      before the trigger (shared catalog row) — no client/account/deal/pin/ТУ-instance id copied
+      from the case as a literal; reference/dictionary CODES (service/ПУ/branch/currency) stay
+      constants; a test-ownable entity with no curated create-endpoint is a blocking missing-info.
+- [ ] Parallel-safe: all test data scoped by `${testRunId}`, Kafka expects discriminated, no shared
+      static/instance state; `@StandIsolated`/`@ResourceLock` called for only when a resource is not
+      `testRunId`-isolable.
+- [ ] Negative paths listed with the Java construct that will express them.
+
+## Example
+
+[`example-scenario-design.md`](../stand-test-scenario-design/example-scenario-design.md).

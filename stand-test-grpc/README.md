@@ -137,6 +137,9 @@ coverage is ≥ 80% (JaCoCo). No `Thread.sleep`, no Testcontainers, no real stan
 
 No streaming (client/server/bidi); no stub generation; no TLS / channel credentials (plaintext MVP for
 internal DEV/IFT); no `FileDescriptorSet`-from-config reflection fallback yet (the `GrpcCallInvoker` seam
-is ready for it); the runtime executes `equals` matchers only (the schema's richer matchers are a later
-sub-iteration). After this module, the tracked follow-ups are removing the `AiStepNormalizer` fail-closed
-on `grpc.unary`, adding grpc to the `ai-schema` parity set (F8), and a `stand-test-example` scenario.
+is ready for it). A non-OK gRPC status surfaces as a `StandTestException` (an infrastructure failure), so
+it can never be asserted on the way a REST 5xx can.
+
+The matcher gap is closed: the runtime executes the full five-matcher set (`equals`/`contains`/`exists`/
+`notNull`/`matches`) over the `MATCHER` wire key, at parity with REST. `GrpcAssertion` keeps a two-argument
+constructor defaulting to `EQUALS` as a compatibility shim from the equals-only era.
