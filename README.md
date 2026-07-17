@@ -241,7 +241,7 @@ multiple-bindings не возникает.
 ./gradlew publishToMavenLocal  # локальная публикация всех модулей + BOM
 ```
 
-Toolchain — Java 24, байткод таргетит **Java 17** (`--release 17`) — артефакты грузятся на потребительских
+Toolchain — Java 21, байткод таргетит **Java 17** (`--release 17`) — артефакты грузятся на потребительских
 JDK 17/21/24. Публикация во внутренний репозиторий параметризована через свойства `standTestPublish*` /
 переменные окружения `STAND_TEST_PUBLISH_*` — см. [docs/publishing.md](docs/publishing.md).
 

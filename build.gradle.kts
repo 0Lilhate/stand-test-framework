@@ -43,7 +43,7 @@ subprojects {
     }
     // The SDK is consumed by other teams: publish -sources.jar (IDE navigation) and -javadoc.jar,
     // both picked up automatically by the `maven` publication via components["java"]. The javadoc
-    // task runs on the JDK-24 toolchain with doclint disabled (below) — the SDK's Javadoc is written
+    // task runs on the JDK-21 toolchain with doclint disabled (below) — the SDK's Javadoc is written
     // for humans, not for doclint's strict HTML/@-tag rules.
     withSourcesJar()
     // stand-test-example is not published and its src/main holds only a package-info —
@@ -55,7 +55,7 @@ subprojects {
 
   tasks.withType<Javadoc>().configureEach {
     options.encoding = "UTF-8"
-    // Disable doclint: strict HTML/reference checks on JDK 24 would fail the build over cosmetic
+    // Disable doclint: strict HTML/reference checks on JDK 21 would fail the build over cosmetic
     // Javadoc issues; the jar exists for internal consumers' IDEs, not for lint-perfect HTML.
     (options as StandardJavadocDocletOptions).addStringOption("Xdoclint:none", "-quiet")
   }
@@ -63,7 +63,7 @@ subprojects {
   tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
     options.compilerArgs.add("-parameters")
-    // Compile with the JDK-24 toolchain but target Java 17 bytecode/API (`--release 17`), so the SDK is
+    // Compile with the JDK-21 toolchain but target Java 17 bytecode/API (`--release 17`), so the SDK is
     // loadable by consumers on JDK 17/21/24 (plan §14). `--release` also bans APIs newer than 17, keeping
     // the sources 17-compatible.
     options.release.set(ver("javaRelease").toInt())
@@ -108,8 +108,8 @@ subprojects {
 
   // JaCoCo coverage gate (DoD: instruction coverage >= 80%). Modules without execution data
   // (skeletons whose `test` task is NO-SOURCE) are skipped via `onlyIf`, so the build stays green
-  // until they gain real tests. toolVersion is pinned via the catalog because the Java 24 toolchain
-  // needs JaCoCo >= 0.8.13 to parse class-file major version 68.
+  // until they gain real tests. toolVersion is pinned via the catalog because JaCoCo must be new enough
+  // to parse the toolchain's class files: the Java 21 toolchain emits major version 65, needing >= 0.8.11.
   plugins.withId("jacoco") {
     extensions.configure<JacocoPluginExtension> {
       toolVersion = ver("jacoco")

@@ -1,8 +1,8 @@
 [versions]
 # `java` is the Gradle toolchain (which JDK compiles the build); `javaRelease` is the bytecode/API level
-# (`--release`). Keeping the toolchain on 24 while releasing to 17 lets the build run on the newest JDK yet
-# produce artifacts loadable by consumers on JDK 17/21/24 (plan §14 resolution).
-java = "24"
+# (`--release`). The toolchain is an LTS (21) while the release level stays 17, so the build runs on a JDK
+# every dev box already has yet produces artifacts loadable on JDK 17/21/24 (plan §14 resolution).
+java = "21"
 javaRelease = "17"
 checkstyle = "10.18.2"
 junit = "5.11.4"

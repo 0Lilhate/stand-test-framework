@@ -66,7 +66,7 @@ Use `--console=plain` for clean CI-style output. Configuration cache, parallel a
     `EmptyLineSeparator` (blank line between members), `MutableException` (exception fields must be
     `final`), no tabs, `System.out/err` forbidden. `LineLength` max is 1000 (so long lines are fine —
     don't wrap method chains, since `SeparatorWrapDot` would then require the `.` at line start).
-- **Java toolchain is 24** (non-LTS), but the build compiles with **`--release 17`** (catalog
+- **Java toolchain is 21** (LTS), but the build compiles with **`--release 17`** (catalog
   `javaRelease`, applied in the root `subprojects` `JavaCompile` block), so bytecode targets Java 17 and
   the SDK loads on consumer JDK 17/21/24 (plan §14 resolved). `--release 17` also bans APIs newer than 17,
   so keep sources 17-compatible (no Sequenced-collection APIs, `Math.clamp`, virtual threads,
