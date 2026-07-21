@@ -106,10 +106,6 @@ subprojects {
     }
   }
 
-  // JaCoCo coverage gate (DoD: instruction coverage >= 80%). Modules without execution data
-  // (skeletons whose `test` task is NO-SOURCE) are skipped via `onlyIf`, so the build stays green
-  // until they gain real tests. toolVersion is pinned via the catalog because JaCoCo must be new enough
-  // to parse the toolchain's class files: the Java 21 toolchain emits major version 65, needing >= 0.8.11.
   plugins.withId("jacoco") {
     extensions.configure<JacocoPluginExtension> {
       toolVersion = ver("jacoco")
@@ -148,8 +144,6 @@ subprojects {
 
   plugins.withId("maven-publish") {
     extensions.configure<PublishingExtension> {
-      // stand-test-example is a test-only showcase and is not published — no publication is created
-      // for it at all (mirrors how stand-test-bom opts out of the whole subprojects block).
       if (name != "stand-test-example") {
         publications {
           create<MavenPublication>("maven") {
@@ -162,25 +156,7 @@ subprojects {
         }
       }
     }
-  }
-}
 
-// Publish-repository wiring for EVERY publishing module — including stand-test-bom, which the main
-// subprojects block above deliberately skips (java-platform), hence this separate block. The internal
-// Nexus/Artifactory coordinates are not hardcoded: they arrive via Gradle properties (or their
-// STAND_TEST_PUBLISH_* environment fallbacks), so the repo carries no endpoint and the ordinary build
-// never depends on them. `./gradlew publishToMavenLocal` keeps working without any of this.
-//
-//   standTestPublishReleasesUrl  / STAND_TEST_PUBLISH_RELEASES_URL   — release repository
-//   standTestPublishSnapshotsUrl / STAND_TEST_PUBLISH_SNAPSHOTS_URL  — snapshot repository
-//   standTestPublishUrl          / STAND_TEST_PUBLISH_URL            — fallback for both
-//   standTestPublishUsername/Password (+ env)                        — credentials (omit for file:// repos)
-//   standTestPublishAllowInsecure=true                               — permit plain http (in-perimeter Nexus)
-//
-// The snapshot/release choice follows the version suffix, so `version=x.y.z-SNAPSHOT` publishes to the
-// snapshot repository and a release version to the release one.
-subprojects {
-  plugins.withId("maven-publish") {
     fun prop(gradleName: String, envName: String): String? = providers.gradleProperty(gradleName)
       .orElse(providers.environmentVariable(envName))
       .orNull
