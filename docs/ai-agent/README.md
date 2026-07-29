@@ -81,6 +81,11 @@ docs/ai-agent/
       detectors.json   all 18 safety findings, as data — the eighteenth needs the artifact's
                        previous version (the disk, or `--against` in CI) and says so when it lacks one
       lib/, corpus/    the engine and the golden fixtures it is proven against
+      stand-batch.mjs  NOT a hook — nothing invokes it, and it enforces nothing of its own. A
+                       directory of text cases, one headless `claude -p` session each, run by a
+                       person from a terminal. Every verdict comes from what the hooks recorded,
+                       never from what the model said, and NEEDS-HUMAN is a correct outcome: in a
+                       headless run nobody can answer the blocking questions of stage 3
   .opencode/         ← THE SAME BUNDLE for opencode — identical skills/commands/rules/workflows, plus
       AGENTS.md      ← opencode-specific manual (load model, command/skill index); the pipeline
                        itself lives in rules/stand-test-pipeline.md, shared by both bundles
@@ -113,6 +118,12 @@ checklists and worked example by relative path, so the bundle works wherever it 
 3. For the JSON track additionally approve/add `com.networknt:json-schema-validator:1.5.6`
    + `jackson-databind` as test dependencies (the SDK ships only the schema resource).
 4. Start with `/stand-test-design` on a real text case.
+5. For a folder of cases at once:
+   `node .claude/hooks/stand-batch.mjs cases/ --dry-run`, then without `--dry-run`. One headless
+   session per case, sequentially — the hooks keep one state file per PROJECT, so parallel sessions
+   would overwrite each other's gate bookkeeping and every verdict would be a guess. The report says
+   which cases produced a test, which came back as questions, and which expectation families it could
+   not check at all.
 
 The bundle under `docs/ai-agent/` is the single source of truth. The repo-root `.claude/` is one
 developer's local tooling and is deliberately untracked — do not treat anything there as part of
