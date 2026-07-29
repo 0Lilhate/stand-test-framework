@@ -163,7 +163,9 @@ modules (`stand-test-agent-{core,tools,llm,cli}`, ~31 500 lines) once implemente
 a state machine, a tool registry and an LLM client; they were removed because they rebuilt what the
 subscription host (Claude Code / opencode) already provides and reached a model through a separate
 API key. **Do not reintroduce them.** The agent is the host; what this repository ships for it is the
-kit under `docs/ai-agent/`.
+kit under `docs/ai-agent/`, and its roadmap is
+[`docs/plans/ai-agent-kit-implementation.md`](docs/plans/ai-agent-kit-implementation.md) — read that
+before picking up work on the kit.
 
 Three artefacts of that effort survive because they were written before it and do not depend on it:
 `docs/agent-analysis/current-state-analysis.md` (findings A-01…A-17 about the kit, the SDK and this
