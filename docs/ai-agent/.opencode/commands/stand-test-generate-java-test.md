@@ -22,17 +22,27 @@ commands directly when you need only one phase.
 ```
 Text scenario
   → 1. Case analysis            (stand-test-case-analysis)
-  → 2. KB lookup                (stand-test-kb-lookup → KnowledgeBaseLookupResult)
+  → 2. KB lookup                (subagent stand-test-kb-resolver → KnowledgeBaseLookupResult)
   → 3. Missing info / blocking questions   (analysis blockers + lookup `missing`)
-  → 4. Environment mapping      (stand-test-environment-mapping)
+  → 4. Environment mapping      (same subagent, same call)
   → 5. Scenario design          (stand-test-scenario-design; contract details cite KB entry ids)
   → 6. Java test generation     (stand-test-java-dsl-authoring)
   → 7. Fixture generation       (stand-test-fixture-authoring)
-  → 8. Safety review            (stand-test-safety-review; BLOCK → regenerate)
+  → 8. Safety review            (subagent stand-test-safety-reviewer; BLOCK → regenerate)
   → 9. Compile                  (./gradlew compileTestJava [checkstyleTest] in the consumer project)
   → 10. Test run                (skip-gate always; real run when the stand is configured)
-  → 11. Readiness report        (/stand-test-validate verdict + human approval)
+  → 11. Readiness report        (subagent stand-test-quality-reviewer → verdict + human approval)
 ```
+
+Stages 2, 4, 8 and 11 run in a SEPARATE context — a subagent — and the reason differs by stage: 2 and
+4 to keep the knowledge base out of the authoring context, 8 and 11 because a review by the context
+that wrote the code is a review of its own intent. The rules file states the split; do not fold these
+stages back into this context because it would be quicker.
+
+The safety verdict is recorded HERE, not by the reviewer:
+`node <bundle>/hooks/stand-guard.mjs record-gate --gate safety-review --verdict PASS <files>`.
+It refuses a PASS when the deterministic scan disagrees, and it refuses one when no subagent has
+finished since the artifact was last written — so stage 8 cannot be quietly performed in place.
 
 Steps 1–5 are `/stand-test-design` with the KB stage; steps 6–9 are `/stand-test-java`;
 steps 10–11 are `/stand-test-validate`. On a failed run: `/stand-test-debug`, then re-enter at

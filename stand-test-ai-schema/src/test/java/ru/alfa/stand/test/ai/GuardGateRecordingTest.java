@@ -138,6 +138,11 @@ class GuardGateRecordingTest {
         return MAPPER.createObjectNode().put("cwd", project.toString()).toString();
     }
 
+    /** The host's own signal that a separate context ran and finished. */
+    private static void subagentFinished(Path project) {
+        assertThat(run(project, stopPayload(project), "subagent-stop").exitCode()).isZero();
+    }
+
     @Test
     @DisplayName("a verdict that names no file is refused — it used to cover the whole session without re-scanning anything")
     void recordGate_withoutFiles_isRefused(@TempDir Path temporary) throws IOException {
@@ -159,6 +164,7 @@ class GuardGateRecordingTest {
     void recordGate_namingTheArtifact_coversIt(@TempDir Path temporary) throws IOException {
         Path project = temporary.toRealPath();
         writeArtifact(project, CLEAN_FIXTURE);
+        subagentFinished(project);
 
         Answer answer = run(project, "", "record-gate", "--gate", "safety-review", "--verdict", "PASS", ARTIFACT);
 
@@ -207,6 +213,7 @@ class GuardGateRecordingTest {
     void recordGate_parsesFlagValuesRatherThanGuessingThem(@TempDir Path temporary) throws IOException {
         Path project = temporary.toRealPath();
         writeArtifact(project, CLEAN_FIXTURE);
+        subagentFinished(project);
 
         Answer answer = run(project, "", "record-gate", "--verdict", "pass", ARTIFACT);
 
@@ -266,6 +273,47 @@ class GuardGateRecordingTest {
 
         assertThat(answer.exitCode()).as("what narrowed is the bookkeeping, not the scan; a secret in a markdown file is committed the moment it is written").isEqualTo(2);
         assertThat(answer.output()).contains("SECRET_IN_SOURCE");
+    }
+
+    @Test
+    @DisplayName("PASS is refused while no subagent has finished — the context that wrote the code cannot sign it off")
+    void recordGate_withoutADelegatedReview_isRefused(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+        writeArtifact(project, CLEAN_FIXTURE);
+
+        Answer answer = run(project, "", "record-gate", "--verdict", "PASS", ARTIFACT);
+
+        assertThat(answer.exitCode()).isEqualTo(2);
+        assertThat(answer.output()).contains("stand-test-safety-reviewer");
+        assertThat(state(project).path("gates").isEmpty()).isTrue();
+        assertThat(run(project, stopPayload(project), "stop").exitCode()).as("and the artifact stays uncovered, so the session is still held").isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("a subagent that finished BEFORE the artifact was written does not count — it cannot have reviewed it")
+    void recordGate_withAReviewThatPredatesTheArtifact_isRefused(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+        subagentFinished(project);
+        writeArtifact(project, CLEAN_FIXTURE);
+
+        Answer answer = run(project, "", "record-gate", "--verdict", "PASS", ARTIFACT);
+
+        assertThat(answer.exitCode()).as("the same rule as the content hash, in time rather than in bytes: what was reviewed is what existed then").isEqualTo(2);
+        assertThat(answer.output()).contains("ни один субагент не завершился");
+    }
+
+    @Test
+    @DisplayName("re-writing an artifact after its review costs it the delegation too, not only the hash")
+    void recordGate_afterAnEditNeedsAFreshReview(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+        writeArtifact(project, CLEAN_FIXTURE);
+        subagentFinished(project);
+        assertThat(run(project, "", "record-gate", "--verdict", "PASS", ARTIFACT).exitCode()).isZero();
+
+        writeArtifact(project, CLEAN_FIXTURE);
+        Answer answer = run(project, "", "record-gate", "--verdict", "PASS", ARTIFACT);
+
+        assertThat(answer.exitCode()).as("'reviewed, then quietly adjusted' must not survive by reusing the earlier delegation").isEqualTo(2);
     }
 
     /** What the hook answered: the exit code is the contract, the text is what the model is shown. */

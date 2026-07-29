@@ -23,6 +23,9 @@ import * as state from './lib/state.mjs';
 
 const SAFETY_GATE = 'safety-review';
 
+/** "Since forever" — used when no named file is an artifact this session recorded. */
+const EPOCH = '1970-01-01T00:00:00.000Z';
+
 function readStdin() {
   try {
     return JSON.parse(readFileSync(0, 'utf8') || '{}');
@@ -245,6 +248,22 @@ function commandRecordGate(argv, payload) {
     block(`✖ PASS не записан: повторный скан нашёл ${stoppers.length} блокирующих находок\n\n${stoppers.map(render).join('\n\n')}`);
   }
 
+  // "Ревью выполнил другой контекст" перестаёт быть обещанием: с момента последней правки артефакта
+  // должен был завершиться субагент. Хук не знает, КАКОЙ и что он читал, — но знает, что делегирование
+  // вообще было, и этого хватает, чтобы контекст, писавший код, не подписывал сам себя.
+  if (gate === SAFETY_GATE && claimed === 'PASS') {
+    const known = state.readState(cwd).artifacts;
+    const written = files.map((file) => (known[file] || {}).at).filter(Boolean);
+    const since = written.sort().pop() || EPOCH;
+    if (!state.subagentRanSince(since, cwd)) {
+      block(`✖ PASS не записан: с момента записи артефакта ни один субагент не завершился\n`
+        + `  ${files.join('\n  ')}\n\n`
+        + '  Safety-review выполняет ОТДЕЛЬНЫЙ контекст — субагент stand-test-safety-reviewer, у которого нет Write.\n'
+        + '  Тот же контекст, что писал код, не может быть его adversarial-ревьюером: он проверяет свой замысел, а не написанное.\n'
+        + '  → запустите субагента, затем повторите эту команду. Правка артефакта после ревью снимает и это покрытие.');
+    }
+  }
+
   const covered = Object.keys(state.recordGate(gate, claimed, files, cwd).gates[gate].covers);
   const uncovered = files.filter((file) => !covered.includes(file));
   proceed(`гейт ${gate}: ${claimed} (${files.join(', ')})`
@@ -268,6 +287,11 @@ function commandStop(payload) {
     + `→ ${instruction}\n`
     + '→ затем запишите вердикт: node .claude/hooks/stand-guard.mjs record-gate --gate safety-review --verdict PASS <файлы>\n'
     + 'Правка файла после ревью снимает покрытие автоматически — гейт привязан к содержимому, а не к факту запуска.');
+}
+
+function commandSubagentStop(payload) {
+  state.recordSubagentStop(payload.cwd || process.cwd());
+  proceed();
 }
 
 function commandStatus(payload) {
@@ -321,9 +345,10 @@ try {
     case 'post-run': commandPostRun(readStdin()); break;
     case 'record-gate': commandRecordGate(argv, {}); break;
     case 'stop': commandStop(readStdin()); break;
+    case 'subagent-stop': commandSubagentStop(readStdin()); break;
     case 'status': commandStatus({}); break;
     default:
-      process.stdout.write('stand-guard: scan | pre-write | pre-bash | post-run | record-gate | stop | status\n');
+      process.stdout.write('stand-guard: scan | pre-write | pre-bash | post-run | record-gate | stop | subagent-stop | status\n');
       process.exit(0);
   }
 } catch (error) {

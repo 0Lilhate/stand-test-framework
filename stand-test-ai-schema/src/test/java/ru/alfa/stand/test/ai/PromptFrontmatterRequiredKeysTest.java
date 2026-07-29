@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -60,7 +61,17 @@ class PromptFrontmatterRequiredKeysTest {
             "skills", List.of("name", "description", "version"),
             "commands", List.of("description", "version"),
             "rules", List.of("version"),
-            "workflows", List.of("version"));
+            "workflows", List.of("version"),
+            "agents", List.of("name", "description", "version"));
+
+    /**
+     * Categories that exist in the Claude copy alone, because they are Claude Code mechanisms.
+     *
+     * <p>Named rather than inferred from what happens to be on disk: a category that vanished from a
+     * copy would otherwise be indistinguishable from one that never belonged there, and the whole
+     * point of walking both copies is to notice a disappearance.
+     */
+    private static final Set<String> CLAUDE_ONLY_CATEGORIES = Set.of("agents");
 
     /** A version is a positive integer with no leading zero: {@code 1}, not {@code 0}, {@code v1} or {@code 1.0}. */
     private static final Pattern VERSION = Pattern.compile("^[1-9][0-9]*$");
@@ -120,6 +131,9 @@ class PromptFrontmatterRequiredKeysTest {
         TreeMap<String, Path> found = new TreeMap<>();
         for (String bundle : BUNDLES) {
             for (String category : REQUIRED_KEYS.keySet()) {
+                if (CLAUDE_ONLY_CATEGORIES.contains(category) && !".claude".equals(bundle)) {
+                    continue;
+                }
                 Path directory = root.resolve(bundle).resolve(category);
                 try (Stream<Path> walk = Files.walk(directory)) {
                     walk.filter(Files::isRegularFile)
@@ -204,7 +218,7 @@ class PromptFrontmatterRequiredKeysTest {
         });
 
         assertThat(problems).as("frontmatter of the shipped prompts").isEmpty();
-        assertThat(prompts).as("both copies must contribute %d prompts each (16 skills + 12 commands + 2 rules + 2 workflows); a smaller listing means the bundle root resolved wrongly", PROMPTS_PER_BUNDLE)
+        assertThat(prompts).as("both copies must contribute %d prompts each (16 skills + 12 commands + 2 rules + 2 workflows), plus the Claude-only subagents; a smaller listing means the bundle root resolved wrongly", PROMPTS_PER_BUNDLE)
                 .hasSizeGreaterThanOrEqualTo(BUNDLES.size() * PROMPTS_PER_BUNDLE);
     }
 
@@ -250,7 +264,9 @@ class PromptFrontmatterRequiredKeysTest {
         List<String> mismatched = new ArrayList<>();
 
         prompts.forEach((relative, file) -> {
-            if (!relative.startsWith(".claude/")) {
+            // A Claude-only category has no twin BY CONSTRUCTION, and demanding one here would make
+            // this test the place that forbids a host mechanism the other host expresses differently.
+            if (!relative.startsWith(".claude/") || CLAUDE_ONLY_CATEGORIES.contains(categoryOf(relative))) {
                 return;
             }
             Path twin = prompts.get(relative.replaceFirst("^\\.claude/", ".opencode/"));

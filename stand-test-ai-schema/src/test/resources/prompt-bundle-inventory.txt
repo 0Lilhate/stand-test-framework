@@ -2,15 +2,22 @@
 # PromptBundleInventoryTest. One shipped asset path per line, relative to docs/ai-agent,
 # lexicographically sorted; blank lines and lines starting with '#' are ignored.
 #
-# Covered: the four asset directories (commands, rules, skills, workflows) of BOTH bundle copies,
-# plus the opencode-only loader manual AGENTS.md. Machine-local residue (.env*, settings.local.json,
-# scheduled_tasks.lock) sits at the bundle root, outside those directories, and is not shipped.
+# Covered: the asset directories (commands, rules, skills, workflows, hooks, agents) of BOTH bundle
+# copies, the bundle-root assets (settings.json, .gitignore) and the opencode-only loader manual
+# AGENTS.md. Machine-local residue (.env*, settings.local.json, scheduled_tasks.lock) sits at the
+# bundle root, outside those directories, and is not shipped. hooks/ and agents/ exist in the Claude
+# copy alone — they are Claude Code mechanisms, and BundleParityTest exempts those two prefixes.
 #
 # Adding, deleting or renaming an asset must be a deliberate edit of this file in the same commit.
 # Regenerate from the repository root:
-#   cd docs/ai-agent && { for b in .claude .opencode; do for d in commands rules skills workflows; \
-#     do find "$b/$d" -type f; done; done; echo ".opencode/AGENTS.md"; } | LC_ALL=C sort
+#   cd docs/ai-agent && { for b in .claude .opencode; do for d in commands rules skills workflows \
+#     hooks agents; do find "$b/$d" -type f 2>/dev/null; done; \
+#     find "$b" -maxdepth 1 \( -name settings.json -o -name .gitignore \) ; done; \
+#     echo ".opencode/AGENTS.md"; } | LC_ALL=C sort
 .claude/.gitignore
+.claude/agents/stand-test-kb-resolver.md
+.claude/agents/stand-test-quality-reviewer.md
+.claude/agents/stand-test-safety-reviewer.md
 .claude/commands/stand-test-apply-kb-candidates.md
 .claude/commands/stand-test-debug.md
 .claude/commands/stand-test-design.md

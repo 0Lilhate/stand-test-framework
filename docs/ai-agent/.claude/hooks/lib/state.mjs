@@ -14,7 +14,10 @@ const STATE_FILE = join(STATE_DIR, 'state.json');
 const JOURNAL_FILE = join(STATE_DIR, 'run-journal.jsonl');
 const UNKNOWN_FILE = join(STATE_DIR, 'unknown-signatures.jsonl');
 
-const EMPTY = { artifacts: {}, gates: {}, runs: [], results: {} };
+const EMPTY = { artifacts: {}, gates: {}, runs: [], results: {}, subagents: [] };
+
+/** More than enough to answer "was there a fresh context after this file was written". */
+const SUBAGENT_HISTORY = 50;
 
 export function sha256(text) {
   return createHash('sha256').update(text, 'utf8').digest('hex');
@@ -79,6 +82,33 @@ export function staleArtifacts(gate, cwd = process.cwd()) {
   return Object.entries(state.artifacts)
     .filter(([path, artifact]) => covers[path] !== artifact.sha)
     .map(([path]) => path);
+}
+
+/**
+ * Records that a subagent finished.
+ *
+ * This is the whole of what the host lets a hook know about delegation: that a separate context ran
+ * and ended, at this moment. Not which one, not what it was asked, not what it concluded. It is
+ * enough for one question — "did anything other than the writing context run since this file was
+ * written" — and that question is the difference between a review by a fresh context and a review
+ * declared by the context that wrote the code.
+ */
+export function recordSubagentStop(cwd = process.cwd()) {
+  const state = readState(cwd);
+  state.subagents = [...state.subagents, new Date().toISOString()].slice(-SUBAGENT_HISTORY);
+  writeState(state, cwd);
+  return state;
+}
+
+/**
+ * Whether a subagent finished no earlier than the given moment.
+ *
+ * Ties are resolved in the caller's favour: a stop in the same millisecond as a write cannot really
+ * have reviewed it, but a false refusal here costs more than that theoretical tie — it is the shape
+ * of gate people switch off.
+ */
+export function subagentRanSince(moment, cwd = process.cwd()) {
+  return readState(cwd).subagents.some((at) => Date.parse(at) >= Date.parse(moment));
 }
 
 /** The JUnit result files already read, as `{ '<path relative to cwd>': mtimeMs }`. */
