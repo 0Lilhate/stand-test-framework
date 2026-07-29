@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://alfa.ru/stand-test/agent/failure-analysis.schema.json",
+  "title": "stand-test agent failure analysis",
+  "description": "The machine-checkable output contract of the stand-test-debugging skill. Its two conditional rules encode the difference between an agent that finds bugs and one that hides them: a defect in the system under test is reported, never repaired by editing the test. PromptOutputSchemaResolutionTest keeps the skill's outputSchema reference pointing here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "primaryCause",
+    "failureClass",
+    "evidence",
+    "repairability",
+    "hints",
+    "confidence"
+  ],
+  "properties": {
+    "primaryCause": {
+      "description": "The single primary cause. A closed vocabulary.",
+      "enum": [
+        "TEST_DATA",
+        "ENVIRONMENT_CONFIG",
+        "TIMEOUT_TOO_SMALL",
+        "ASSERTION_WRONG_EXPECTATION",
+        "SYSTEM_DEFECT",
+        "ADAPTER_LIMITATION",
+        "FRAMEWORK_BUG"
+      ]
+    },
+    "failureClass": {
+      "description": "The mechanical split the SDK already makes: StandTestAssertionError is an ASSERTION, StandTestException is INFRASTRUCTURE. A closed vocabulary.",
+      "enum": [
+        "ASSERTION",
+        "INFRASTRUCTURE"
+      ]
+    },
+    "matchedSignature": {
+      "description": "Identifier of the matched known signature. Absent when nothing matched and the diagnosis came from the model rather than the catalogue.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "evidence": {
+      "description": "The observation supporting the diagnosis — what was seen, not what is believed.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "repairability": {
+      "description": "Whether the agent may attempt a fix. A closed vocabulary.",
+      "enum": [
+        "REPAIRABLE_BY_AGENT",
+        "NEEDS_HUMAN",
+        "SYSTEM_DEFECT"
+      ]
+    },
+    "hints": {
+      "description": "Bounded repair suggestions, necessarily empty for a system defect.",
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "$ref": "#/$defs/repairHint"
+      }
+    },
+    "confidence": {
+      "description": "How certain the diagnosis is. A deterministic catalogue match is 1.0; a model's guess is not.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  },
+  "allOf": [
+    {
+      "description": "A system defect carries no repair hints. The test stays red and the defect is reported — a hint here is an invitation to edit the test until the bug disappears from view.",
+      "if": {
+        "required": [
+          "repairability"
+        ],
+        "properties": {
+          "repairability": {
+            "const": "SYSTEM_DEFECT"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "hints": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "description": "A SYSTEM_DEFECT cause must be marked unrepairable by the agent. The record enforces this too; stating it here stops the model from producing the one combination that lets a real defect enter the repair loop.",
+      "if": {
+        "required": [
+          "primaryCause"
+        ],
+        "properties": {
+          "primaryCause": {
+            "const": "SYSTEM_DEFECT"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "repairability": {
+            "const": "SYSTEM_DEFECT"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "repairHint": {
+      "description": "One bounded repair suggestion. A closed vocabulary.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "rationale"
+      ],
+      "properties": {
+        "action": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      }
+    }
+  }
+}

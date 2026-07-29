@@ -1,0 +1,27 @@
+# Worked example — lookup result for the example case "created client request is accepted,
+# published to Kafka and stored in the DB" against docs/ai-agent/knowledge-base examples.
+caseId: client-request-accepted-e2e
+environment: ift
+matched:
+  services:
+    - client-service
+  endpoints:
+    - create-request
+    - get-request-status
+  kafkaTopics:
+    - request-created-topic
+  datasources:
+    - client-db
+  dbProbes:
+    - request-status-by-request-id
+  grpcTargets:
+    - result-grpc-service
+  grpcMethods:
+    - check-result
+missing: []
+assumptions:
+  - Timeout not stated in the case; SDK default 30s recorded for Kafka and DB expectations
+  - Environment not named; matched entries allow {dev, ift}, ift chosen by the step-7 tie-break (integration over dev)
+conflicts: []
+confidence:
+  overall: medium

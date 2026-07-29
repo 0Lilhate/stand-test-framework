@@ -11,6 +11,8 @@ itself is never modified by these assets.
 docs/ai-agent/
   README.md          ← this guide (stays in the SDK repo; not part of the bundle)
   usage-guide.md     ← worked walkthrough (RU): OpenAPI spec → KB → env → Java test
+  example-test-case-specification.md  ← how to WRITE the input case so the run needs no
+                       blocking questions (stays in the SDK repo; not part of the bundle)
   knowledge-base/    ← THE KB CONTRACT — schemas + worked examples (consumers copy the layout
                        to knowledge-base/ and replace examples with real entries)
     README.md, schema/*.schema.json,
@@ -50,14 +52,20 @@ docs/ai-agent/
       stand-test-apply-kb-candidates.md  /stand-test-apply-kb-candidates  — approved candidates → curated KB
       stand-test-generate-env.md /stand-test-generate-env — KB → registry config (yml/application.yml)
       stand-test-debug.md       /stand-test-debug    — failed test → debugging report
-    rules/
+    rules/           ← the only auto-loaded part of the bundle (Claude reads .claude/rules/**)
       stand-test-guardrails.md  ← non-negotiable constraints (mirrors ForbiddenOperation)
+      stand-test-pipeline.md    ← binding stage order + gates; the .claude counterpart of
+                                  .opencode/AGENTS.md, which points at this same file
     workflows/       ← 2 multi-command pipeline docs (not auto-loaded; referenced by the KB commands)
       ingest-unstructured-spec-to-kb.md    document → staged candidates
       review-and-apply-kb-candidates.md    candidates → human review → curated write
   .opencode/         ← THE SAME BUNDLE for opencode — identical skills/commands/rules/workflows, plus
-      AGENTS.md      ← agent manual (load model, pipeline, gates); loaded via opencode.json `instructions`
+      AGENTS.md      ← opencode-specific manual (load model, command/skill index); the pipeline
+                       itself lives in rules/stand-test-pipeline.md, shared by both bundles
       opencode.json  ← model, permissions, MCP servers; must sit NEXT TO `.opencode/`, not inside it
+                       Ships machine-agnostic MCP servers ONLY — no database and no IDE server.
+                       A wired-up SQL channel would reach every consumer that copies this bundle;
+                       add one in a local override outside the repo (shape: `env.template`).
 ```
 
 Each skill directory is self-contained: its SKILL.md references the colocated template,
@@ -78,10 +86,19 @@ checklists and worked example by relative path, so the bundle works wherever it 
    + `jackson-databind` as test dependencies (the SDK ships only the schema resource).
 4. Start with `/stand-test-design` on a real text case.
 
-In THIS repo the same skills are also registered at the root `.claude/skills/stand-test-*`
-as thin wrappers pointing into the bundle — the bundle stays the single source of truth.
+The bundle under `docs/ai-agent/` is the single source of truth. The repo-root `.claude/` is one
+developer's local tooling and is deliberately untracked — do not treat anything there as part of
+this contract.
 
 ## How a text case becomes an autotest
+
+The quality of the input decides how far the run gets before it has to stop and ask. Two worked
+inputs, deliberately different:
+
+| Input | What it shows |
+|---|---|
+| [`example-test-case-specification.md`](example-test-case-specification.md) | a **well-formed** case (SM-001) — exact expected values taken from the live stand, an explicit data-and-cleanup verdict, and correlation addressed rather than assumed. Every alias in it resolves against this repo's KB, so the claim "no blocking questions" is checkable, not asserted. It also states what it deliberately leaves out and why. Give this to whoever writes the cases. |
+| [`.claude/skills/stand-test-case-analysis/example-text-case.md`](.claude/skills/stand-test-case-analysis/example-text-case.md) | a **raw** case (OT-101) as a QA engineer actually writes it, ambiguities included — the input the analysis skill is built to interrogate. The rest of the bundle's worked examples derive from it. |
 
 `/stand-test-generate-java-test` runs the whole chain below as one umbrella workflow; the phase
 commands remain individually invocable:
@@ -151,7 +168,7 @@ gRPC custom metadata. Source of truth: `ai/stand-test-ai-generation-rules.md` +
 ## Safety constraints and prohibitions
 
 The hard rules live in the bundle: [`.claude/rules/stand-test-guardrails.md`](.claude/rules/stand-test-guardrails.md)
-(mirrors the 12-code `ForbiddenOperation` enum + review-only rules), with detection patterns
+(mirrors the 15-code `ForbiddenOperation` enum + review-only rules), with detection patterns
 in [`.claude/skills/stand-test-safety-review/safety-checklist.md`](.claude/skills/stand-test-safety-review/safety-checklist.md).
 Summary: aliases only, no secrets, no sleeps, bounded timeouts, no destructive SQL,
 SDK-owned `testRunId`/`correlationId`, no pipeline/validator bypass, no production envs,
@@ -193,9 +210,24 @@ Generated tests are gated to **skip** (not fail) without stand configuration:
 @EnabledIfEnvironmentVariable(named = "ORDER_SERVICE_URL", matches = ".+")
 ```
 
-Run `./gradlew test` with the env vars the registry names exported — the `*-ref` fields'
-names plus, on the Spring-starter surface, the variables inside the endpoint value twins'
-`${ENV_VAR:...}` placeholders.
+Wire the registry's env vars into the **test JVM**, not just the shell. A bare
+`export VAR=... && ./gradlew test` is not a reliable channel to the forked test worker: the test then
+skips silently and the build still reports `BUILD SUCCESSFUL`, so a test that never issued a request
+looks like a passing one. In the consumer's `build.gradle.kts`:
+
+```kotlin
+tasks.withType<Test>().configureEach {
+  listOf("ORDER_SERVICE_URL", "ORDER_DB_PASSWORD").forEach { name ->   // the registry's *-ref names
+    providers.environmentVariable(name).orNull?.let { environment(name, it) }
+  }
+}
+```
+
+The names to forward are the `*-ref` fields' values plus, on the Spring-starter surface, the
+variables inside the endpoint value twins' `${ENV_VAR:...}` placeholders.
+
+**Always check the result, not the exit code**: `build/test-results/test/TEST-<class>.xml` must show
+`tests="1" skipped="0"`. `skipped="1"` means the gate fired and the stand was never touched.
 Assertion failures surface as `StandTestAssertionError` (JUnit red), infra/config problems
 as `StandTestException` (JUnit error).
 

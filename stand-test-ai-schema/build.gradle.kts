@@ -31,4 +31,29 @@ dependencies {
 // instead of hitting a stale FROM-CACHE result.
 tasks.test {
     inputs.dir(rootDir.resolve("docs/ai-agent/knowledge-base")).withPropertyName("standTestKnowledgeBaseDir")
+
+    // StepMatcherCapabilityCoverageTest scans the authoring bundle for stale matcher claims, so the
+    // bundle is a test input too. Only the curated asset trees are declared: the bundle directories
+    // also hold gitignored machine-local files (.env, settings.local.json, scheduled_tasks.lock), and
+    // folding those into the cache key would make up-to-date checks differ per developer.
+    inputs.files(
+        fileTree(rootDir.resolve("docs/ai-agent")) {
+            include(".claude/skills/**", ".claude/commands/**", ".claude/rules/**", ".claude/workflows/**")
+            include(".opencode/skills/**", ".opencode/commands/**", ".opencode/rules/**", ".opencode/workflows/**", ".opencode/AGENTS.md")
+        // OpencodeConfigSafetyTest reads the shipped loader config. It is excluded from
+        // BundleParityTest by design (opencode-only) and holds no prompts, so nothing else looks
+        // at it — which is how three production database servers lived in it unnoticed.
+        include(".opencode/opencode.json")
+        },
+    ).withPropertyName("standTestAuthoringBundle")
+
+    // ForbiddenOperationCoverageTest also scans the documents allowed to state how many
+    // ForbiddenOperation codes exist. The two guardrails copies are already covered by the bundle
+    // tree above; these three sit outside it, and without declaring them a wrong number typed into
+    // CLAUDE.md would hide behind an UP-TO-DATE test.
+    inputs.files(
+        rootDir.resolve("CLAUDE.md"),
+        rootDir.resolve("README.md"),
+        rootDir.resolve("docs/ai-agent/README.md"),
+    ).withPropertyName("standTestCountBearingDocs")
 }

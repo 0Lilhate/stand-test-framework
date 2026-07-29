@@ -1,3 +1,7 @@
+---
+version: 1
+---
+
 # Rules: stand-test-sdk autotest generation guardrails
 
 Non-negotiable rules for ANY agent work that creates or modifies stand-test autotests.
@@ -29,12 +33,21 @@ Details and detection patterns: `.opencode/skills/stand-test-safety-review/safet
   values; auth comes from the registry (`auth:` with `*-ref` env-var NAMES).
 - No production environments in any test registry.
 - No destructive SQL: no DDL/TRUNCATE/MERGE/upserts/multi-statement; DB writes only via
-  `db.seed`/`db.cleanup` on `write-allowed` datasources into whitelisted schemas, scoped by
-  `:testRunId` (`whereTestRunId`, no author WHERE in cleanup SQL).
+  `db.seed`/`db.cleanup`/`db.write` on `write-allowed` datasources into whitelisted schemas —
+  `db.seed` scoped by `:testRunId` (`whereTestRunId`, no author WHERE in cleanup SQL), `db.write`
+  scoped by the primary key it declares in `identifiedBy(...)` and undone by the run's undo-log.
 - **DB write logic — when the case needs it, WRITE it (do not dodge into assumptions):**
   - *When*: the case requires precondition rows or test data that cannot be created through the
-    system's API (the API path is preferred — scenario-design rule 11). Seeds/cleanups exist
-    only on the Java DSL track (the AI format has no `db.seed`/`db.cleanup`).
+    system's API (the API path is preferred — scenario-design rule 11). DB writes exist only on the
+    Java DSL track (the AI format has no `db.seed`/`db.cleanup`/`db.write`).
+  - *Which shape*: the TARGET TABLE decides. A table carrying a `test_run_id` marker column →
+    `db.seed` + a paired `db.cleanup` (below). A table WITHOUT one — an ordinary business table —
+    → `db.write` with `identifiedBy("<pk>")`, whose row is undone after the run by a primary-key
+    compensation in the run's undo-log; no marker column and no paired cleanup are needed.
+    `identifiedBy` is mandatory there and every column it names must be bound as `:<column>` in the
+    INSERT — a write whose key cannot be resolved is refused at run time, so nothing un-undoable
+    reaches the stand. Timing is the scenario's `cleanupPolicy`: `ON_FAILURE` (default), `ALWAYS`,
+    `NEVER`. "No marker column" is therefore NOT a reason to declare the case blocked.
   - *Preconditions first*: the datasource must have `write-allowed: true` in the registry
     (KB: `access.mode: write-allowed`) AND the target schema must be in `allowed-schemas`.
     Either missing ⇒ a blocking question to the human (registry/KB changes are human-approved) —

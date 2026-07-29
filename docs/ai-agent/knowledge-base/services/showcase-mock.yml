@@ -1,0 +1,42 @@
+# Curated service entry derived from the live OpenAPI 3.1 document at the IFT mock
+# (GET /v3/api-docs on the tksdev3mock1 app), via /stand-test-kb-update. Schema: ../schema/service.schema.json
+#
+# HUMAN DECISIONS RECORDED AT DERIVATION TIME (the spec does not supply them):
+#   * `id` — the document's `info.title` is the springdoc placeholder "OpenAPI definition" and
+#     `info.version` is "v0", so no id could be derived. `showcase-mock` was chosen by a human and is
+#     now FROZEN (mappings and generated tests reference it).
+#   * `environments: [ift]` — the document's single `servers` entry is a generated absolute URL, which
+#     the KB may not store. The deployment binding is a recorded assumption, not an extracted fact.
+#
+# NOT PRESENT IN THE SPEC, therefore absent here (their absence is a real constraint on tests):
+#   * no `correlation:` — the document declares no header parameters at all, so `injectCorrelationId()`
+#     is unavailable against this service and event-style correlation cannot be asserted;
+#   * no `auth:` — the document declares no `components.securitySchemes`.
+# Both become blocking questions if a case needs them; do not invent either.
+services:
+  - id: showcase-mock
+    name: "Showcase / card-migration mock (IFT)"
+    description: >-
+      Mock service on the IFT stand exposing showcase load/format operations, a card-migration
+      endpoint and a MessagePack decoder. Backs smoke and contract-shape autotests; it is a test
+      double, not a business system of record.
+    domain: tks
+    environments:
+      - ift
+    endpoints:
+      - get-showcases-formats-code
+      - post-decoder
+      - post-migration-cards
+      - post-showcases-formats
+      - post-showcases-load
+      - post-showcases-load-batch
+      - post-showcases-load-list
+    grpcTargets: []
+    kafkaTopics:
+      produces: []
+      consumes: []
+    datasources: []
+    tags:
+      - tks
+      - showcase
+      - mock

@@ -1,0 +1,31 @@
+// SAFETY FIXTURE — a Java test that stays inside the SDK: nothing here is a finding.
+// Stored as .java.txt so nothing compiles it. It exists so every positive fixture has a
+// counterpart, because a detector is only useful if something makes it stay quiet.
+package ru.alfa.qa.test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.time.Duration;
+import org.junit.jupiter.api.Test;
+import ru.alfa.stand.test.core.client.StandClient;
+import ru.alfa.stand.test.core.scenario.Scenario;
+import ru.alfa.stand.test.junit.StandTest;
+import ru.alfa.stand.test.rest.RestStep;
+
+@StandTest
+class CleanDeclarativeTest {
+
+    @Test
+    void formatIsReturned(StandClient stand) {
+        Scenario scenario = Scenario.builder("showcase-format")
+                .environment("ift")
+                .step(RestStep.get("client-service", "/showcases/formats/DEMO-001")
+                        .id("fetch-format")
+                        .timeout(Duration.ofSeconds(10))
+                        .expectStatus(200)
+                        .build())
+                .build();
+
+        assertThat(stand.run(scenario).isSuccessful()).isTrue();
+    }
+}

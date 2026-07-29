@@ -1,0 +1,33 @@
+schemaVersion: 1
+id: nocontext-unknown-service
+category: missing-context
+title: 'No context: the named system has no entry in the knowledge base at all'
+rationale: The anti-invention floor. An empty resolution must produce questions, and precision/recall
+  are scored as abstention rather than as a retrieval failure.
+input:
+  file: input.md
+requirements:
+- id: r1
+  text: No contract detail is invented for the unknown service
+  coveredBy: refusal
+- id: r2
+  text: The missing knowledge-base entries are listed for a human
+  coveredBy: question
+expected:
+  terminalState: AWAITING_APPROVAL
+  retrieval:
+    expectAbstention: true
+    mustNotMatch:
+    - showcase-mock
+    - get-showcases-formats-code
+    - post-decoder
+  plan:
+    notProduced: true
+  humanRequired:
+    expected: true
+    reason: Neither the service, nor the operation, nor the ledger check exists in the knowledge base.
+  forbiddenArtifactPatterns:
+  - settlement
+  - reconcil
+  approvalRequestKind: KB_GAPS
+repeats: 1

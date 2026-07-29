@@ -1,6 +1,7 @@
 package ru.alfa.stand.test.kafka;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
@@ -221,6 +222,30 @@ class KafkaStepExecutorExpectTest {
         assertThatThrownBy(() -> executor.execute(step, this.context))
                 .isInstanceOf(StandTestAssertionError.class)
                 .hasMessageContaining("$.status");
+    }
+
+    @Test
+    @DisplayName("numbers are compared by value, so an expected int matches a JSON decimal — the shared core evaluator, not a kafka-local copy")
+    void numericAssertionComparesByValue() {
+        KafkaStepExecutor executor = executor(Awaiter.create());
+        ScenarioStep step = KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).correlationIdFromContext().assertPath("$.amount", 100).build();
+        executor.prepare(step, this.context);
+        addResponse(0L, null, "{\"amount\":100.0}", correlationId());
+
+        assertThatCode(() -> executor.execute(step, this.context)).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("a type change other than numeric is a genuine mismatch — the value is never string-coerced")
+    void typeChangeIsNotCoerced() {
+        KafkaStepExecutor executor = executor(Awaiter.create());
+        ScenarioStep step = KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).correlationIdFromContext().assertPath("$.amount", "100").build();
+        executor.prepare(step, this.context);
+        addResponse(0L, null, "{\"amount\":100}", correlationId());
+
+        assertThatThrownBy(() -> executor.execute(step, this.context))
+                .isInstanceOf(StandTestAssertionError.class)
+                .hasMessageContaining("$.amount");
     }
 
     @Test

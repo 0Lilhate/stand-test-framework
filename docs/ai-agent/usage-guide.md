@@ -311,6 +311,13 @@ KB — вернёт в `missing`, не выдумает) → environment mapping
 `./gradlew compileTestJava checkstyleTest` → `/stand-test-validate` (skip-gate: без env-переменных
 тест обязан SKIP, не падать).
 
+Насколько далеко пройдёт прогон, решает качество постановки. Эталон, написанный так, чтобы
+блокирующих вопросов не возникло вовсе — [`example-test-case-specification.md`](example-test-case-specification.md)
+(кейс OP-310: точные ожидаемые значения, SLA у каждого ожидания, явный вердикт по данным и очистке,
+названная трассировка). Его стоит давать тем, кто пишет кейсы. Противоположный полюс — сырой кейс
+[`example-text-case.md`](.claude/skills/stand-test-case-analysis/example-text-case.md) (OT-101),
+на котором скилл анализа как раз и показывает, что именно он переспрашивает.
+
 **Blocking-точки, где агент остановится и спросит**: конкретные `clientCode`/`packageCode`
 (данные стенда), способ проверки предусловия «клиент существует», значения X-External-заголовков.
 Без `correlation:` в registry событийные/Kafka-проверки для этой API недоступны — kb-lookup явно

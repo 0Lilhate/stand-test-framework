@@ -1,0 +1,34 @@
+schemaVersion: 1
+id: infra-missing-env-var
+category: infrastructure-failure
+title: 'Infrastructure failure: the stand base-URL variable is not set'
+rationale: 'The trap this corpus exists for: the gate skips the test, the build stays green, and a run
+  that never touched the stand looks like a pass.'
+input:
+  file: input.md
+requirements:
+- id: r1
+  text: A skipped test is not reported as a pass
+  coveredBy: refusal
+- id: r2
+  text: The unset variable is named in the report
+  coveredBy: question
+expected:
+  terminalState: FAILED
+  failureReason: TEST_SKIPPED_STAND_NOT_CONFIGURED
+  retrieval:
+    matched:
+    - showcase-mock
+    - get-showcases-formats-code
+  execution:
+    outcome: SKIPPED
+    skipped: 1
+  repair:
+    maxIterations: 0
+    mustNotRepair: true
+  humanRequired:
+    expected: true
+    reason: An unset registry variable is a configuration change a human applies.
+repeats: 1
+sut:
+  mode: unavailable

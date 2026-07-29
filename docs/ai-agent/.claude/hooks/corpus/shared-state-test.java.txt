@@ -1,0 +1,37 @@
+// SAFETY FIXTURE — a Java test that races itself and swallows what the SDK tells it.
+// Stored as .java.txt so nothing compiles it. Handed to the scan as "SharedStateTest.java".
+//
+// Planted violations:
+//   11. a correlation id written as a literal instead of injected     (HIGH)
+//   12. an SDK failure caught and turned into a log line              (HIGH)
+//   17. two static mutable fields shared across parallel test threads (HIGH)
+package ru.alfa.qa.test;
+
+import java.util.ArrayList;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import ru.alfa.stand.test.core.exception.StandTestAssertionError;
+
+class SharedStateTest {
+
+    private static final List<String> CAPTURED_IDS = new ArrayList<>();
+
+    private static int runCounter;
+
+    @Test
+    void createsARequest() {
+        runCounter++;
+        Scenario scenario = Scenario.builder("showcase-format")
+                .environment("ift")
+                .step(RestStep.post("client-service", "/api/requests")
+                        .header("X-Correlation-Id", "fixed-correlation-0001")
+                        .build())
+                .build();
+
+        try {
+            CAPTURED_IDS.add(stand.run(scenario).capture("requestId"));
+        } catch (StandTestAssertionError e) {
+            log.warn("the assertion did not hold, carrying on", e);
+        }
+    }
+}

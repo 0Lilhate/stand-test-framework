@@ -29,30 +29,15 @@ content from memory.
 
 ## The one pipeline
 
-Every authoring request follows this order. **No stage may be skipped or reordered**, and each gate
-stops the run:
+Defined once, in [`rules/stand-test-pipeline.md`](rules/stand-test-pipeline.md) — loaded through the
+`instructions` entry `.opencode/rules/**/*.md`, so it is already in your context. It fixes the stage
+order (case-analysis → kb-lookup → blocking questions → environment-mapping → scenario-design →
+authoring → fixtures → safety-review → compile → run → test-review), the gates, and the binding
+track choice at stage 5.
 
-```
-text case
-  1. stand-test-case-analysis      goal, preconditions, trigger, expected effects, missing info
-  2. stand-test-kb-lookup          contracts resolve to KB entries — or become `missing`
-  3. blocking questions            analysis blockers + lookup `missing`  → ASK THE HUMAN
-  4. stand-test-environment-mapping aliases, correlation/auth/write-allowed, required env vars
-  5. stand-test-scenario-design    steps, captures, assertions, awaits, cleanup, TRACK CHOICE
-  6. authoring                     java-dsl-authoring (default) | yaml-authoring (AI format)
-  7. stand-test-fixture-authoring  for every body/payload/request reference
-  8. stand-test-safety-review      MANDATORY GATE — any BLOCK ⇒ regenerate, never work around
-  9. compile / schema-validate     ./gradlew compileTestJava checkstyleTest  |  schema+parser+validator
- 10. run                           skip-gate always; real run only with a stand configured
- 11. stand-test-test-review        quality gate → readiness report → HUMAN APPROVES
-```
-
-`/stand-test-generate-java-test` is the umbrella that runs 1–11. Use the narrower commands when you
-need one phase. On a failed run: `/stand-test-debug`, then re-enter at 6 (or 5 if the design was wrong).
-
-**Track choice (step 5) is binding.** Java DSL is the default. The AI format is only for scenarios
-inside its executable subset (7 step types, equals-only outside REST/gRPC, fixture-only bodies, no
-`db.seed`/`db.cleanup`). If a step falls outside — switch to the Java track, never stretch the format.
+It is stated there rather than here so the two bundles cannot drift: `.claude/` has no `AGENTS.md`,
+and a second copy of the stage order is exactly the kind of duplicate this repository has been
+bitten by before.
 
 ## Commands
 

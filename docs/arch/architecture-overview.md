@@ -635,8 +635,10 @@ JUnit'овыми).
    (`EQUALS/CONTAINS/EXISTS/NOT_NULL/MATCHES`) и wire-ключ `MATCHER`; у `KafkaAssertion` поля матчера нет
    вообще, а `AiStepNormalizer` отвергает любой не-`equals` матчер на `kafka.expect`. `GrpcAssertion`
    сохраняет двухаргументный конструктор с дефолтом `EQUALS` — compat-шим со времён, когда gRPC был equals-only.
-2. **Числовая коэрсия продублирована**: `MessageAssertions.valuesMatch` (kafka) переизобретает то, что core'овский
-   `AssertionMatchers` уже делает для REST/gRPC. Семантика та же, копии две.
+2. ~~**Числовая коэрсия продублирована**~~ — **закрыто.** `MessageAssertions` (kafka) и `DbValues` (db)
+   делегируют в core'овский `AssertionMatchers.equalsMatch`, который уже использовали REST и gRPC. Копия
+   одна, все четыре адаптера сравнивают одинаково по построению. Поведение kafka зафиксировано тестами
+   `KafkaStepExecutorExpectTest` (числа сравниваются по значению; смена типа — честный мисматч).
 3. **DB-ассерты другой формы**: без JSONPath — один `expectValue` против первой колонки однострочного SELECT;
    captures по **имени колонки**. `db.expectEventually` требует ровно одну строку (>1 ⇒ «ambiguous»).
 4. **Корреляция покрыта неравномерно**: rest=HEADER, kafka=HEADER-only (KEY/PAYLOAD_FIELD не реализованы),
@@ -648,6 +650,16 @@ JUnit'овыми).
 8. **gRPC — plaintext-only** (`usePlaintext()`), тогда как REST-auth и Kafka SASL/SSL идут из реестра. Streaming вне скоупа.
 9. **`prepare()` использует 2 адаптера из 4** (kafka, grpc); rest/db — no-op.
 10. **gRPC недостижим из surface A** (`given`/`then`) — только из AI-формата.
+11. **Человекочитаемая метаинформация модели никуда не доезжает.** `Scenario.title`/`description` и
+    `ScenarioStep.description` хранятся в модели (и `AiScenarioParser` читает их из корня AI-документа),
+    но событийная модель их не несёт: `ScenarioEvent` = (scenarioId, testRunId, correlationId,
+    environment, tags, phase, timestamp), `StepEvent` = (… stepId, stepType, phase, status, timestamp,
+    message, diagnostics, attachments). Allure-синк видит только события, поэтому шаг именуется
+    `type + id` (`AllureStepMapper` это прямо документирует), а заголовок сценария в отчёт не попадает —
+    имя теста берётся из JUnit `@DisplayName` через `allure-junit5`. Следствие для авторинга: на
+    Java-треке метаинформация живёт в `@DisplayName` + javadoc, а `.title(...)`/`.description(...)`
+    вызывать бессмысленно; на AI-треке `title`/`description` полезны как текст для читателя документа.
+    Починка = расширение `ScenarioEvent`/`StepEvent` (ломает публичные record'ы) + маппер.
 11. **Публикация endpoint-less**: проводка готова, реальные координаты Nexus/Artifactory и первый прогон
     публикации остались.
 

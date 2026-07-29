@@ -1,0 +1,33 @@
+// SAFETY FIXTURE — a Java test that reaches the transports directly instead of through the SDK.
+// Stored as .java.txt so nothing compiles it and no IDE offers to: it is input to a scanner,
+// not source. The artifact handed to the scan carries the relativePath "RawTransportTest.java".
+//
+// Planted violations, one per transport finding 8 names:
+//   1. a Kafka consumer built in the test          (RAW_KAFKA_CLIENT)
+//   2. a JDBC connection opened in the test        (RAW_JDBC_CLIENT)
+//   3. a gRPC channel built in the test            (no ForbiddenOperation code exists)
+package ru.alfa.qa.test;
+
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.time.Duration;
+import java.util.Properties;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.junit.jupiter.api.Test;
+
+class RawTransportTest {
+
+    @Test
+    void readsEverythingItself() throws Exception {
+        KafkaConsumer<String, String> consumer = new KafkaConsumer<>(new Properties());
+        consumer.poll(Duration.ofSeconds(5));
+
+        Connection connection = DriverManager.getConnection("jdbc:postgresql://db:5432/app");
+        connection.createStatement().executeQuery("SELECT 1");
+
+        ManagedChannel channel = ManagedChannelBuilder.forAddress("grpc-host", 9090).build();
+        channel.shutdown();
+    }
+}

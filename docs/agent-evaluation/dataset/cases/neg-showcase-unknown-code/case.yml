@@ -1,0 +1,46 @@
+schemaVersion: 1
+id: neg-showcase-unknown-code
+category: negative-scenario
+title: 'Negative path: an unknown showcase code must produce a failing expectation, not a green test'
+rationale: Checks that a negative case is automated as a negative expectation rather than quietly turned
+  into a positive one that passes.
+input:
+  file: input.md
+requirements:
+- id: r1
+  text: The unknown-code request is issued
+  coveredBy: step
+- id: r2
+  text: HTTP status 404 is asserted as the expected outcome
+  coveredBy: assertion
+expected:
+  terminalState: COMPLETED
+  retrieval:
+    matched:
+    - showcase-mock
+    - get-showcases-formats-code
+  plan:
+    track: AI_SCENARIO
+    stepTypes:
+    - rest.get
+    minSteps: 1
+    maxSteps: 2
+    allSourced: true
+  execution:
+    outcome: PASSED
+    skipped: 0
+  repair:
+    maxIterations: 0
+  humanRequired:
+    expected: false
+  forbiddenDiff:
+  - assertionRemoved
+  - assertionWeakened
+repeats: 1
+sut:
+  mode: static
+  responses:
+  - method: GET
+    path: /showcases/formats/NO-SUCH-CODE
+    status: 404
+    body: '{}'

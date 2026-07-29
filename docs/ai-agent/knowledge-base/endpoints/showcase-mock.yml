@@ -1,0 +1,148 @@
+# Curated endpoint entries derived mechanically from the live OpenAPI 3.1 document (see
+# ../services/showcase-mock.yml for the derivation record). Schema: ../schema/endpoint.schema.json
+#
+# Derivation rules applied:
+#   * id       = <method>-<path-slug>; every operationId in the source is a camelCase verb phrase
+#                that does not disambiguate the path, so the slug form is used throughout.
+#   * response = only the declared SUCCESS code. The 500 responses are not contract: negative
+#                expectations belong to the case, not the KB.
+#   * request  = requiredFields taken verbatim from the referenced components.schema `required`
+#                array; `fixtureTemplate` is a CLASSPATH path under src/test/resources (the SDK
+#                reads it at run time), unlike schemaRef which is KB-relative.
+#   * query    = every declared query parameter, all optional in this document.
+#
+# EXCLUDED ON PURPOSE — `POST /convert-to-json` consumes multipart/form-data with a binary file
+# part. The REST adapter sends a single string body (`WebClientHttpCaller` calls
+# `bodyValue(request.body())`), so that operation is NOT expressible by the SDK. Adding it would
+# put an unautomatable contract in front of the agent; it is left out until multipart exists.
+endpoints:
+  - id: get-showcases-formats-code
+    serviceId: showcase-mock
+    method: GET
+    path: /showcases/formats/{code}
+    description: "Формат одной витрины (актуальная или указанная версия)"
+    query:
+      optional:
+        - version
+    response:
+      status:
+        success: 200
+    allowedEnvironments:
+      - ift
+
+  - id: post-decoder
+    serviceId: showcase-mock
+    method: POST
+    path: /decoder
+    description: "Декодировать HEX (MessagePack) в JSON"
+    request:
+      contentType: application/json
+      fixtureTemplate: fixtures/showcase-mock/post-decoder.json
+      requiredFields:
+        - message
+    response:
+      status:
+        success: 200
+    allowedEnvironments:
+      - ift
+
+  # 200 carries NO response body, so only the status is assertable here.
+  - id: post-migration-cards
+    serviceId: showcase-mock
+    method: POST
+    path: /migration/cards
+    description: "Выполнить миграцию данных карты"
+    request:
+      contentType: application/json
+      fixtureTemplate: fixtures/showcase-mock/post-migration-cards.json
+      requiredFields:
+        - cardId
+        - cardType
+        - clientPin
+        - connectDate
+        - endDate
+        - location
+        - notifyChannel
+        - paymentDay
+        - period
+        - serviceCode
+        - startDate
+        - status
+    response:
+      status:
+        success: 200
+    allowedEnvironments:
+      - ift
+
+  # Body is an ARRAY of ShowcaseFormatRequest; the schema declares no required fields on the item.
+  - id: post-showcases-formats
+    serviceId: showcase-mock
+    method: POST
+    path: /showcases/formats
+    description: "Получить форматы списка витрин (версия опциональна для каждого элемента)"
+    request:
+      contentType: application/json
+      fixtureTemplate: fixtures/showcase-mock/post-showcases-formats.json
+    response:
+      status:
+        success: 200
+    allowedEnvironments:
+      - ift
+
+  - id: post-showcases-load
+    serviceId: showcase-mock
+    method: POST
+    path: /showcases/load
+    description: "Отправить одно сообщение"
+    request:
+      contentType: application/json
+      fixtureTemplate: fixtures/showcase-mock/post-showcases-load.json
+      requiredFields:
+        - businessCode
+        - fields
+    response:
+      status:
+        success: 200
+    allowedEnvironments:
+      - ift
+
+  - id: post-showcases-load-batch
+    serviceId: showcase-mock
+    method: POST
+    path: /showcases/load/batch
+    description: "Отправить N сообщений"
+    query:
+      optional:
+        - count
+    request:
+      contentType: application/json
+      fixtureTemplate: fixtures/showcase-mock/post-showcases-load-batch.json
+      requiredFields:
+        - businessCode
+        - fields
+    response:
+      status:
+        success: 200
+    allowedEnvironments:
+      - ift
+
+  # Body is an ARRAY of ShowcaseMessageRequest; required fields apply to each element.
+  - id: post-showcases-load-list
+    serviceId: showcase-mock
+    method: POST
+    path: /showcases/load/list
+    description: "Отправить список сообщений"
+    query:
+      optional:
+        - rps
+    request:
+      contentType: application/json
+      fixtureTemplate: fixtures/showcase-mock/post-showcases-load-list.json
+      requiredFields:
+        - businessCode
+        - fields
+    response:
+      status:
+        success: 200
+    allowedEnvironments:
+      - ift

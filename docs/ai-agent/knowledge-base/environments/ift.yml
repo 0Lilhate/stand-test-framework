@@ -1,0 +1,20 @@
+# Curated environment binding for the IFT stand. Schema: ../schema/environment.schema.json
+#
+# The KB stores env-var REFERENCES (names), never values: the source document's `servers` entry is a
+# generated absolute URL and is deliberately NOT recorded here. `/stand-test-generate-env` renders
+# this file into stand-test-environments.yml (plain JUnit, refs-only) or application.yml
+# `stand.test.environments.ift.*` (Spring starter).
+#
+# Every endpoint whose `allowedEnvironments` lists `ift` needs its owning service bound below —
+# an entry without a binding cannot run anywhere. Export the referenced variable before a real run:
+#   export SHOWCASE_MOCK_BASE_URL="http://<stand-host>:<port>"
+environments:
+  - id: ift
+    description: Integration test stand
+    services:
+      - serviceId: showcase-mock
+        baseUrlRef: SHOWCASE_MOCK_BASE_URL
+    secrets:
+      mode: external
+      allowedRefPrefixes:
+        - SHOWCASE_

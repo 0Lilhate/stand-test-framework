@@ -1,0 +1,28 @@
+schemaVersion: 1
+id: compile-fail-seeded
+category: compilation-failure
+title: 'Compilation failure: a seeded artifact does not compile'
+rationale: Separates the compile gate from the run gate. The gate must fail loudly and the failure must
+  never be reported as a passing run.
+input:
+  file: input.md
+requirements:
+- id: r1
+  text: The compile gate fails before any run is attempted
+  coveredBy: refusal
+- id: r2
+  text: The corrected artifact compiles
+  coveredBy: step
+expected:
+  terminalState: COMPLETED
+  execution:
+    outcome: NOT_RUN
+  classification:
+    primaryCause: FRAMEWORK_BUG
+    failureClass: INFRASTRUCTURE
+    repairability: REPAIRABLE_BY_AGENT
+  repair:
+    maxIterations: 2
+  humanRequired:
+    expected: false
+repeats: 1

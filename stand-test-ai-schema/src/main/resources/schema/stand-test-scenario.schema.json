@@ -134,7 +134,7 @@
       "items": { "$ref": "#/$defs/assertion" }
     },
     "equalsOnlyAssertion": {
-      "description": "A single EQUALS-only assertion over a JSONPath, for adapters whose executor supports EQUALS only (kafka.expect, grpc.unary). Only `path` + `equals` are allowed here, so a schema-valid document is exactly what the runtime can execute (no exists/notNull/contains/matches/script that the kafka/grpc executors would reject or silently degrade). `equals: null` is forbidden — express a null check on the REST surface where the full matcher set executes.",
+      "description": "A single EQUALS-only assertion over a JSONPath, for adapters whose executor supports EQUALS only — `kafka.expect` is the sole user of this def (`grpc.unary` references the full `assertionList`, at parity with REST). Only `path` + `equals` are allowed here, so a schema-valid document is exactly what the runtime can execute (no exists/notNull/contains/matches/script that the kafka executor would reject or silently degrade). `equals: null` is forbidden — express a null check on the REST or gRPC surface, where the full matcher set executes.",
       "type": "object",
       "additionalProperties": false,
       "required": ["path", "equals"],

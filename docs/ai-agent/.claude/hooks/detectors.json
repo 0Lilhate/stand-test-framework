@@ -1,0 +1,339 @@
+{
+  "$comment": [
+    "Таблица детекторов safety-скана. Нумерация — из stand-test-safety-review/SKILL.md.",
+    "ruleId для находок, у которых есть код в ForbiddenOperation, обязан совпадать с ним:",
+    "это проверяет GuardrailScannerParityTest в stand-test-ai-schema. Второй словарь",
+    "guardrail-кодов разошёлся бы с первым, и никто бы не заметил.",
+    "",
+    "severity: BLOCK останавливает работу, HIGH требует человека, но не блокирует.",
+    "source: STATIC_SCAN — совпадение решает вопрос; HEURISTIC — совпадение это улика,",
+    "решает человек. Три эвристики (10, 13, 14) помечены так по колонке автоматизируемости.",
+    "",
+    "appliesTo: java | document | build | any — по виду артефакта.",
+    "Регулярки в синтаксисе JS RegExp; флаги в поле flags."
+  ],
+  "version": 1,
+  "detectors": [
+    {
+      "finding": 1,
+      "ruleId": "HARDCODED_STAND_URL",
+      "severity": "BLOCK",
+      "source": "STATIC_SCAN",
+      "appliesTo": "any",
+      "title": "адрес написан там, где положен алиас",
+      "patterns": [
+        { "regex": "\\b(?:https?|jdbc|grpc|amqp|mongodb|redis)://|\\bjdbc:[a-z0-9]+:", "flags": "gi" },
+        { "regex": "\\b(?:[a-z0-9-]+\\.)+[a-z][a-z0-9-]*:\\d{2,5}\\b", "flags": "gi" }
+      ],
+      "fix": "назови сервис, топик, датасорс или gRPC-таргет из реестра окружений; резолвинг — это место, где проверяются allowlist окружений, correlation-заголовок и креденшелы, а написанный адрес обходит все три"
+    },
+    {
+      "finding": 2,
+      "ruleId": "SECRET_IN_SOURCE",
+      "severity": "BLOCK",
+      "source": "STATIC_SCAN",
+      "appliesTo": "any",
+      "title": "креденшел записан в артефакт",
+      "patterns": [
+        {
+          "regex": "\"([A-Za-z0-9_-]*(?:authorization|api[-_]?key|token|password|secret|credential)[A-Za-z0-9_-]*)\"\\s*:\\s*\"([^\"]*)\"",
+          "flags": "gi",
+          "captureKey": 1,
+          "captureValue": 2,
+          "exemptKeyRegex": "(?:-ref|_ref|Ref)$",
+          "exemptValueRegex": "^[A-Z][A-Z0-9_]*$",
+          "$comment": "форма *-ref с бареным ИМЕНЕМ переменной — санкционированная, и помечать её находкой значит гнать авторов обратно к значениям"
+        },
+        { "regex": "\\b(?:Bearer|Basic)\\s+\\S+", "flags": "g" }
+      ],
+      "fix": "используй форму *-ref с бареным именем переменной окружения либо per-service auth в реестре; инлайновый креденшел закоммичен в тот момент, когда артефакт записан"
+    },
+    {
+      "finding": 3,
+      "ruleId": "DESTRUCTIVE_SQL_WITHOUT_ALLOW",
+      "severity": "BLOCK",
+      "source": "STATIC_SCAN",
+      "appliesTo": "any",
+      "title": "SQL, который отверг бы write-guard",
+      "extract": {
+        "regex": "\"(?:query|sql)\"\\s*:\\s*\"([^\"]+)\"|\\.(?:query|sql)\\(\\s*\"([^\"]+)\"",
+        "flags": "gi",
+        "$comment": "якорь на ИМЕНИ поля, а не на первом слове значения: заголовок «Create a request, then GET-poll…» и id шага create-request начинаются с CREATE, и гейт, называющий id шага DDL-выражением, выключают"
+      },
+      "rule": "permittedRead",
+      "$rule": [
+        "SELECT (в т.ч. WITH … SELECT) — чисто.",
+        "INSERT/UPDATE/DELETE/MERGE — только если статемент биндит testRunId: это условие DbWriteGuard.",
+        "DROP/TRUNCATE/ALTER/CREATE/GRANT/REVOKE, многооператорность, непарсящееся — находка.",
+        "Соответствует SqlStatementClassifier из stand-test-core; AI-схема сверх того требует SELECT."
+      ],
+      "fix": "читай через SELECT, либо сделай так, чтобы запись биндила дискриминатор прогона и write-guard мог доказать, какие строки ей принадлежат; запись на общем стенде не откатывается тем, что тест закончился"
+    },
+    {
+      "finding": 4,
+      "ruleId": "NON_WHITELISTED_ENVIRONMENT",
+      "severity": "BLOCK",
+      "source": "STATIC_SCAN",
+      "appliesTo": "any",
+      "title": "окружение, которого этот прогон не касается",
+      "extract": {
+        "regex": "\"environment\"\\s*:\\s*\"([^\"]+)\"|\\.environment\\(\\s*\"([^\"]+)\"\\s*\\)",
+        "flags": "g"
+      },
+      "productionTokens": ["prod", "prd", "production", "psi", "промышленн"],
+      "$rule": [
+        "Два вопроса, а не один: окружение вне allowlist прогона — находка;",
+        "production-подобное имя — находка ДАЖЕ если его внесли в allowlist (опечатка в",
+        "списке, набранном руками, — ровно та ошибка, которую стоит ловить дважды).",
+        "Ограничение: имя не видит, куда указывает URL. Настоящий периметр — реестр."
+      ],
+      "fix": "укажи тестовое окружение из реестра; агент генерирует и запускает тесты, и production-стенд — не то место, где стоит узнавать, что сгенерированный оказался неверным"
+    },
+    {
+      "finding": 5,
+      "ruleId": "UNBOUNDED_TIMEOUT",
+      "severity": "BLOCK",
+      "source": "STATIC_SCAN",
+      "appliesTo": "document",
+      "title": "ожидание без границы — отсутствующее или безграничное",
+      "rule": "modelWalk",
+      "$rule": [
+        "По МОДЕЛИ, а не по тексту: у отсутствия нет подстроки. Разобрать документ,",
+        "обойти steps[]. Типы, требующие timeout, и грамматика длительности выводятся",
+        "из stand-test-scenario.schema.json — список рядом со схемой от неё уезжает.",
+        "Сегодня это rest.expectEventually, kafka.expect, db.expectEventually, grpc.unary;",
+        "грамматика — <=99999ms, <=999s, <=60m.",
+        "Java-артефакты не покрыты: таймаут там аргумент билдера."
+      ],
+      "fix": "задай ограниченный таймаут; без него ожидание кончается тогда, когда сработают чужие часы, и прогон сообщит про них вместо того, что на самом деле пошло не так"
+    },
+    {
+      "finding": 6,
+      "ruleId": "THREAD_SLEEP",
+      "severity": "BLOCK",
+      "source": "STATIC_SCAN",
+      "appliesTo": "any",
+      "title": "ожидание руками вместо объявленного",
+      "patterns": [
+        { "regex": "\\b(?:Thread\\.sleep|TimeUnit\\.[A-Z]+\\.sleep|Uninterruptibles\\.sleepUninterruptibly)\\s*\\(", "flags": "g" }
+      ],
+      "sqlPatterns": [
+        { "regex": "\\b(?:pg_sleep|sleep|waitfor|benchmark|dbms_lock)\\b", "flags": "gi", "$comment": "применяется к тому, что извлёк detector 3" }
+      ],
+      "limit": "поллинг-цикл, который жжёт CPU вместо сна, не детектируется — у него нет отличительной подстроки",
+      "fix": "объяви ожидание таймаутом шага; у SDK один механизм ожидания, а фиксированный сон одновременно слишком короток на нагруженном стенде и слишком длинен на всех остальных прогонах"
+    },
+    {
+      "finding": 7,
+      "ruleId": "SCRIPT_IN_DECLARATIVE_DOCUMENT",
+      "severity": "BLOCK",
+      "source": "STATIC_SCAN",
+      "appliesTo": "document",
+      "title": "исполняемый текст в документе, который должен быть данными",
+      "rule": "keysAnywhere",
+      "keys": ["script", "expression", "expr", "eval", "groovy", "javascript", "js", "spel", "lambda", "code"],
+      "$rule": "Ключи, а не значения: значение, «похожее на выражение», — догадка; ключ script — объявленное намерение. Собирать на любой глубине: скрипт прячется в ассерте внутри шага.",
+      "fix": "сформулируй ожидание декларативно — путь и матчер; документ, который что-то исполняет, валидатор не может разобрать, а выражение можно написать так, что оно проходит всегда"
+    },
+    {
+      "finding": 8,
+      "ruleId": "DIRECT_TRANSPORT_CLIENT",
+      "severity": "BLOCK",
+      "source": "STATIC_SCAN",
+      "appliesTo": "any",
+      "title": "тест дотягивается до транспорта сам",
+      "$comment": "у Kafka и JDBC есть код в ForbiddenOperation, у gRPC и HTTP — нет, и это факт о рантайме, а не пробел детектора. Один gate-id на детектор: иначе перечень гейтов перестаёт быть перечнем находок SKILL.md",
+      "imports": {
+        "regex": "^\\s*import\\s+(?:static\\s+)?([\\w.]+)",
+        "flags": "gm",
+        "groups": {
+          "RAW_KAFKA_CLIENT": ["org.apache.kafka"],
+          "RAW_JDBC_CLIENT": ["java.sql.DriverManager", "java.sql.Connection", "java.sql.Statement", "javax.sql.DataSource"],
+          "сырой gRPC-канал (кода в ForbiddenOperation нет)": ["io.grpc"],
+          "сырой HTTP-клиент (кода в ForbiddenOperation нет)": ["java.net.http", "okhttp3", "org.apache.http"]
+        }
+      },
+      "transportFields": {
+        "bootstrapServers": "брокер",
+        "bootstrap-servers": "брокер",
+        "securityProtocol": "брокер",
+        "jdbcUrl": "датасорс",
+        "driverClassName": "датасорс"
+      },
+      "$transportFields": "второе написание того же нарушения: шаг, объявивший брокер сам, — тот же обход SDK, только клиент оставлен подразумеваемым. Проверка одних импортов пропустила бы direct-broker.json",
+      "limit": "импорты и имена полей, а не AST: рефлексия, полное имя класса inline или хелпер в соседнем файле проходят",
+      "fix": "иди через шаг SDK для этого транспорта; клиент, собранный в тесте, не получает ни allowlist окружений, ни correlation id, ни write-guard, ни отчёта, и ничто в рантайме не возражает, потому что SDK никто не спросил"
+    },
+    {
+      "finding": 9,
+      "ruleId": "VALIDATOR_BYPASS",
+      "severity": "BLOCK",
+      "source": "STATIC_SCAN",
+      "appliesTo": "java",
+      "title": "прогон в обход валидатора",
+      "markers": {
+        "new DefaultScenarioRunner(": "конструирует раннер напрямую и пропускает pre-flight валидатор",
+        "ScenarioValidator scenarioValidator()": "подменяет бин валидатора собственным",
+        "implements ScenarioValidator": "поставляет свой валидатор вместо SDK-шного",
+        "extends DefaultScenarioValidator": "переопределяет валидатор, который поставляет SDK"
+      },
+      "commentsAreFindings": true,
+      "$commentsAreFindings": "совпадение внутри // — тоже находка. Понять, что оно закомментировано, значит лексировать Java, а сканер, угадывающий, какой текст является кодом, — сканер, чьему молчанию нельзя верить. Цена — редкая ложная находка на строке, которую и писать не следовало",
+      "fix": "запускай сценарий через точку входа SDK, чтобы отработал pre-flight валидатор; все guardrails SDK энфорсятся там, и прогон, который его пропустил, — не прогон с меньшим числом правил, а прогон без правил"
+    },
+    {
+      "finding": 10,
+      "ruleId": "FIXED_TEST_DATA_ID",
+      "severity": "HIGH",
+      "source": "HEURISTIC",
+      "appliesTo": "document",
+      "title": "идентификатор, указывающий на одну конкретную строку",
+      "patterns": [
+        { "regex": "\"(?:path|url)\"\\s*:\\s*\"([^\"]*/\\d+)\"", "flags": "g" },
+        { "regex": "\"(\\d{6,})\"", "flags": "g" },
+        { "regex": "\"((?=[A-Z0-9]{6}\")(?=[^\"]*\\d)[A-Z0-9]{6})\"", "flags": "g" }
+      ],
+      "exemptValueRegex": "\\$\\{[^}]+\\}",
+      "$patterns": "формы подобраны так, чтобы санкционированный корпус молчал: шестисимвольный токен считается подозрительным только с цифрой внутри — голый [A-Z0-9]{6} матчит SELECT, STATUS и SUCCESS, а эвристика, срабатывающая на всём, находит ничего",
+      "fix": "выводи значение из ${testRunId} или из capture, если тест владеет сущностью; если это указатель на заранее заведённую строку — заведи её вне прогона и прочитай обратно, чтобы прогон не зависел от состояния, которым не владеет"
+    },
+    {
+      "finding": 11,
+      "ruleId": "HARDCODED_CORRELATION_ID",
+      "severity": "HIGH",
+      "source": "STATIC_SCAN",
+      "appliesTo": "any",
+      "title": "correlation id, написанный руками",
+      "patterns": [
+        {
+          "regex": "\"([A-Za-z-]*correlation[A-Za-z-]*)\"\\s*:\\s*\"([^\"]*)\"|\\.(?:header|key|metadata)\\s*\\(\\s*\"([A-Za-z-]*correlation[A-Za-z-]*)\"\\s*,\\s*\"([^\"]*)\"",
+          "flags": "gi",
+          "exemptValueRegex": "\\$\\{[^}]+\\}"
+        }
+      ],
+      "fix": "дай SDK внедрить свой correlation id (correlation.inject, correlation.fromContext или ${correlationId}); литерал делает два параллельных прогона неразличимыми ниже по потоку, а id, на который ассертится тест, — не тот, что был отправлен"
+    },
+    {
+      "finding": 12,
+      "ruleId": "SDK_EXCEPTION_SWALLOWED",
+      "severity": "HIGH",
+      "source": "STATIC_SCAN",
+      "appliesTo": "java",
+      "title": "отказ SDK пойман и проглочен",
+      "patterns": [
+        { "regex": "catch\\s*\\(\\s*(?:final\\s+)?((?:StandTest\\w*|AssertionError)(?:\\s*\\|\\s*\\w+)*)", "flags": "g" }
+      ],
+      "$comment": "исключение для assertThatThrownBy не нужно: конструкции синтаксически непересекающиеся — она принимает лямбду и возвращает ассерт, никакого catch внутри неё нет. Недостижимая ветка в safety-детекторе хуже отсутствующей: она читается как гарантия",
+      "fix": "дай отказу распространиться либо ассертись на него через assertThatThrownBy; пойманная assertion error становится строкой в логе, и тест сообщает об успехе прогона, который не удался"
+    },
+    {
+      "finding": 13,
+      "ruleId": "MASKED_SECRET",
+      "severity": "HIGH",
+      "source": "HEURISTIC",
+      "appliesTo": "any",
+      "title": "секрет оставлен в открытую, потому что что-то ниже по потоку его маскирует",
+      "patterns": [
+        {
+          "regex": "\\beyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}|\\b(?:sk|pk|rk)[-_](?:live|test)?[-_]?[A-Za-z0-9]{16,}|\\bgh[pousr]_[A-Za-z0-9]{16,}|\\bxox[baprs]-[A-Za-z0-9-]{16,}",
+          "flags": "g"
+        }
+      ],
+      "$comment": "отличается от находки 2: та про поля, НАЗВАННЫЕ креденшелом; эта — про значения там, где креденшелом никто не называл (заметка, описание, тело). Поэтому может только предполагать: длинная непрозрачная строка — это токен или хеш чего-то безобидного, и форма не говорит, что именно",
+      "fix": "если это секрет — замени на *-ref с именем переменной окружения; маскирование в отчёте не причина записывать секрет: у него документированные дыры, а артефакт в любом случае лежит в системе контроля версий"
+    },
+    {
+      "finding": 14,
+      "ruleId": "PII_IN_FIXTURE",
+      "severity": "HIGH",
+      "source": "HEURISTIC",
+      "appliesTo": "any",
+      "title": "реальный человек в фикстуре",
+      "shapes": {
+        "адрес электронной почты": { "regex": "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b", "flags": "g" },
+        "телефонный номер": { "regex": "\\+7\\d{10}\\b|\\b8\\(\\d{3}\\)\\d{7}\\b", "flags": "g" },
+        "СНИЛС": { "regex": "\\b\\d{3}-\\d{3}-\\d{3} \\d{2}\\b", "flags": "g" },
+        "номер паспорта": { "regex": "\\b\\d{4} \\d{6}\\b", "flags": "g" }
+      },
+      "$shapes": "якорь на структуре, которой у обычных тестовых данных нет: адрес — только с локальной частью, @ и доменом с точкой, что и удерживает application/json снаружи",
+      "fix": "используй сгенерированные или явно синтетические данные; запись, скопированная из выгрузки, коммитится вместе с артефактом и остаётся везде, куда попадает репозиторий"
+    },
+    {
+      "finding": 15,
+      "ruleId": "UNSANCTIONED_DEPENDENCY",
+      "severity": "HIGH",
+      "source": "STATIC_SCAN",
+      "appliesTo": "build",
+      "title": "зависимость, которую никто не санкционировал",
+      "buildFiles": ["build.gradle", "build.gradle.kts", "pom.xml"],
+      "coordinate": { "regex": "\"([\\w.-]+):([\\w.-]+)(?::[^\"]*)?\"", "flags": "g" },
+      "allowedPrefixes": [
+        "ru.alfa.stand.test:",
+        "io.qameta.allure:",
+        "com.networknt:json-schema-validator",
+        "com.fasterxml.jackson.core:",
+        "com.fasterxml.jackson.datatype:",
+        "org.postgresql:",
+        "com.oracle.database.jdbc:",
+        "com.microsoft.sqlserver:",
+        "org.junit.jupiter:",
+        "org.assertj:"
+      ],
+      "$allowedPrefixes": "allowlist кита: allure-junit5, JSON-Schema-валидатор с Jackson, JDBC-драйвер. Сверка по префиксу group:artifact, поэтому подъём версии находкой не становится",
+      "fix": "держи тестовый модуль в пределах SDK, allure-junit5, JSON-Schema-валидатора с Jackson и JDBC-драйвера; новая зависимость — это способ, которым сырой клиент появляется без того, чтобы кто-то его импортировал, и она переживает изменение, которое её принесло"
+    },
+    {
+      "finding": 16,
+      "ruleId": "KAFKA_EXPECT_WITHOUT_DISCRIMINATOR",
+      "severity": "BLOCK",
+      "source": "STATIC_SCAN",
+      "appliesTo": "document",
+      "title": "kafka.expect, которому нечем отличить свои сообщения от чужих",
+      "rule": "modelWalk",
+      "$rule": [
+        "По модели: находкой делает ОТСУТСТВИЕ дискриминатора у конкретного шага.",
+        "Дискриминатор — correlation.fromContext == true либо key, содержащий ${…}.",
+        "Константный key дискриминатором не является: два прогона, фильтрующие по",
+        "одному и тому же 'fixed', видят сообщения друг друга ровно так же, как если",
+        "бы не фильтровал никто, — потому Kafka-executor и отвергает такой в рантайме.",
+        "Единственная из пяти детерминированных находок 11-17, которая БЛОКИРУЕТ:",
+        "ущерб достаётся не тому прогону, который её допустил, а чужой сборке."
+      ],
+      "fix": "поставь correlation.fromContext либо выведи key из захваченного значения"
+    },
+    {
+      "finding": 17,
+      "ruleId": "SHARED_MUTABLE_TEST_STATE",
+      "severity": "HIGH",
+      "source": "STATIC_SCAN",
+      "appliesTo": "java",
+      "title": "поле, в которое могут писать два тестовых потока",
+      "patterns": [
+        {
+          "regex": "\\b(?:public|protected|private)?\\s*static\\s+(final\\s+)?([\\w.<>\\[\\], ?]+?)\\s+(\\w+)\\s*(?:=|;)",
+          "flags": "g",
+          "mutableTypeRegex": "\\b(?:List|Set|Map|Collection|Queue|Deque|StringBuilder|StringBuffer|AtomicInteger|AtomicLong|AtomicReference|ArrayList|HashMap|HashSet|LinkedList|ConcurrentHashMap)\\b|\\[\\s*\\]"
+        }
+      ],
+      "$rule": "мутабельность, а не модификатор: static final String — константа и ничья не проблема; static final List = new ArrayList<>() — разделяемое мутабельное состояние, надевшее слово final, которое связывает ссылку и ничего не говорит о содержимом. Помечать каждый static значило бы сообщать о константах, которые есть у любого тестового класса",
+      "limit": "список мутабельных типов — список форм, а не система типов: собственный мутабельный холдер в static final поле проходит",
+      "fix": "пусть значение течёт через capture или ${testRunId}; раннер и исполнители шагов разделяются параллельными тестовыми потоками, и статическое поле, в которое пишут оба, — гонка"
+    },
+    {
+      "finding": 18,
+      "ruleId": "FAILURE_CONCEALMENT",
+      "severity": "BLOCK",
+      "source": "STATIC_SCAN",
+      "appliesTo": "any",
+      "implemented": false,
+      "title": "сокрытие отказа — только в режиме сравнения с предыдущей версией",
+      "$comment": [
+        "Единственная находка, которой нет в таблице SKILL.md — она добавлена архитектурой.",
+        "Видна только по диффу: удалённые ассерции, появившийся @Disabled, выросший таймаут,",
+        "новый catch. Требует предыдущей версии артефакта, поэтому FULL-скан её не видит.",
+        "Не реализована: сканер обязан говорить, чего он не смотрел, иначе чистый отчёт от",
+        "семнадцати проверок читается как чистый отчёт от восемнадцати."
+      ]
+    }
+  ]
+}

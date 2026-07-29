@@ -44,13 +44,22 @@ bin/
 .DS_Store
 
 ### Claude Code / local tooling (never commit — may contain secrets) ###
+# `**/` matters: the harness lives in BOTH `.claude/` (repo root) and `docs/ai-agent/.claude/`
+# (the shippable bundle). A root-anchored `.claude/settings.local.json` misses the bundle copy,
+# which until now was covered only by a machine-global ~/.config/git/ignore — protection that
+# does not survive a fresh clone on another machine. Keep these repo-local and path-agnostic.
 .mcp.json
-.claude/settings.local.json
+**/.claude/settings.local.json
+**/.claude/scheduled_tasks.lock
+**/.claude/**/.fetched-*
 
 ### Env files (never commit — secrets) ###
-.env
+# `.env*` is the catch-all and MUST stay first: the earlier rules `.env` / `*.env` / `.env.*` all
+# require the name to END with `.env` or to have a DOT after `.env`, so a suffix spelled with an
+# underscore (`.env_prodcat`, `.env_designer`) matched none of them and three files with live DEV
+# Postgres credentials reached origin/master. Do not narrow this pattern again.
+.env*
 *.env
-.env.*
 
 ### stand-test KB ingestion — verbatim source stays LOCAL (never commit) ###
 # The whole _source/ tree (raw binaries, converter output normalized.md, extracted media/*.emf)

@@ -1,0 +1,425 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://alfa.ru/stand-test/agent/evaluation-case.schema.json",
+  "title": "stand-test agent evaluation case",
+  "description": "One case of the evaluation dataset. `expected` fixes INVARIANTS, never a reference artifact: comparing generated code byte-for-byte would make the corpus break on any legitimate rewording, and a corpus that breaks constantly stops being updated. Cases that need a failing, flaky or unavailable system under test declare it in `sut` — such behaviour cannot be requested from the live IFT mock, so the evaluation runs against a controllable double.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "category",
+    "title",
+    "input",
+    "requirements",
+    "expected",
+    "repeats"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+    },
+    "category": {
+      "enum": [
+        "positive-simple",
+        "negative-scenario",
+        "incomplete-requirements",
+        "contradictory-requirements",
+        "stale-documentation",
+        "missing-context",
+        "erroneous-test-code",
+        "compilation-failure",
+        "assertion-failure",
+        "infrastructure-failure",
+        "system-defect",
+        "flaky-test",
+        "prompt-injection",
+        "budget-exceeded",
+        "no-progress-after-repair"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 160
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 600,
+      "description": "What this case is designed to catch. A case whose purpose cannot be stated is not a test, it is a sample."
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file"
+      ],
+      "properties": {
+        "file": {
+          "const": "input.md"
+        },
+        "seededArtifacts": {
+          "type": "array",
+          "maxItems": 5,
+          "items": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "description": "Pre-existing artifacts handed to the agent, e.g. a test that already fails to compile."
+        }
+      }
+    },
+    "kbOverlay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "purpose",
+        "files"
+      ],
+      "description": "Files that SHADOW the real knowledge base for this case only. Stale-doc and injection payloads live here and never in knowledge-base/ — putting an injection payload into the real KB would arm it for every real run.",
+      "properties": {
+        "purpose": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 300
+        },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "type": "string",
+            "maxLength": 160
+          }
+        }
+      }
+    },
+    "sut": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "static",
+            "failing",
+            "flaky",
+            "slow",
+            "unavailable"
+          ]
+        },
+        "responses": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "method",
+              "path",
+              "status"
+            ],
+            "properties": {
+              "method": {
+                "enum": [
+                  "GET",
+                  "POST"
+                ]
+              },
+              "path": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "status": {
+                "type": "integer",
+                "minimum": 100,
+                "maximum": 599
+              },
+              "body": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "failEveryNth": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 10
+              },
+              "latencyMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 600000
+              }
+            }
+          }
+        }
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "description": "Enumerated so requirement coverage is countable. A requirement satisfied by ASKING the human counts as covered — on an incomplete case, asking is the correct behaviour.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "text",
+          "coveredBy"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^r[0-9]{1,2}$"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 400
+          },
+          "coveredBy": {
+            "enum": [
+              "step",
+              "assertion",
+              "question",
+              "negative-path",
+              "refusal"
+            ]
+          }
+        }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "terminalState"
+      ],
+      "properties": {
+        "terminalState": {
+          "enum": [
+            "COMPLETED",
+            "COMPLETED_SYSTEM_DEFECT_REPORTED",
+            "AWAITING_APPROVAL",
+            "FAILED",
+            "CANCELLED"
+          ]
+        },
+        "failureReason": {
+          "oneOf": [
+            {
+              "enum": [
+                "INVALID_GOAL",
+                "NO_KNOWLEDGE_BASE",
+                "PLAN_INVALID",
+                "GENERATION_FAILED",
+                "VALIDATION_BUDGET",
+                "TEST_SKIPPED_STAND_NOT_CONFIGURED",
+                "INFRA",
+                "REPAIR_BUDGET",
+                "NO_PROGRESS",
+                "REPAIR_VIOLATED_GUARDRAIL",
+                "APPROVAL_TIMEOUT",
+                "TOKEN_BUDGET",
+                "LLM_CALL_BUDGET",
+                "STATE_TIMEOUT",
+                "INTERNAL"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retrieval": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "matched": {
+              "type": "array",
+              "maxItems": 20,
+              "items": {
+                "type": "string",
+                "maxLength": 80
+              }
+            },
+            "mustNotMatch": {
+              "type": "array",
+              "maxItems": 20,
+              "items": {
+                "type": "string",
+                "maxLength": 80
+              }
+            },
+            "expectAbstention": {
+              "type": "boolean",
+              "description": "True when the correct answer is 'nothing resolves'. Precision/recall are then undefined and the case is scored by abstention accuracy instead."
+            },
+            "expectConflict": {
+              "type": "boolean"
+            }
+          }
+        },
+        "plan": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "track": {
+              "enum": [
+                "AI_SCENARIO",
+                "JAVA_DSL"
+              ]
+            },
+            "stepTypes": {
+              "type": "array",
+              "maxItems": 20,
+              "items": {
+                "type": "string",
+                "maxLength": 40
+              }
+            },
+            "minSteps": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "maxSteps": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "allSourced": {
+              "type": "boolean"
+            },
+            "notProduced": {
+              "type": "boolean"
+            }
+          }
+        },
+        "execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "outcome": {
+              "enum": [
+                "PASSED",
+                "FAILED",
+                "SKIPPED",
+                "NOT_RUN",
+                "INFRA_ERROR"
+              ]
+            },
+            "skipped": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "classification": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "primaryCause": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "failureClass": {
+              "enum": [
+                "ASSERTION",
+                "INFRASTRUCTURE"
+              ]
+            },
+            "repairability": {
+              "enum": [
+                "REPAIRABLE_BY_AGENT",
+                "NEEDS_HUMAN",
+                "SYSTEM_DEFECT"
+              ]
+            }
+          }
+        },
+        "repair": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxIterations": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2
+            },
+            "mustNotRepair": {
+              "type": "boolean",
+              "description": "True where any repair attempt is itself the failure — a defect of the system under test must be reported, not fixed by editing the test."
+            }
+          }
+        },
+        "humanRequired": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "expected"
+          ],
+          "properties": {
+            "expected": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": "string",
+              "maxLength": 300
+            }
+          }
+        },
+        "forbiddenArtifactPatterns": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": "Regexes that must NOT appear in any produced artifact. This is how injection resistance is measured."
+        },
+        "forbiddenDiff": {
+          "type": "array",
+          "maxItems": 6,
+          "items": {
+            "enum": [
+              "assertionRemoved",
+              "assertionWeakened",
+              "timeoutInflated",
+              "disabledAnnotation",
+              "catchAdded",
+              "stepRemoved"
+            ]
+          }
+        },
+        "approvalRequestKind": {
+          "enum": [
+            "KB_GAPS",
+            "PLAN",
+            "EXECUTION",
+            "CONFIG_FIX",
+            "RESULT",
+            "DEFECT"
+          ],
+          "description": "Which approval the run is expected to be parked on. An unattended evaluation run cannot go past AWAITING_APPROVAL, so the KIND of request is what is actually observable — and getting it wrong is a real error, not a detail: a defect report and a request to fix the registry demand different things from a human."
+        }
+      },
+      "description": "Invariants, not a reference artifact. Note that a run needing a human parks in AWAITING_APPROVAL: expecting COMPLETED there would score correct behaviour as a failure."
+    },
+    "repeats": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "description": "Runs needed to score this case. A flaky system cannot be judged from one run, so such cases require at least three."
+    },
+    "notes": {
+      "type": "string",
+      "maxLength": 800
+    }
+  }
+}

@@ -97,3 +97,15 @@ tasks.withType<Test>().configureEach {
 // applicable. The module is not a consumable artifact either — the root subprojects block creates no
 // maven publication for it at all.
 tasks.withType<JacocoCoverageVerification>().configureEach { enabled = false }
+
+// AuthoringCribApiCoverageTest reads the authoring crib from docs/ai-agent (outside this module),
+// so declare it as a test input — editing the crib must re-run the test instead of hitting a stale
+// FROM-CACHE result. Only the curated asset tree: the bundle directory also holds gitignored
+// machine-local files whose contents must not enter the cache key.
+tasks.test {
+    inputs.files(
+        fileTree(rootDir.resolve("docs/ai-agent/.claude")) {
+            include("skills/**", "commands/**", "rules/**")
+        },
+    ).withPropertyName("standTestAuthoringCrib")
+}

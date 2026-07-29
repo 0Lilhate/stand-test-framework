@@ -123,9 +123,10 @@ executable forms:
 - **DB expectation:** use `expect.singleValue` (equals the first column). `expect.rowExists` is not
   executable yet.
 - **gRPC:** `grpc.unary` is executable in a subset: `target`, `method`, `timeout` (→ deadline),
-  `correlation.inject` (METADATA carrier), `request.fixture`, `expect.assert` with `equals`, and `capture`.
-  Not executable yet (fail-closed): inline `request.json`, `expect.status` (the gRPC status is surfaced as
-  an exception, not a declarative assertion), and non-`equals` matchers. The method is the fully-qualified
+  `correlation.inject` (METADATA carrier), `request.fixture`, `expect.assert` with **all five matchers**
+  (at parity with REST — `grpc.unary` uses the same `assertionList`), and `capture`.
+  Not executable yet (fail-closed): inline `request.json` and `expect.status` (the gRPC status is surfaced
+  as an exception, not a declarative assertion). The method is the fully-qualified
   `package.Service/Method`; the target service must expose gRPC Server Reflection.
 - **Step ids** must be unique within a scenario. Uniqueness is enforced by the runtime `ScenarioValidator`,
   not by the schema, so keep them distinct.
