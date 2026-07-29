@@ -41,12 +41,16 @@ function proceed(message) {
   process.exit(0);
 }
 
+/** A path as the state file spells it: relative to the workspace, whatever form it arrived in. */
+function relativise(raw, cwd) {
+  const prefix = `${cwd}/`;
+  return raw.startsWith(prefix) ? raw.slice(prefix.length) : raw;
+}
+
 /** The workspace-relative path of whatever a Write/Edit tool call is about to touch. */
 function targetPath(input, cwd) {
   const raw = input.file_path || input.path || '';
-  if (!raw) return '';
-  const prefix = `${cwd}/`;
-  return raw.startsWith(prefix) ? raw.slice(prefix.length) : raw;
+  return raw ? relativise(raw, cwd) : '';
 }
 
 /** The content a Write/Edit tool call would leave behind, as far as the hook can know it. */
@@ -76,7 +80,7 @@ function commandScan(argv) {
   // names that describe what each fixture violates, and a build file called after its violation is
   // not a build file to any detector — the artifact kind comes from the path, deliberately.
   const alias = argumentValue(argv, '--as');
-  const files = argv.filter((argument, index) => !argument.startsWith('--') && argv[index - 1] !== '--as');
+  const files = positional(argv);
   const policy = policyOf(process.cwd());
   let findings = [];
   for (const file of files) {
@@ -185,22 +189,43 @@ function commandRecordGate(argv, payload) {
   const cwd = (payload && payload.cwd) || process.cwd();
   const gate = argumentValue(argv, '--gate') || SAFETY_GATE;
   const claimed = (argumentValue(argv, '--verdict') || 'PASS').toUpperCase();
-  const files = argv.filter((argument) => !argument.startsWith('--') && argument !== gate && argument !== claimed);
+  const files = positional(argv).map((file) => relativise(file, cwd));
+
+  // A verdict has to name what it passed. Without a list there is nothing to re-scan, and the record
+  // used to cover EVERY artifact of the session — one command that certified everything and verified
+  // nothing, which is the exact inverse of what this gate exists for.
+  if (files.length === 0) {
+    block(`✖ гейт ${gate} не записан: не перечислены файлы\n`
+      + '  Вердикт покрывает ровно те артефакты, которые названы, и они перепроверяются сканом.\n'
+      + `  → node .claude/hooks/stand-guard.mjs record-gate --gate ${gate} --verdict ${claimed} <файл> [<файл>…]`);
+  }
+
+  // Skipping an absent path silently would record a PASS about content nobody read — the same hole
+  // one level down. A path that does not resolve is a mistake worth hearing about.
+  const missing = files.filter((file) => !existsSync(join(cwd, file)));
+  if (missing.length > 0) {
+    block(`✖ гейт ${gate} не записан: этих файлов нет на диске\n  ${missing.join('\n  ')}\n\n`
+      + '  Пути указываются от корня проекта. Пропустить их молча значило бы записать вердикт о непрочитанном содержимом.');
+  }
 
   // The verdict is not taken on trust. A subagent may judge what a scan cannot, but it may not
   // certify away what a scan can decide — so the deterministic half runs again, here.
   const policy = policyOf(cwd);
   let stoppers = [];
   for (const file of files) {
-    if (!existsSync(join(cwd, file))) continue;
     stoppers = stoppers.concat(blocking(scanArtifact(readFileSync(join(cwd, file), 'utf8'), file, policy)));
   }
   if (claimed === 'PASS' && stoppers.length > 0) {
     state.recordGate(gate, 'BLOCK', files, cwd);
     block(`✖ PASS не записан: повторный скан нашёл ${stoppers.length} блокирующих находок\n\n${stoppers.map(render).join('\n\n')}`);
   }
-  state.recordGate(gate, claimed, files, cwd);
-  proceed(`гейт ${gate}: ${claimed}${files.length > 0 ? ` (${files.join(', ')})` : ''}`);
+
+  const covered = Object.keys(state.recordGate(gate, claimed, files, cwd).gates[gate].covers);
+  const uncovered = files.filter((file) => !covered.includes(file));
+  proceed(`гейт ${gate}: ${claimed} (${files.join(', ')})`
+    + (uncovered.length > 0
+      ? `\n⚠ эта сессия не записывала ${uncovered.length} из перечисленных файлов, и вердикт их не покрывает: ${uncovered.join(', ')}`
+      : ''));
 }
 
 function commandStop(payload) {
@@ -233,9 +258,31 @@ function commandStatus(payload) {
     + `без пройденного safety-review ${stale}; детекторов активно ${ran.length}/${ran.length + notRun.length}`);
 }
 
+const VALUE_FLAGS = new Set(['--gate', '--verdict', '--as']);
+
 function argumentValue(argv, name) {
   const index = argv.indexOf(name);
   return index >= 0 && index + 1 < argv.length ? argv[index + 1] : null;
+}
+
+/**
+ * The bare arguments — flags and the values they consume removed.
+ *
+ * Filtering by "not a flag, and not equal to what the flags parsed" looked equivalent and was not:
+ * `--verdict pass` left the lowercase word behind as a file name, and a file genuinely called after
+ * a gate would have vanished from its own verdict.
+ */
+function positional(argv) {
+  const values = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    if (VALUE_FLAGS.has(argv[index])) {
+      index += 1;
+      continue;
+    }
+    if (argv[index].startsWith('--')) continue;
+    values.push(argv[index]);
+  }
+  return values;
 }
 
 // ---------------------------------------------------------------------------------------------

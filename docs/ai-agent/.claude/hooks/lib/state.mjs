@@ -50,12 +50,18 @@ export function recordArtifact(relativePath, content, cwd = process.cwd()) {
   return state;
 }
 
-/** Records a gate verdict against the exact content it saw. */
+/**
+ * Records a gate verdict against the exact content it saw.
+ *
+ * A verdict covers the files it NAMES and nothing else. An empty list used to mean "everything",
+ * which made one file-less command certify the whole session without a single re-scan — the default
+ * has to fail closed, so now it covers nothing.
+ */
 export function recordGate(gate, verdict, files, cwd = process.cwd()) {
   const state = readState(cwd);
   const covers = {};
   for (const [path, artifact] of Object.entries(state.artifacts)) {
-    if (files.length === 0 || files.includes(path)) covers[path] = artifact.sha;
+    if (files.includes(path)) covers[path] = artifact.sha;
   }
   state.gates[gate] = { verdict, at: new Date().toISOString(), covers };
   writeState(state, cwd);
