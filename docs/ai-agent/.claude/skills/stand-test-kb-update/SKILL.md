@@ -71,17 +71,22 @@ parse → candidates → validate → diff → report pipeline. The KB is stand 
    a `conflict`, never an update. Record each entry's source rank in the report's "Derived from"
    column so the next run can apply this rule mechanically; manually-authored values sit above
    rank 1 (only a human changes them).
-5. **Write (apply mode only)** deterministically: collections sorted by `id`; entry keys in
+5. **Take a write permit.** The curated collections are closed to the agent without one, and the
+   paths are declared BEFORE the content exists, so a write that strays outside them is refused while
+   it is still recoverable:
+   `node <bundle>/hooks/stand-guard.mjs kb-write-permit --reason update --source <спека|pasted> <файлы>`.
+   The host asks a human at each write — that prompt, not the permit, is the approval.
+6. **Write (apply mode only)** deterministically: collections sorted by `id`; entry keys in
    schema property order; 2-space indent; one collection key per file; file naming follows the
    convention `<collection>/<service-id>.yml` (children grouped by owning service — this is what
    lets kb-lookup read large KBs addressed instead of wholesale); an existing non-conventional
    split is preserved, not reshuffled.
-6. **Cross-check**: after apply, referential integrity must hold (service rollups list new child
+7. **Cross-check**: after apply, referential integrity must hold (service rollups list new child
    ids; environments bind new entries or the report lists the binding as a follow-up).
-7. **Validate the result**: run the KB validation tests
+8. **Validate the result**: run the KB validation tests
    (`./gradlew :stand-test-ai-schema:test` in this repo; the consumer's KB check where one
    exists) and re-run the schema over every touched file.
-8. **Report** per [`kb-update-report-template.md`](kb-update-report-template.md), then apply
+9. **Report** per [`kb-update-report-template.md`](kb-update-report-template.md), then apply
    [`kb-entry-review-checklist.md`](kb-entry-review-checklist.md) to every added/updated entry.
 
 ## Hard rules

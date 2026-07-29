@@ -14,7 +14,10 @@ const STATE_FILE = join(STATE_DIR, 'state.json');
 const JOURNAL_FILE = join(STATE_DIR, 'run-journal.jsonl');
 const UNKNOWN_FILE = join(STATE_DIR, 'unknown-signatures.jsonl');
 
-const EMPTY = { artifacts: {}, gates: {}, runs: [], results: {}, subagents: [] };
+const EMPTY = { artifacts: {}, curated: {}, permit: null, gates: {}, runs: [], results: {}, subagents: [] };
+
+/** Long enough for one promote, short enough that a forgotten permit is not a standing licence. */
+const PERMIT_MINUTES = 60;
 
 /** More than enough to answer "was there a fresh context after this file was written". */
 const SUBAGENT_HISTORY = 50;
@@ -63,8 +66,10 @@ export function recordArtifact(relativePath, content, cwd = process.cwd()) {
 export function recordGate(gate, verdict, files, cwd = process.cwd()) {
   const state = readState(cwd);
   const covers = {};
-  for (const [path, artifact] of Object.entries(state.artifacts)) {
-    if (files.includes(path)) covers[path] = artifact.sha;
+  // Both ledgers, because a gate covers what it named: generated artifacts answer to the safety
+  // review, curated knowledge-base files to `kb-write`, and each verdict reaches its own.
+  for (const [path, file] of [...Object.entries(state.artifacts), ...Object.entries(state.curated)]) {
+    if (files.includes(path)) covers[path] = file.sha;
   }
   state.gates[gate] = { verdict, at: new Date().toISOString(), covers };
   writeState(state, cwd);
@@ -81,6 +86,82 @@ export function staleArtifacts(gate, cwd = process.cwd()) {
   const covers = record !== undefined && record.verdict === 'PASS' ? record.covers || {} : {};
   return Object.entries(state.artifacts)
     .filter(([path, artifact]) => covers[path] !== artifact.sha)
+    .map(([path]) => path);
+}
+
+/**
+ * Opens a window in which the named curated files may be written.
+ *
+ * A permit is a DECLARATION OF INTENT AND SCOPE, not a lock. The model can issue one — the guard
+ * script is in the run's allow-list — so nothing here proves a human agreed to anything. What it does
+ * buy is real and worth having: the paths are declared before the content exists, so a write that
+ * strays outside them is refused while it is still recoverable, and the reason is on the record where
+ * a person reading the session can see it. The human decision happens at the write itself, through the
+ * host's permission prompt, which the model cannot forge.
+ */
+export function issuePermit(permit, cwd = process.cwd()) {
+  const state = readState(cwd);
+  const previous = state.permit;
+  const issuedAt = new Date();
+  state.permit = {
+    ...permit,
+    issuedAt: issuedAt.toISOString(),
+    expiresAt: new Date(issuedAt.getTime() + PERMIT_MINUTES * 60_000).toISOString(),
+    consumed: {},
+  };
+  writeState(state, cwd);
+  return previous;
+}
+
+/** The permit if one is standing and still in date, otherwise null. */
+export function activePermit(cwd = process.cwd()) {
+  const permit = readState(cwd).permit;
+  if (permit === null || permit === undefined) return null;
+  return Date.parse(permit.expiresAt) > Date.now() ? permit : null;
+}
+
+/**
+ * Records that a permitted path was written. Deliberately does NOT spend the permit: one apply
+ * touches several files and re-touches the owning service's rollup, and a single-use permit would
+ * turn that into four refusals — the shape of gate people switch off.
+ */
+export function consumePermit(path, cwd = process.cwd()) {
+  const state = readState(cwd);
+  if (state.permit === null || state.permit === undefined) return null;
+  state.permit.consumed = { ...state.permit.consumed, [path]: (state.permit.consumed[path] || 0) + 1 };
+  writeState(state, cwd);
+  return state.permit;
+}
+
+export function revokePermit(cwd = process.cwd()) {
+  const state = readState(cwd);
+  const previous = state.permit;
+  state.permit = null;
+  writeState(state, cwd);
+  return previous;
+}
+
+/**
+ * Records what a curated knowledge-base file now holds.
+ *
+ * Kept apart from {@link recordArtifact} on purpose: an artifact answers to the safety review of a
+ * generated test, a curated KB file answers to the `kb-write` gate. One ledger for both would make
+ * each gate hold files it has nothing to say about.
+ */
+export function recordCurated(relativePath, content, cwd = process.cwd()) {
+  const state = readState(cwd);
+  state.curated[relativePath] = { sha: sha256(content), at: new Date().toISOString() };
+  writeState(state, cwd);
+  return state;
+}
+
+/** Curated files no PASS of the `kb-write` gate covers — because it never ran, or they changed after. */
+export function staleCurated(gate, cwd = process.cwd()) {
+  const state = readState(cwd);
+  const record = state.gates[gate];
+  const covers = record !== undefined && record.verdict === 'PASS' ? record.covers || {} : {};
+  return Object.entries(state.curated)
+    .filter(([path, file]) => covers[path] !== file.sha)
     .map(([path]) => path);
 }
 

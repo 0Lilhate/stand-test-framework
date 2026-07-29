@@ -28,15 +28,25 @@ is reported and skipped.
    field is filled only from `stand-test-kb-lookup`, else downgraded to unresolved — never invented.
 3. **Strict-validate** each projected entry against `stand-test-knowledge-base.schema.json`; a failure
    blocks that entry (report, no write).
-4. **Hand off to `stand-test-kb-update`** as the sole writer: its `diff (added/updated/unchanged/
+4. **Take a write permit** naming every curated file this promote will touch, the owning service's
+   rollup included (it is written a second time by the referential-integrity step):
+   `node <bundle>/hooks/stand-guard.mjs kb-write-permit --reason promote --document <document-id> <файлы>`.
+   It refuses a document with no review record — that catches a promote aimed at the wrong id and is
+   NOT the approval; the approval is the host prompt on each write.
+5. **Hand off to `stand-test-kb-update`** as the sole writer: its `diff (added/updated/unchanged/
    conflict) → write` runs dry-run first; never delete, never rename ids, never overwrite a
    manually-authored field without a human-resolved conflict.
-5. **Referential integrity** — co-update each owning service's rollup in the same run; BLOCK any child
+6. **Referential integrity** — co-update each owning service's rollup in the same run; BLOCK any child
    whose owner is neither curated nor approved (no orphan promotion).
-6. **Update provenance links** — append `promotion-log.yml` (curatedId → documentId/version/date/
+7. **Update provenance links** — append `promotion-log.yml` (curatedId → documentId/version/date/
    promotedAt). A skipped append fails the apply closed. Stamp promoted candidates `status: applied`.
-7. **Produce the diff**; run `/stand-test-generate-env` for any new env-var refs.
-8. **Run KB validation** — `./gradlew :stand-test-ai-schema:test` (this repo) / the consumer's KB check.
+8. **Produce the diff**; run `/stand-test-generate-env` for any new env-var refs.
+9. **Run KB validation** — `./gradlew :stand-test-ai-schema:test` (this repo).
+10. **Close the write.** At a consumer, where the schema tests do not exist:
+   `node <bundle>/hooks/stand-guard.mjs kb-validate --exit-code` and `alias-check`, then
+   `node <bundle>/hooks/stand-guard.mjs record-gate --gate kb-write --verdict PASS <файлы>` — until
+   that verdict is recorded the session will not end, because a curated write nobody re-read breaks
+   not this session but the next generated test.
 
 ## Mandatory checks
 

@@ -20,20 +20,28 @@ human-gated; the only writer of the curated KB is `stand-test-kb-update`.
   6. human records review.decision + status per candidate; resolves conflicts
 
 /stand-test-apply-kb-candidates <document-id> --apply                            [CURATED WRITE]
-  precondition (hard): approved AND (high OR ticked medium) AND no open conflict AND not partial/promotionBlocked
+  precondition (hard): listed under `approved` in review-decisions.yml AND (high OR medium with a basis)
+                       AND no open conflict AND not partial/promotionBlocked
+  0. kb-write-permit --reason promote --document <id> <files>   (curated files are closed without it)
   1. project candidate -> curated entry (STRIP provenance/confidence; re-derive id)
   2. strict-validate vs stand-test-knowledge-base.schema.json
   3. stand-test-kb-update: diff (added/updated/unchanged/conflict) -> deterministic write
+     (the host asks a human at each write — that prompt, not the permit, is the approval)
   4. co-update owning-service rollups (BLOCK orphan promotion)
   5. append promotion-log.yml (fail-closed); stamp candidate status: applied
   6. /stand-test-generate-env for new env-var refs
   7. ./gradlew :stand-test-ai-schema:test  (curated KB validation)
+  8. kb-validate --exit-code, then record-gate --gate kb-write --verdict PASS <files>
+     (until this verdict is recorded the session will not end)
 ```
 
 ## Gates
 
 - **Confidence gating** sits at the review→apply boundary: `high` eligible after approval, `medium`
-  needs an explicit tick, `low` never applies.
+  needs a stated `basis` on its `approved` item, `low` never applies.
+- **The curated write is permitted, prompted and checked.** Paths are declared before the content
+  exists (permit), the human confirms each write (host prompt), and what landed is re-read by
+  `kb-write` before the session may end. None of the three claims to be the others.
 - **Conflict blocking** is enforced as an apply precondition — any id in an unresolved conflict is
   blocked on both sides until a human writes the `resolution`.
 - **Partial / promotionBlocked** (e.g. db-table with no curated home) is blocked until a human decides

@@ -26,15 +26,20 @@ The KB is stand configuration: a human approves the diff before `apply` lands.
 4. **Diff against the existing KB**: `added` / `updated` / `unchanged` / `conflicts` /
    `removed-candidates` (report-only). Conflicts are never auto-resolved.
 5. **dry-run**: stop — no file changes; print the report with the would-be diff.
-6. **apply**: write deterministically (collections sorted by id, schema key order, one collection
+6. **Take a write permit.** The curated collections are closed to the agent without one, and the
+   paths are declared BEFORE the content exists, so a write that strays outside them is refused while
+   it is still recoverable:
+   `node <bundle>/hooks/stand-guard.mjs kb-write-permit --reason update --source <спека|pasted> <файлы>`.
+   The host asks a human at each write — that prompt, not the permit, is the approval.
+7. **apply**: write deterministically (collections sorted by id, schema key order, one collection
    key per file), never deleting, never renaming ids/aliases.
-7. **Run KB validation** — `./gradlew :stand-test-ai-schema:test` in this repo; at a CONSUMER, where
+8. **Run KB validation** — `./gradlew :stand-test-ai-schema:test` in this repo; at a CONSUMER, where
    those tests do not exist, `node <bundle>/hooks/stand-guard.mjs kb-validate --exit-code` and
    `alias-check` (lexical safety, identity, alias-vs-registry — they name what they do NOT check, and
    the schemas remain the contract for that); plus
    [`kb-entry-review-checklist.md`](../skills/stand-test-kb-update/kb-entry-review-checklist.md)
    over every added/updated entry.
-8. **Print the update report** per
+9. **Print the update report** per
    [`kb-update-report-template.md`](../skills/stand-test-kb-update/kb-update-report-template.md).
 
 ## Mandatory checks

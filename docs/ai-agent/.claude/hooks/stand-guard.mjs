@@ -21,9 +21,13 @@ import { readResults, skipWarning } from './lib/junit.mjs';
 import { fingerprint, normalise } from './lib/fingerprint.mjs';
 import { kbStatus } from './lib/kb.mjs';
 import { validateKnowledgeBase, checkAliases } from './lib/kb-checks.mjs';
+import { classify, validateFileSet, reviewRecordFor, describe } from './lib/permit.mjs';
 import * as state from './lib/state.mjs';
 
 const SAFETY_GATE = 'safety-review';
+
+/** The curated knowledge base has its own gate: its reviewer is a human, and its checker is kb-validate. */
+const KB_GATE = 'kb-write';
 
 /** "Since forever" — used when no named file is an artifact this session recorded. */
 const EPOCH = '1970-01-01T00:00:00.000Z';
@@ -132,13 +136,34 @@ function commandPreWrite(payload) {
   const path = targetPath(payload.tool_input || {}, cwd);
   if (!path) proceed();
 
-  // The knowledge base has one writable channel, and it is not this one. `mappings/` and
-  // `candidates/` are the agent's; the curated collections are written only by an approved promote.
-  if (/^knowledge-base\//.test(path) && !/^knowledge-base\/(mappings|candidates)\//.test(path)) {
-    block(`✖ запись в курируемую базу знаний: ${path}\n`
-      + '  Агенту разрешены только knowledge-base/mappings/** и knowledge-base/candidates/**.\n'
-      + '  → пройдите /stand-test-review-kb-candidates и /stand-test-apply-kb-candidates — '
-      + 'единственный путь, на котором есть человеческий гейт.');
+  // The knowledge base, by tier. `schema/` never; staging as always; a curated file only inside a
+  // permit that named it. The permit is scope and intent — the human decision is the host's own
+  // prompt on this write, and what landed is judged afterwards by the `kb-write` gate.
+  const tier = classify(path);
+  if (tier === 'schema') {
+    block(`✖ контракт схем не пишет прогон, который он ограничивает: ${path}\n`
+      + '  knowledge-base/schema/** не покрывается никаким пермитом: по этим схемам валидируется всё остальное,\n'
+      + '  и правка схемы — это изменение SDK, которое делает человек.');
+  }
+  if (tier === 'curated') {
+    const permit = state.activePermit(cwd);
+    if (permit === null) {
+      const expired = state.readState(cwd).permit;
+      block(expired
+        ? `✖ пермит истёк: выдан ${expired.issuedAt}, действовал до ${expired.expiresAt}\n  ${path}\n\n`
+          + '  Выпустите новый — срок стоит для того, чтобы забытый пермит не превращался в постоянную лицензию.'
+        : `✖ запись в курируемую базу знаний без пермита: ${path}\n\n`
+          + '  Объявите файлы, которые собираетесь записать, — до того, как содержимое существует:\n'
+          + `  → node .claude/hooks/stand-guard.mjs kb-write-permit --reason promote --document <id> ${path}\n`
+          + '     (или --reason update --source <спека>, или --reason repair для находок kb-validate)\n\n'
+          + '  Пермит — это область и намерение, а не разрешение: подтверждает запись человек, в момент записи.');
+    }
+    if (!permit.files.includes(path)) {
+      block(`✖ пермит не называет этот файл: ${path}\n\n${describe(permit)}\n\n`
+        + '  Пермит покрывает ровно перечисленное. Выпустите новый, назвав недостающий путь — '
+        + 'это один шаг, а не тупик.');
+    }
+    state.consumePermit(path, cwd);
   }
 
   const content = intendedContent(payload.tool_name, payload.tool_input || {});
@@ -155,6 +180,26 @@ function commandPreWrite(payload) {
   if (isReviewableArtifact(path)) state.recordArtifact(path, content, cwd);
   const notes = findings.filter((item) => item.severity !== 'BLOCK');
   proceed(notes.length > 0 ? `⚠ ${notes.length} находок уровня HIGH в ${path}:\n${notes.map(render).join('\n')}` : '');
+}
+
+/**
+ * What a curated knowledge-base file holds now that the write has happened.
+ *
+ * Recorded here rather than in pre-write because here it is exact. Before the write the file on disk
+ * still holds the old content, and the tool call carries the whole new file only for `Write` — an
+ * `Edit` carries the replacement fragment, whose hash describes nothing anyone can re-check. After
+ * the write there is one answer, and the `kb-write` gate is bound to it.
+ */
+function commandPostWrite(payload) {
+  const cwd = payload.cwd || process.cwd();
+  const path = targetPath(payload.tool_input || {}, cwd);
+  if (!path || classify(path) !== 'curated') proceed();
+  if (!existsSync(join(cwd, path))) proceed();
+
+  state.recordCurated(path, readFileSync(join(cwd, path), 'utf8'), cwd);
+  proceed(`курируемая база знаний изменена: ${path}\n`
+    + '  Сессия не закончится, пока это не покрыто гейтом: node .claude/hooks/stand-guard.mjs kb-validate --exit-code, '
+    + 'затем record-gate --gate kb-write --verdict PASS <файлы>');
 }
 
 const DANGEROUS_COMMANDS = [
@@ -250,7 +295,20 @@ function commandRecordGate(argv, payload) {
     block(`✖ PASS не записан: повторный скан нашёл ${stoppers.length} блокирующих находок\n\n${stoppers.map(render).join('\n\n')}`);
   }
 
-  // "Ревью выполнил другой контекст" перестаёт быть обещанием: с момента последней правки артефакта
+  // The curated knowledge base answers to its own checker. This is the deterministic half a pre-write
+  // rule could never be — before the write there is no file to judge, and on the Edit route not even
+  // the whole content. Here there is.
+  if (gate === KB_GATE && claimed === 'PASS') {
+    const report = validateKnowledgeBase(cwd);
+    const kbStoppers = blocking(report.findings).filter((item) => files.some((file) => String(item.file).startsWith(file)));
+    if (kbStoppers.length > 0) {
+      state.recordGate(gate, 'BLOCK', files, cwd);
+      block(`✖ PASS не записан: kb-validate нашёл ${kbStoppers.length} блокирующих находок\n\n`
+        + `${kbStoppers.map((item) => `✖ ${item.ruleId}\n  ${item.file}: ${item.message}\n  → ${item.fix}`).join('\n\n')}`);
+    }
+  }
+
+  // "Ревью выполнил другой контекст" перестаёт быть обещанием: с момента записи артефакта
   // должен был завершиться субагент. Хук не знает, КАКОЙ и что он читал, — но знает, что делегирование
   // вообще было, и этого хватает, чтобы контекст, писавший код, не подписывал сам себя.
   if (gate === SAFETY_GATE && claimed === 'PASS') {
@@ -276,8 +334,19 @@ function commandRecordGate(argv, payload) {
 
 function commandStop(payload) {
   const cwd = payload.cwd || process.cwd();
+  const staleKb = state.staleCurated(KB_GATE, cwd);
+  if (staleKb.length > 0 && !payload.stop_hook_active) {
+    block(`✖ сессия не завершена: ${staleKb.length} файлов курируемой базы знаний записаны и не проверены\n  ${staleKb.join('\n  ')}\n\n`
+      + `→ node .claude/hooks/stand-guard.mjs kb-validate --exit-code\n`
+      + `→ node .claude/hooks/stand-guard.mjs record-gate --gate ${KB_GATE} --verdict PASS ${staleKb.join(' ')}\n`
+      + 'База знаний — это конфигурация стенда: запись, которую никто не перечитал, ломает не эту сессию, а следующий сгенерированный тест.');
+  }
+
   const stale = state.staleArtifacts(SAFETY_GATE, cwd);
-  if (stale.length === 0) proceed();
+  if (stale.length === 0) {
+    if (staleKb.length > 0) proceed(`NOT-READY: ${staleKb.length} файлов базы знаний без гейта ${KB_GATE}:\n  ${staleKb.join('\n  ')}`);
+    proceed();
+  }
 
   const instruction = `node .claude/hooks/stand-guard.mjs scan ${stale.join(' ')}`;
   if (payload.stop_hook_active) {
@@ -289,6 +358,60 @@ function commandStop(payload) {
     + `→ ${instruction}\n`
     + '→ затем запишите вердикт: node .claude/hooks/stand-guard.mjs record-gate --gate safety-review --verdict PASS <файлы>\n'
     + 'Правка файла после ревью снимает покрытие автоматически — гейт привязан к содержимому, а не к факту запуска.');
+}
+
+const PERMIT_REASONS = ['promote', 'update', 'repair'];
+
+/**
+ * Declares which curated files a write is about to touch, and why.
+ *
+ * `repair` asks for no evidence at all, and that is a decision rather than an oversight: the kit's own
+ * `kb-validate` reports defects IN curated files — a duplicate id, a ref carrying a value — and if no
+ * reason could open those files, the only fix would be outside the tool. A gate nobody can satisfy is
+ * a gate people switch off, and it takes the working checks with it. So the honest statement is that
+ * this command is bookkeeping the model can perform for itself; the human decision lives in the
+ * host's prompt at the moment of the write.
+ */
+function commandKbWritePermit(argv) {
+  const cwd = process.cwd();
+  if (argv.includes('--revoke')) {
+    const previous = state.revokePermit(cwd);
+    proceed(previous ? `пермит отозван (был на ${previous.files.length} файлов)` : 'активного пермита не было');
+  }
+
+  const reason = argumentValue(argv, '--reason') || '';
+  if (!PERMIT_REASONS.includes(reason)) {
+    block(`✖ --reason обязателен и должен быть одним из: ${PERMIT_REASONS.join(' | ')}\n`
+      + '  promote — промоут одобренных кандидатов; update — kb-update из машинного контракта; repair — починка находок kb-validate.');
+  }
+
+  const files = positional(argv).map((file) => relativise(file, cwd));
+  const scope = validateFileSet(files);
+  if (!scope.ok) block(`✖ пермит не выдан: ${scope.why}`);
+
+  const document = argumentValue(argv, '--document');
+  const source = argumentValue(argv, '--source');
+  if (reason === 'promote') {
+    const review = reviewRecordFor(cwd, document);
+    if (!review.ok) {
+      block(`✖ пермит не выдан: ${review.why}\n\n`
+        + '  Это сверка на согласованность, а не авторизация: файл решения пишет тот же агент. '
+        + 'Она ловит промоут не того документа, не более того.');
+    }
+  }
+  if (reason === 'update') {
+    if (!source) block('✖ пермит не выдан: --reason update требует --source <путь к спеке> либо --source pasted');
+    if (source !== 'pasted' && !existsSync(join(cwd, source))) {
+      block(`✖ пермит не выдан: источника нет на диске — ${source}\n`
+        + '  Если контракт пришёл текстом, так и скажите: --source pasted (это попадёт в вывод и останется в транскрипте).');
+    }
+  }
+
+  const previous = state.issuePermit({ reason, document: document || null, source: source || null, files }, cwd);
+  const permit = state.activePermit(cwd);
+  proceed(`${describe(permit)}\n`
+    + (previous ? `⚠ заменён неизрасходованный пермит на ${previous.files.length} файлов\n` : '')
+    + '  Это бухгалтерия, а не разрешение: на каждой записи хост спросит человека.');
 }
 
 function commandSubagentStop(payload) {
@@ -364,18 +487,23 @@ function commandAliasCheck(argv) {
 
 function commandStatus(payload) {
   const cwd = (payload && payload.cwd) || process.cwd();
+  // A new session inherits no permission from an old one: a permit is about what is being done now.
+  const dropped = state.revokePermit(cwd);
   const current = state.readState(cwd);
   const artifacts = Object.keys(current.artifacts).length;
   const stale = state.staleArtifacts(SAFETY_GATE, cwd).length;
+  const staleKb = state.staleCurated(KB_GATE, cwd).length;
   const kb = existsSync(join(cwd, 'knowledge-base')) ? 'есть' : 'НЕТ';
   const registry = ['stand-test-environments.yml', 'src/test/resources/stand-test-environments.yml']
     .some((path) => existsSync(join(cwd, path))) ? 'есть' : 'НЕТ';
   const { ran, notRun } = gates();
   proceed(`stand-test: KB ${kb}, реестр окружений ${registry}; артефактов за сессию ${artifacts}, `
-    + `без пройденного safety-review ${stale}; детекторов активно ${ran.length}/${ran.length + notRun.length}`);
+    + `без пройденного safety-review ${stale}; файлов KB без гейта ${KB_GATE} ${staleKb}; `
+    + `детекторов активно ${ran.length}/${ran.length + notRun.length}`
+    + (dropped ? `\n⚠ пермит на запись в KB от ${dropped.issuedAt} снят: он принадлежал прошлой сессии` : ''));
 }
 
-const VALUE_FLAGS = new Set(['--gate', '--verdict', '--as']);
+const VALUE_FLAGS = new Set(['--gate', '--verdict', '--as', '--reason', '--document', '--source']);
 
 function argumentValue(argv, name) {
   const index = argv.indexOf(name);
@@ -413,13 +541,15 @@ try {
     case 'post-run': commandPostRun(readStdin()); break;
     case 'record-gate': commandRecordGate(argv, {}); break;
     case 'stop': commandStop(readStdin()); break;
+    case 'post-write': commandPostWrite(readStdin()); break;
     case 'subagent-stop': commandSubagentStop(readStdin()); break;
+    case 'kb-write-permit': commandKbWritePermit(argv); break;
     case 'kb-status': commandKbStatus(argv); break;
     case 'kb-validate': commandKbValidate(argv); break;
     case 'alias-check': commandAliasCheck(argv); break;
     case 'status': commandStatus({}); break;
     default:
-      process.stdout.write('stand-guard: scan | pre-write | pre-bash | post-run | record-gate | stop | subagent-stop | kb-status | kb-validate | alias-check | status\n');
+      process.stdout.write('stand-guard: scan | pre-write | post-write | pre-bash | post-run | record-gate | kb-write-permit | stop | subagent-stop | kb-status | kb-validate | alias-check | status\n');
       process.exit(0);
   }
 } catch (error) {

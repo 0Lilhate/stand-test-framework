@@ -18,9 +18,14 @@ so it is small, auditable, and `dry-run` by default.
 
 ## Hard preconditions (checked before anything is written)
 
+The RECORD OF REVIEW is `candidates/<document-id>/review-decisions.yml` — the only place carrying a
+schema-required `reviewedBy` and `reviewedOn`, i.e. who decided and when. Per-candidate `status` is
+LIFECYCLE (`new` → `applied`), not authority, and `review.decision` is an optional detail beside it.
+
 A candidate is promotable ONLY if ALL hold:
-- `review.decision: approved` AND `status: approved`;
-- `confidence: high`, OR `confidence: medium` with an explicit per-item human tick;
+- the family's `disposition` in `review-decisions.yml` lists its id under `approved`;
+- `confidence: high`, OR `confidence: medium` whose `approved[].basis` says why the human took it —
+  that string IS the tick; no schema anywhere has another field for it;
 - it is not involved in any `conflict` whose `resolution` is still unresolved;
 - it is not `partial` and not `promotionBlocked` (e.g. db-table with no curated home is not promotable
   until a human extends the schema — a separate SDK change, not this pipeline).
@@ -37,23 +42,33 @@ Anything failing a precondition is reported and skipped; it is never written.
    candidate is downgraded to `unresolved` — never invented.
 3. **Strict-validate** each projected entry against `stand-test-knowledge-base.schema.json` (the curated
    umbrella). A failure means the entry is not promotable — report it, do not write.
-4. **Hand off to `stand-test-kb-update`** as the SOLE deterministic writer. Feed the projected entries
+4. **Take a write permit** naming every curated file this promote will touch, the owning service's
+   rollup included (it is written a second time by the referential-integrity step):
+   `node <bundle>/hooks/stand-guard.mjs kb-write-permit --reason promote --document <document-id> <файлы>`.
+   It refuses a document with no review record — that catches a promote aimed at the wrong id and is
+   NOT the approval; the approval is the host prompt on each write.
+5. **Hand off to `stand-test-kb-update`** as the SOLE deterministic writer. Feed the projected entries
    as pre-formed candidates; kb-update runs its own `parse → validate → diff (added/updated/unchanged/
    conflict) → write` pipeline, dry-run first. Do NOT write curated files directly — reuse kb-update's
    never-delete / never-silently-overwrite / sorted-by-id / property-order guarantees and the pinned
    `KnowledgeBaseSchemaValidationTest` guard.
-5. **Referential integrity** — in the SAME kb-update run, co-update the owning service's rollup
+6. **Referential integrity** — in the SAME kb-update run, co-update the owning service's rollup
    (`endpoints[]`/`datasources[]`/`grpcTargets[]`/`kafkaTopics`) for each promoted child. If the owner
    is neither curated nor in the approved set, BLOCK the child's promotion (never orphan-promote).
-6. **Update provenance links** — append `promotion-log.yml`: `curatedId → { documentId,
+7. **Update provenance links** — append `promotion-log.yml`: `curatedId → { documentId,
    documentVersion, documentDate, promotedAt, promotedBy }`. This is the ONLY join surface for
    stale-vs-curated and version-conflict detection (curated entries stay provenance-free). A skipped
    log append **fails the apply closed** — it is part of the write, not an afterthought. Stamp the
    promoted candidate `status: applied`.
-7. **Produce the diff** (kb-update's report) and, for any new env-var refs the promoted entries
+8. **Produce the diff** (kb-update's report) and, for any new env-var refs the promoted entries
    introduce, run `/stand-test-generate-env` (refs only, diff before apply).
-8. **Run KB validation** — `./gradlew :stand-test-ai-schema:test` (this repo) or the consumer's KB
-   check; re-run the schema over every touched curated file.
+9. **Run KB validation** — `./gradlew :stand-test-ai-schema:test` (this repo); re-run the schema over
+   every touched curated file.
+10. **Close the write.** At a consumer, where the schema tests do not exist:
+   `node <bundle>/hooks/stand-guard.mjs kb-validate --exit-code` and `alias-check`, then
+   `node <bundle>/hooks/stand-guard.mjs record-gate --gate kb-write --verdict PASS <файлы>` — until
+   that verdict is recorded the session will not end, because a curated write nobody re-read breaks
+   not this session but the next generated test.
 
 ## Forbidden
 

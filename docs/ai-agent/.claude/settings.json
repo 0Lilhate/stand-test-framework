@@ -24,6 +24,8 @@
       "Edit(./.claude/hooks/**)",
       "Edit(./.claude/agents/**)",
       "Edit(./knowledge-base/schema/**)",
+      "Write(./knowledge-base/schema/**)",
+      "MultiEdit(./knowledge-base/schema/**)",
       "Bash(rm -rf:*)",
       "Bash(git push:*)",
       "Bash(git reset --hard:*)",
@@ -34,6 +36,8 @@
     ],
     "ask": [
       "Edit(./knowledge-base/**)",
+      "Write(./knowledge-base/**)",
+      "MultiEdit(./knowledge-base/**)",
       "Edit(./stand-test-environments.yml)",
       "Edit(./**/application*.yml)",
       "Bash(./gradlew test:*)",
@@ -88,6 +92,16 @@
       }
     ],
     "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/stand-guard.mjs post-write",
+            "timeout": 10
+          }
+        ]
+      },
       {
         "matcher": "Bash",
         "hooks": [
