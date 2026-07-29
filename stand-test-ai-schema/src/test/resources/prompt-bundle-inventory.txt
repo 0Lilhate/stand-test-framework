@@ -30,6 +30,11 @@
 .claude/hooks/corpus/unsanctioned-dependencies.gradle.kts.txt
 .claude/hooks/corpus/validator-bypass-test.java.txt
 .claude/hooks/detectors.json
+.claude/hooks/lib/fingerprint.mjs
+.claude/hooks/lib/junit.mjs
+.claude/hooks/lib/scan.mjs
+.claude/hooks/lib/state.mjs
+.claude/hooks/stand-guard.mjs
 .claude/rules/stand-test-guardrails.md
 .claude/rules/stand-test-pipeline.md
 .claude/settings.json

@@ -60,7 +60,66 @@
       "Bash(cat:*)",
       "Bash(head:*)",
       "Bash(tail:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(node .claude/hooks/stand-guard.mjs:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/stand-guard.mjs pre-write",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/stand-guard.mjs pre-bash",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/stand-guard.mjs post-run",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/stand-guard.mjs stop",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/stand-guard.mjs status",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }
