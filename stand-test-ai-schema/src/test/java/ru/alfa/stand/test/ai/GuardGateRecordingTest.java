@@ -172,6 +172,19 @@ class GuardGateRecordingTest {
         JsonNode gate = state(project).path("gates").path("safety-review");
         assertThat(gate.path("verdict").asText()).isEqualTo("PASS");
         assertThat(gate.path("covers").fieldNames()).toIterable().containsExactly(ARTIFACT);
+
+        // A reviewed test must also be claimed by a mapping entry before the session may end — see
+        // GuardMappingTest. Here that is scaffolding for the gate under test, not the subject.
+        preWrite(project, "knowledge-base/mappings/generated-scenario.yml",
+                "testCaseMappings:\n"
+                        + "  - caseId: generated-scenario\n"
+                        + "    environment: ift\n"
+                        + "    matched: {}\n"
+                        + "    generatedTest:\n"
+                        + "      module: qa-tests\n"
+                        + "      package: ru.alfa.qa.test\n"
+                        + "      className: GeneratedScenarioTest\n"
+                        + "    status: generated\n");
         assertThat(run(project, stopPayload(project), "stop").exitCode()).as("the one artifact of the session is covered, so nothing is stale").isZero();
     }
 

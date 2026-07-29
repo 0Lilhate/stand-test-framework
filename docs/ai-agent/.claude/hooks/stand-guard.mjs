@@ -25,6 +25,7 @@ import { validateKnowledgeBase, checkAliases } from './lib/kb-checks.mjs';
 import { classify, validateFileSet, reviewRecordFor, describe } from './lib/permit.mjs';
 import { diagnose, render as renderReport } from './lib/doctor.mjs';
 import { toSarif } from './lib/sarif.mjs';
+import { mappings, claimsArtifact, needsMapping, template } from './lib/mapping.mjs';
 import * as state from './lib/state.mjs';
 
 const SAFETY_GATE = 'safety-review';
@@ -345,6 +346,19 @@ function commandRecordGate(argv, payload) {
     }
   }
 
+  // Fail fast on the traceability record, where the message can still name the artifact being gated.
+  // The Stop hook is the backstop; this is the courtesy of finding out now rather than at the end.
+  const caseId = argumentValue(argv, '--case');
+  if (caseId !== null && claimed === 'PASS') {
+    const known = mappings(cwd);
+    if (!known.some((entry) => entry.caseId === caseId)) {
+      block(`✖ гейт ${gate} не записан: в knowledge-base/mappings/ нет записи о кейсе '${caseId}'\n\n`
+        + `${template(files[0], caseId)}\n\n`
+        + '  Запись связи «кейс → тест» — единственное место, где эта связь вообще есть: '
+        + 'через полгода по одному файлу теста не восстановить, какой кейс он закрывает и что при этом предполагалось.');
+    }
+  }
+
   const covered = Object.keys(state.recordGate(gate, claimed, files, cwd).gates[gate].covers);
   const uncovered = files.filter((file) => !covered.includes(file));
   proceed(`гейт ${gate}: ${claimed} (${files.join(', ')})`
@@ -365,6 +379,17 @@ function commandStop(payload) {
 
   const stale = state.staleArtifacts(SAFETY_GATE, cwd);
   if (stale.length === 0) {
+    // Reviewed, and still nowhere on the record. The mapping is the only place the join between a case
+    // and the test that answers it is written down; without it the test's reason for existing lives in
+    // a transcript nobody will have.
+    const claimed = mappings(cwd);
+    const unclaimed = Object.keys(state.readState(cwd).artifacts).filter((path) => needsMapping(path) && !claimsArtifact(claimed, path));
+    if (unclaimed.length > 0 && !payload.stop_hook_active) {
+      block(`✖ сессия не завершена: ${unclaimed.length} тестов прошли ревью и не заявлены в knowledge-base/mappings/\n  ${unclaimed.join('\n  ')}\n\n`
+        + `${template(unclaimed[0], null)}\n\n`
+        + '  mappings/ — единственный канал записи, открытый агенту, и до сих пор он держался на добросовестности.');
+    }
+    if (unclaimed.length > 0) proceed(`NOT-READY: ${unclaimed.length} тестов без записи в mappings/:\n  ${unclaimed.join('\n  ')}`);
     if (staleKb.length > 0) proceed(`NOT-READY: ${staleKb.length} файлов базы знаний без гейта ${KB_GATE}:\n  ${staleKb.join('\n  ')}`);
     proceed();
   }
@@ -541,7 +566,7 @@ function commandStatus(payload) {
     + (dropped ? `\n⚠ пермит на запись в KB от ${dropped.issuedAt} снят: он принадлежал прошлой сессии` : ''));
 }
 
-const VALUE_FLAGS = new Set(['--gate', '--verdict', '--as', '--reason', '--document', '--source', '--format', '--against']);
+const VALUE_FLAGS = new Set(['--gate', '--verdict', '--as', '--reason', '--document', '--source', '--format', '--against', '--case']);
 
 function argumentValue(argv, name) {
   const index = argv.indexOf(name);
