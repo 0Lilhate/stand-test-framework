@@ -28,8 +28,11 @@ The KB is stand configuration: a human approves the diff before `apply` lands.
 5. **dry-run**: stop — no file changes; print the report with the would-be diff.
 6. **apply**: write deterministically (collections sorted by id, schema key order, one collection
    key per file), never deleting, never renaming ids/aliases.
-7. **Run KB validation** — `./gradlew :stand-test-ai-schema:test` in this repo / the consumer's
-   KB check; plus [`kb-entry-review-checklist.md`](../skills/stand-test-kb-update/kb-entry-review-checklist.md)
+7. **Run KB validation** — `./gradlew :stand-test-ai-schema:test` in this repo; at a CONSUMER, where
+   those tests do not exist, `node <bundle>/hooks/stand-guard.mjs kb-validate --exit-code` and
+   `alias-check` (lexical safety, identity, alias-vs-registry — they name what they do NOT check, and
+   the schemas remain the contract for that); plus
+   [`kb-entry-review-checklist.md`](../skills/stand-test-kb-update/kb-entry-review-checklist.md)
    over every added/updated entry.
 8. **Print the update report** per
    [`kb-update-report-template.md`](../skills/stand-test-kb-update/kb-update-report-template.md).

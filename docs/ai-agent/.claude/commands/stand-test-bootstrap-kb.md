@@ -33,7 +33,10 @@ correct behaviour and an awful first hour.
 6. **apply**: write under `knowledge-base/candidates/bootstrap-registry/` and
    `knowledge-base/candidates/bootstrap-tests/` — never into the curated collections. The write hook
    refuses anything else.
-7. **Hand over to the existing gate**: `/stand-test-review-kb-candidates`, then
+7. **Check what landed**: `node <bundle>/hooks/stand-guard.mjs kb-validate --exit-code` and
+   `alias-check` — the consumer-side half of the schema tests, which live in the SDK repository and
+   do not travel with the bundle.
+8. **Hand over to the existing gate**: `/stand-test-review-kb-candidates`, then
    `/stand-test-apply-kb-candidates`. A human decides what enters the KB, exactly as for an ingested
    specification.
 

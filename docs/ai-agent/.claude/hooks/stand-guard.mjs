@@ -20,6 +20,7 @@ import { scanArtifact, blocking, render, gates, kindOf } from './lib/scan.mjs';
 import { readResults, skipWarning } from './lib/junit.mjs';
 import { fingerprint, normalise } from './lib/fingerprint.mjs';
 import { kbStatus } from './lib/kb.mjs';
+import { validateKnowledgeBase, checkAliases } from './lib/kb-checks.mjs';
 import * as state from './lib/state.mjs';
 
 const SAFETY_GATE = 'safety-review';
@@ -317,6 +318,50 @@ function commandKbStatus(argv) {
   proceed(lines.join('\n'));
 }
 
+/**
+ * The knowledge base, checked at the site that uses it.
+ *
+ * In this repository a Gradle test validates the base against its twenty schemas. That test does not
+ * travel with the bundle, so at a consumer the schemas are documents nobody executes — and a KB
+ * drifts silently until a generated test fails against a stand for a reason that looks like anything
+ * else. What runs here is the part a script can decide exactly, and it says which part that is.
+ */
+function commandKbValidate(argv) {
+  const result = validateKnowledgeBase(process.cwd());
+  const stoppers = blocking(result.findings);
+  if (argv.includes('--json')) {
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  } else if (result.files === 0) {
+    process.stdout.write('база знаний не найдена: нечего проверять\n');
+  } else {
+    result.findings.forEach((item) => process.stdout.write(`${item.severity === 'BLOCK' ? '✖' : '⚠'} ${item.ruleId}\n  ${item.file}: ${item.message}\n  → ${item.fix}\n`));
+    process.stdout.write(`\nпроверено файлов: ${result.files}, находок: ${result.findings.length}, из них блокирующих: ${stoppers.length}\n`);
+    process.stdout.write(`НЕ проверено (контракт — схемы в knowledge-base/schema/): ${result.notChecked.join('; ')}\n`);
+  }
+  process.exit(argv.includes('--exit-code') && stoppers.length > 0 ? 1 : 0);
+}
+
+/** The base against the registry, in both directions. */
+function commandAliasCheck(argv) {
+  const result = checkAliases(process.cwd());
+  if (argv.includes('--json')) {
+    proceed(JSON.stringify(result, null, 2));
+  }
+  if (result.registry === null) {
+    proceed('реестр окружений не найден: сверять базу знаний не с чем');
+  }
+  const lines = [`реестр: ${result.registry}`];
+  for (const [kind, value] of Object.entries(result.kinds)) {
+    lines.push(`  ${kind}: реестр ${value.registry.length}, KB ${value.knowledgeBase.length}`
+      + `, нет в реестре ${value.unregistered.length}${value.unregistered.length > 0 ? ` (${value.unregistered.join(', ')})` : ''}`
+      + `, нет в KB ${value.missingFromKb.length}${value.missingFromKb.length > 0 ? ` (${value.missingFromKb.join(', ')})` : ''}`);
+  }
+  lines.push(result.findings.length > 0
+    ? `\n${result.findings.length} алиасов базы знаний не объявлены реестром — тест, сгенерированный по такой записи, падает на резолвинге`
+    : '\nкаждый алиас базы знаний объявлен реестром');
+  proceed(lines.join('\n'));
+}
+
 function commandStatus(payload) {
   const cwd = (payload && payload.cwd) || process.cwd();
   const current = state.readState(cwd);
@@ -370,9 +415,11 @@ try {
     case 'stop': commandStop(readStdin()); break;
     case 'subagent-stop': commandSubagentStop(readStdin()); break;
     case 'kb-status': commandKbStatus(argv); break;
+    case 'kb-validate': commandKbValidate(argv); break;
+    case 'alias-check': commandAliasCheck(argv); break;
     case 'status': commandStatus({}); break;
     default:
-      process.stdout.write('stand-guard: scan | pre-write | pre-bash | post-run | record-gate | stop | subagent-stop | kb-status | status\n');
+      process.stdout.write('stand-guard: scan | pre-write | pre-bash | post-run | record-gate | stop | subagent-stop | kb-status | kb-validate | alias-check | status\n');
       process.exit(0);
   }
 } catch (error) {

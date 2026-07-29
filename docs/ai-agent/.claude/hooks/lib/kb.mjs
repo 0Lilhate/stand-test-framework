@@ -35,6 +35,29 @@ const SECTIONS = {
 /** KB collections, as directory names under `knowledge-base/`. */
 const COLLECTIONS = ['services', 'endpoints', 'kafka', 'db', 'grpc', 'environments'];
 
+/**
+ * Registry kind → the KB collection KEY that holds the same thing.
+ *
+ * By the top-level key of the file, not by its directory: `db/` holds datasources, tables and probes
+ * together, and comparing a TABLE id against the registry's datasource aliases would report a finding
+ * for every table in the base. A false finding here is worse than a missed one — this is the report
+ * people are meant to keep running.
+ */
+export const REGISTRY_COLLECTIONS = {
+  service: 'services',
+  'kafka-topic': 'kafkaTopics',
+  datasource: 'datasources',
+  'grpc-target': 'grpcTargets',
+};
+
+const TOP_LEVEL_KEY = /^([A-Za-z][A-Za-z0-9]*):\s*$/m;
+
+// The id of an ENTRY is the list-item one. An `alias:` beside it is the same entry seen twice, and
+// counting both made every entry that carries an alias look like a duplicate of itself.
+const ENTRY_ID = /^\s*-\s+id:\s*["']?([A-Za-z0-9][A-Za-z0-9._-]*)["']?\s*$/gm;
+
+const ENTRY_ALIAS = /^\s*(?:-\s+)?alias:\s*["']?([A-Za-z0-9][A-Za-z0-9._-]*)["']?\s*$/gm;
+
 const KEY = /^(\s*)([A-Za-z][A-Za-z0-9._-]*):\s*$/;
 
 export function registryPath(cwd) {
@@ -74,28 +97,48 @@ export function registryAliases(cwd) {
   return { path, aliases: found };
 }
 
-/** Every `id:`/`alias:` the curated KB declares, and how many entries each collection holds. */
-export function knowledgeBase(cwd) {
+/** Every curated KB file: where it is, what collection it declares, and the ids in it. */
+export function knowledgeBaseFiles(cwd) {
   const root = join(cwd, 'knowledge-base');
-  const entries = {};
-  const ids = new Set();
-  if (!existsSync(root)) return { present: false, entries, ids };
-
+  if (!existsSync(root)) return [];
+  const files = [];
   for (const collection of COLLECTIONS) {
     const directory = join(root, collection);
     if (!existsSync(directory)) continue;
-    let count = 0;
-    for (const name of readdirSync(directory)) {
+    for (const name of readdirSync(directory).sort()) {
       if (!name.endsWith('.yml') && !name.endsWith('.yaml')) continue;
-      const text = readFileSync(join(directory, name), 'utf8');
-      for (const match of text.matchAll(/^\s*(?:-\s+)?(?:id|alias):\s*["']?([A-Za-z0-9][A-Za-z0-9._-]*)["']?\s*$/gm)) {
-        ids.add(match[1]);
-        count += 1;
-      }
+      const path = `knowledge-base/${collection}/${name}`;
+      const text = readFileSync(join(cwd, path), 'utf8');
+      const key = TOP_LEVEL_KEY.exec(text);
+      files.push({
+        path,
+        collection,
+        key: key === null ? null : key[1],
+        ids: [...text.matchAll(ENTRY_ID)].map((match) => match[1]),
+        aliases: [...text.matchAll(ENTRY_ALIAS)].map((match) => match[1]),
+        text,
+      });
     }
-    entries[collection] = count;
   }
-  return { present: true, entries, ids };
+  return files;
+}
+
+/** Every `id:`/`alias:` the curated KB declares, by collection key and in total. */
+export function knowledgeBase(cwd) {
+  const present = existsSync(join(cwd, 'knowledge-base'));
+  const entries = {};
+  const ids = new Set();
+  const byKey = {};
+  for (const file of knowledgeBaseFiles(cwd)) {
+    entries[file.collection] = (entries[file.collection] || 0) + file.ids.length;
+    if (file.key !== null) byKey[file.key] = byKey[file.key] || new Set();
+    // Both spellings answer "does the KB know this alias"; only `ids` answers "how many entries".
+    [...file.ids, ...file.aliases].forEach((id) => {
+      ids.add(id);
+      if (file.key !== null) byKey[file.key].add(id);
+    });
+  }
+  return { present, entries, ids, byKey };
 }
 
 /**
@@ -111,7 +154,8 @@ export function kbStatus(cwd) {
   const kinds = {};
   let missingTotal = 0;
   for (const [kind, declared] of Object.entries(aliases)) {
-    const missing = declared.filter((alias) => !kb.ids.has(alias));
+    const known = kb.byKey[REGISTRY_COLLECTIONS[kind]] || new Set();
+    const missing = declared.filter((alias) => !known.has(alias));
     missingTotal += missing.length;
     kinds[kind] = { registry: declared, missing };
   }

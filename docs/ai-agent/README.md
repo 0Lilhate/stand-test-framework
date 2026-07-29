@@ -66,7 +66,9 @@ docs/ai-agent/
       stand-test-quality-reviewer.md   stage 11 — reads the ORIGINAL case, not the design
       stand-test-kb-resolver.md        stages 2+4 — Read/Grep/Glob only, keeps the KB out of the authoring context
     hooks/           ← the enforcement layer the HOST runs, model or no model (Claude Code only)
-      stand-guard.mjs  pre-write / pre-bash / post-run / stop / subagent-stop / record-gate / scan / kb-status
+      stand-guard.mjs  pre-write / pre-bash / post-run / stop / subagent-stop / record-gate / scan
+                       kb-status / kb-validate / alias-check — the KB checked at the site that USES it,
+                       because the schema tests live in the SDK repo and do not travel with the bundle
       detectors.json   17 of the 18 safety findings, as data
       lib/, corpus/    the engine and the golden fixtures it is proven against
   .opencode/         ← THE SAME BUNDLE for opencode — identical skills/commands/rules/workflows, plus

@@ -40,6 +40,7 @@
 .claude/hooks/detectors.json
 .claude/hooks/lib/fingerprint.mjs
 .claude/hooks/lib/junit.mjs
+.claude/hooks/lib/kb-checks.mjs
 .claude/hooks/lib/kb.mjs
 .claude/hooks/lib/scan.mjs
 .claude/hooks/lib/state.mjs
