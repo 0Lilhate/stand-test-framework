@@ -15,8 +15,8 @@
 // its own bug — a broken guard must not become a broken session.
 
 import { readFileSync, existsSync } from 'node:fs';
-import { basename, join } from 'node:path';
-import { scanArtifact, blocking, render, gates, kindOf } from './lib/scan.mjs';
+import { join } from 'node:path';
+import { scanArtifact, blocking, render, gates } from './lib/scan.mjs';
 import { readResults, skipWarning } from './lib/junit.mjs';
 import { fingerprint, normalise } from './lib/fingerprint.mjs';
 import * as state from './lib/state.mjs';
@@ -155,8 +155,12 @@ function commandPostRun(payload) {
   const command = (payload.tool_input || {}).command || '';
   if (!/gradlew/.test(command) || !/\b(test|check|build)\b/.test(command)) proceed();
 
-  const summary = readResults(join(cwd, 'build', 'test-results'));
+  // Every module's results, and only the ones this command produced. Both halves were missing: the
+  // root `build/test-results` does not exist in a multi-module project, so the check that catches a
+  // green build over zero executed tests never ran there at all.
+  const summary = readResults(cwd, state.consumedResults(cwd));
   if (summary.files === 0) proceed();
+  state.rememberResults(summary.consumed, cwd);
 
   const lines = [];
   const warning = skipWarning(summary);

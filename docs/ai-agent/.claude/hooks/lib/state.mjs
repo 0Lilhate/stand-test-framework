@@ -14,7 +14,7 @@ const STATE_FILE = join(STATE_DIR, 'state.json');
 const JOURNAL_FILE = join(STATE_DIR, 'run-journal.jsonl');
 const UNKNOWN_FILE = join(STATE_DIR, 'unknown-signatures.jsonl');
 
-const EMPTY = { artifacts: {}, gates: {}, runs: [] };
+const EMPTY = { artifacts: {}, gates: {}, runs: [], results: {} };
 
 export function sha256(text) {
   return createHash('sha256').update(text, 'utf8').digest('hex');
@@ -79,6 +79,28 @@ export function staleArtifacts(gate, cwd = process.cwd()) {
   return Object.entries(state.artifacts)
     .filter(([path, artifact]) => covers[path] !== artifact.sha)
     .map(([path]) => path);
+}
+
+/** The JUnit result files already read, as `{ '<path relative to cwd>': mtimeMs }`. */
+export function consumedResults(cwd = process.cwd()) {
+  return readState(cwd).results;
+}
+
+/**
+ * Remembers the results just read, so a later run does not report them a second time.
+ *
+ * Entries whose file is gone are dropped: `./gradlew clean` deletes the tree, and a remembered time
+ * for a path that no longer exists would only make the map grow.
+ */
+export function rememberResults(consumed, cwd = process.cwd()) {
+  const state = readState(cwd);
+  const kept = {};
+  for (const [path, modified] of Object.entries({ ...state.results, ...consumed })) {
+    if (existsSync(join(cwd, path))) kept[path] = modified;
+  }
+  state.results = kept;
+  writeState(state, cwd);
+  return state;
 }
 
 export function appendJournal(entry, cwd = process.cwd()) {
