@@ -53,6 +53,13 @@ bin/
 **/.claude/scheduled_tasks.lock
 **/.claude/**/.fetched-*
 
+# Machine-local config that was parked inside the SHIPPED bundle and has been moved out of it.
+# The rules above are anchored to `.claude/`, so a file that leaves that directory leaves their
+# cover with it — this whole directory is ignored instead, because what lives in it is exactly the
+# kind of thing that must never be committed: one developer's allow-list, absolute paths into
+# another repository, and DEV database credentials.
+.agent-local/
+
 ### Env files (never commit — secrets) ###
 # `.env*` is the catch-all and MUST stay first: the earlier rules `.env` / `*.env` / `.env.*` all
 # require the name to END with `.env` or to have a DOT after `.env`, so a suffix spelled with an

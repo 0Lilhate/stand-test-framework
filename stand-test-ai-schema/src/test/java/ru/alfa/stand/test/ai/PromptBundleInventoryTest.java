@@ -42,7 +42,17 @@ class PromptBundleInventoryTest {
     private static final List<String> BUNDLES = List.of(".claude", ".opencode");
 
     /** Asset directories that carry the prompts themselves plus their templates, examples and checklists. */
-    private static final List<String> ASSET_DIRECTORIES = List.of("commands", "rules", "skills", "workflows");
+    private static final List<String> ASSET_DIRECTORIES = List.of("commands", "rules", "skills", "workflows", "hooks", "agents");
+
+    /**
+     * Single files that are assets in their own right, in whichever copy carries them.
+     *
+     * <p>{@code settings.json} is the Claude half of the permission policy and {@code .gitignore}
+     * travels with the bundle so a consumer inherits its protection. Both belong to the composition
+     * for the same reason the prompts do: an installer copies what this snapshot lists, so an asset
+     * missing from it is an asset that silently never arrives.
+     */
+    private static final List<String> ASSET_FILES = List.of("settings.json", ".gitignore");
 
     /**
      * Bundle-root files that legitimately exist only in the opencode copy. Its loader config
@@ -50,6 +60,17 @@ class PromptBundleInventoryTest {
      * {@code opencode.json} gets its own safety test, and neither is a prompt.
      */
     private static final Set<String> OPENCODE_ONLY = new TreeSet<>(Set.of("AGENTS.md"));
+
+    /**
+     * Paths that legitimately exist only in the Claude copy: the enforcement layer.
+     *
+     * <p>Hooks, subagents and {@code settings.json} are Claude Code mechanisms. opencode reaches the
+     * same checker through a plugin and states its permissions in {@code opencode.json}, so there is
+     * nothing for it to carry under these names. Listing the prefixes keeps the asymmetry deliberate:
+     * any OTHER asset appearing in one copy alone still fails, which is what makes "copy it across"
+     * the default answer.
+     */
+    private static final List<String> CLAUDE_ONLY_PREFIXES = List.of("settings.json", "hooks/", "agents/");
 
     private static final String SNAPSHOT = "prompt-bundle-inventory.txt";
 
@@ -85,6 +106,14 @@ class PromptBundleInventoryTest {
                     walk.filter(Files::isRegularFile).forEach(file -> paths.add(relative(root, file)));
                 } catch (IOException e) {
                     throw new UncheckedIOException("Failed to walk " + assets, e);
+                }
+            }
+        }
+        for (String bundle : BUNDLES) {
+            for (String assetFile : ASSET_FILES) {
+                Path file = root.resolve(bundle).resolve(assetFile);
+                if (Files.isRegularFile(file)) {
+                    paths.add(relative(root, file));
                 }
             }
         }
@@ -161,6 +190,7 @@ class PromptBundleInventoryTest {
         onlyInOpencode.removeAll(claude);
         Set<String> onlyInClaude = new TreeSet<>(claude);
         onlyInClaude.removeAll(opencode);
+        onlyInClaude.removeIf(path -> CLAUDE_ONLY_PREFIXES.stream().anyMatch(path::startsWith));
 
         assertThat(onlyInOpencode).as("the snapshot may list an opencode-only asset only if it is a loader file").isEqualTo(OPENCODE_ONLY);
         assertThat(onlyInClaude).as("the snapshot lists these for .claude only — a half-updated snapshot hides an asset missing from the .opencode copy").isEmpty();

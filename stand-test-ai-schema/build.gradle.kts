@@ -34,16 +34,26 @@ tasks.test {
 
     // StepMatcherCapabilityCoverageTest scans the authoring bundle for stale matcher claims, so the
     // bundle is a test input too. Only the curated asset trees are declared: the bundle directories
-    // also hold gitignored machine-local files (.env, settings.local.json, scheduled_tasks.lock), and
-    // folding those into the cache key would make up-to-date checks differ per developer.
+    // may still hold gitignored per-run state (.stand-test/), and folding that into the cache key
+    // would make up-to-date checks differ per developer.
+    //
+    // The enforcement layer is declared too, and learning that it had to be cost a probe: with
+    // settings.json missing from this list, editing it left the tests UP-TO-DATE, so a deliberately
+    // broken permission policy passed the very test written to catch it. An undeclared input is not
+    // a slower check — it is a check that silently does not run.
+    // The WHOLE bundle, not a curated selection. The selection used to exclude machine-local files
+    // so their presence would not make cache keys differ per developer — but BundleParityTest now
+    // FORBIDS them outright, so such a file is a build failure rather than a local quirk, and
+    // excluding it only meant the test that forbids it never re-ran when one appeared. Per-run hook
+    // state is the one genuine exception.
+    //
+    // OpencodeConfigSafetyTest reads the shipped loader config, which BundleParityTest excludes by
+    // design (opencode-only) and which holds no prompts — so nothing else looks at it, and that is
+    // how three production database servers lived in it unnoticed.
     inputs.files(
         fileTree(rootDir.resolve("docs/ai-agent")) {
-            include(".claude/skills/**", ".claude/commands/**", ".claude/rules/**", ".claude/workflows/**")
-            include(".opencode/skills/**", ".opencode/commands/**", ".opencode/rules/**", ".opencode/workflows/**", ".opencode/AGENTS.md")
-        // OpencodeConfigSafetyTest reads the shipped loader config. It is excluded from
-        // BundleParityTest by design (opencode-only) and holds no prompts, so nothing else looks
-        // at it — which is how three production database servers lived in it unnoticed.
-        include(".opencode/opencode.json")
+            include(".claude/**", ".opencode/**")
+            exclude("**/.stand-test/**")
         },
     ).withPropertyName("standTestAuthoringBundle")
 

@@ -41,8 +41,19 @@ class BundleParityTest {
             "rules/stand-test-pipeline.md",
             "skills/stand-test-java-dsl-authoring/example-provisioned-prelude.java"));
 
-    /** Never part of the shipped bundle: machine-local, gitignored, or runtime residue. */
+    /**
+     * Never part of the shipped bundle: machine-local, gitignored, or runtime residue.
+     *
+     * <p>Excluded from the parity comparison — and, since {@link #noMachineLocalFileSitsInTheBundle},
+     * forbidden from the directory outright. The distinction matters: exclusion made these files
+     * invisible to every test, which is how one of them came to sit in the bundle holding a
+     * developer's allow-list, absolute paths into an unrelated repository and a curl command with DEV
+     * stand credentials — one {@code cp -R} away from every consumer that installed the kit.
+     */
     private static final Set<String> NOT_SHIPPED = new TreeSet<>(Set.of("settings.local.json", "scheduled_tasks.lock"));
+
+    /** Name shapes that carry machine-local state or secrets, wherever in the bundle they appear. */
+    private static final List<String> FORBIDDEN_NAME_PREFIXES = List.of(".env", ".fetched-");
 
     /**
      * Assets that legitimately exist only in the Claude copy: the enforcement layer.
@@ -97,6 +108,32 @@ class BundleParityTest {
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read " + file, e);
         }
+    }
+
+    @Test
+    @DisplayName("no machine-local file sits in the bundle at all — being excluded from parity is not the same as being absent")
+    void noMachineLocalFileSitsInTheBundle() {
+        List<String> found = new ArrayList<>();
+        for (String bundle : List.of(".claude", ".opencode")) {
+            Path root = bundleRoot(bundle);
+            try (Stream<Path> walk = Files.walk(root)) {
+                walk.filter(Files::isRegularFile).forEach(path -> {
+                    String name = path.getFileName().toString();
+                    boolean forbidden = NOT_SHIPPED.contains(name)
+                            || FORBIDDEN_NAME_PREFIXES.stream().anyMatch(name::startsWith);
+                    if (forbidden) {
+                        found.add(bundle + "/" + root.relativize(path).toString().replace('\\', '/'));
+                    }
+                });
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to walk " + root, e);
+            }
+        }
+
+        assertThat(found)
+                .as("these are gitignored, so they never reach a remote — but the install instruction copies the directory, "
+                        + "and a name without a leading dot travels with it. Machine-local config belongs outside the bundle")
+                .isEmpty();
     }
 
     @Test

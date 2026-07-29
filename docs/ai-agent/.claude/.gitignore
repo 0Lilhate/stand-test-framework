@@ -1,0 +1,14 @@
+# Travels WITH the bundle, so a consumer inherits the protection instead of having to remember it.
+#
+# The rules in the SDK repository's own .gitignore cannot help a consumer: they live in a different
+# repository. And a bundle directory is where it matters most — a machine-local settings file in one
+# of these once held a developer's allow-list, absolute paths into an unrelated repository and a curl
+# command carrying DEV stand credentials, sitting one `cp -R` away from every consumer that installed
+# the kit. Three .env files of the same kind did reach a shared remote and had their accounts rotated.
+settings.local.json
+scheduled_tasks.lock
+.env*
+.fetched-*
+
+# Per-run state written by the hooks: an artefact of one session, never of the bundle.
+.stand-test/

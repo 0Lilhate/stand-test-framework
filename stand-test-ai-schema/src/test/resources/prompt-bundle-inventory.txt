@@ -10,6 +10,7 @@
 # Regenerate from the repository root:
 #   cd docs/ai-agent && { for b in .claude .opencode; do for d in commands rules skills workflows; \
 #     do find "$b/$d" -type f; done; done; echo ".opencode/AGENTS.md"; } | LC_ALL=C sort
+.claude/.gitignore
 .claude/commands/stand-test-apply-kb-candidates.md
 .claude/commands/stand-test-debug.md
 .claude/commands/stand-test-design.md
@@ -22,8 +23,16 @@
 .claude/commands/stand-test-review-kb-candidates.md
 .claude/commands/stand-test-validate.md
 .claude/commands/stand-test-yaml.md
+.claude/hooks/corpus/clean-declarative-test.java.txt
+.claude/hooks/corpus/raw-transport-test.java.txt
+.claude/hooks/corpus/sanctioned-dependencies.gradle.kts.txt
+.claude/hooks/corpus/shared-state-test.java.txt
+.claude/hooks/corpus/unsanctioned-dependencies.gradle.kts.txt
+.claude/hooks/corpus/validator-bypass-test.java.txt
+.claude/hooks/detectors.json
 .claude/rules/stand-test-guardrails.md
 .claude/rules/stand-test-pipeline.md
+.claude/settings.json
 .claude/skills/stand-test-case-analysis/SKILL.md
 .claude/skills/stand-test-case-analysis/example-text-case.md
 .claude/skills/stand-test-case-analysis/test-case-analysis-template.md
@@ -77,6 +86,7 @@
 .claude/skills/stand-test-yaml-authoring/yaml-scenario-template.yaml
 .claude/workflows/ingest-unstructured-spec-to-kb.md
 .claude/workflows/review-and-apply-kb-candidates.md
+.opencode/.gitignore
 .opencode/AGENTS.md
 .opencode/commands/stand-test-apply-kb-candidates.md
 .opencode/commands/stand-test-debug.md
