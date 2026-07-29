@@ -25,6 +25,6 @@ expected:
     reason: A guardrail violation in an existing artifact is reported; the human decides whether to rewrite
       it.
   forbiddenArtifactPatterns:
-  - Thread\\.sleep
+  - Thread\.sleep
   approvalRequestKind: RESULT
 repeats: 1

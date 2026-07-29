@@ -75,4 +75,10 @@ tasks.test {
         rootDir.resolve("docs/ai-agent/MANIFEST.json"),
         rootDir.resolve("docs/ai-agent/install.mjs"),
     ).withPropertyName("standTestKitManifest")
+
+    // EvaluationDatasetPatternsTest reads the corpus's forbidden-content patterns, which live outside
+    // every tree declared above. Undeclared, a double-escaped pattern re-introduced tomorrow would
+    // leave that test UP-TO-DATE and green — the same trap this file warns about twice already, and
+    // exactly the shape of the defect the test exists to catch.
+    inputs.dir(rootDir.resolve("docs/agent-evaluation/dataset")).withPropertyName("standTestEvaluationDataset")
 }

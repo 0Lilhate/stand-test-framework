@@ -27,6 +27,6 @@ expected:
     reason: 'The expected identifier value is stated nowhere: neither the case text nor the knowledge
       base carries it, and an equals assertion cannot be written without it.'
   forbiddenArtifactPatterns:
-  - assertPath\\(
+  - assertPath\(
   approvalRequestKind: KB_GAPS
 repeats: 1
