@@ -5,6 +5,7 @@
 // without any of the three being able to disagree with the others.
 
 import { readFileSync } from 'node:fs';
+import { concealment } from './conceal.mjs';
 import { dirname, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -38,7 +39,9 @@ export function kindOf(path) {
 }
 
 function applies(detector, kind) {
-  if (detector.implemented === false) return false;
+  // A finding that needs a previous version is not part of a single-artifact scan. It is not absent
+  // either — `gates()` reports it as not run, and `scanDiff` is where it does run.
+  if (detector.implemented === false || detector.requires !== undefined) return false;
   if (detector.appliesTo === 'any') return true;
   return detector.appliesTo === kind;
 }
@@ -311,13 +314,35 @@ export function scanArtifact(content, relativePath, policy = {}) {
   return findings.map((item) => ({ ...item, file: relativePath }));
 }
 
-/** Which findings ran and which did not — a clean report from part of the set is not a clean report. */
-export function gates() {
+/**
+ * Which findings ran and which did not — a clean report from part of the set is not a clean report.
+ *
+ * @param options `{ previousVersion: true }` when the caller supplied the artifact's previous
+ *   version, which is what finding 18 needs. Without it that finding is reported as not run rather
+ *   than quietly counted among the ones that passed.
+ */
+export function gates(options = {}) {
   const all = detectors().detectors;
+  const ranHere = (detector) => detector.implemented !== false
+    && (detector.requires !== 'previousVersion' || options.previousVersion === true);
   return {
-    ran: all.filter((detector) => detector.implemented !== false).map((detector) => detector.ruleId),
-    notRun: all.filter((detector) => detector.implemented === false).map((detector) => detector.ruleId),
+    ran: all.filter(ranHere).map((detector) => detector.ruleId),
+    notRun: all.filter((detector) => !ranHere(detector)).map((detector) => detector.ruleId),
   };
+}
+
+/**
+ * What a CHANGE stopped checking — the findings that need both versions of an artifact.
+ *
+ * @param previous the artifact as it was; '' for a new file, where nothing can have been concealed
+ * @param next the artifact as it will be
+ * @param relativePath the path it will have
+ */
+export function scanDiff(previous, next, relativePath) {
+  const detector = detectors().detectors.find((item) => item.requires === 'previousVersion');
+  if (detector === undefined) return [];
+  return concealment(previous, next, kindOf(relativePath), detector)
+    .map((item) => ({ ...item, file: relativePath }));
 }
 
 export function blocking(findings) {

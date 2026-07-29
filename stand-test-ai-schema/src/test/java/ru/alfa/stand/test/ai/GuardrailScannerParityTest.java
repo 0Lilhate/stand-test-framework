@@ -153,23 +153,28 @@ class GuardrailScannerParityTest {
     }
 
     @Test
-    @DisplayName("the table declares all eighteen findings and says which one does not run")
+    @DisplayName("the table declares all eighteen findings and says which one needs more than one artifact")
     void table_isComplete() {
         JsonNode detectors = detectorTable().path("detectors");
         TreeSet<Integer> numbers = new TreeSet<>();
-        List<String> notRun = new ArrayList<>();
+        List<String> unimplemented = new ArrayList<>();
+        List<String> needTwoVersions = new ArrayList<>();
         detectors.forEach(detector -> {
             numbers.add(detector.path("finding").asInt());
             if (!detector.path("implemented").asBoolean(true)) {
-                notRun.add(detector.path("ruleId").asText());
+                unimplemented.add(detector.path("ruleId").asText());
+            }
+            if ("previousVersion".equals(detector.path("requires").asText(null))) {
+                needTwoVersions.add(detector.path("ruleId").asText());
             }
         });
 
         assertThat(numbers).as("the numbering is the safety review's own, and a gap in it is a finding nobody carried over").hasSize(18);
         assertThat(numbers.first()).isEqualTo(1);
         assertThat(numbers.last()).isEqualTo(18);
-        assertThat(notRun)
-                .as("finding 18 needs a previous version to compare against, so a FULL scan cannot see it — and a scanner that did not say so would pass off seventeen checks as eighteen")
+        assertThat(unimplemented).as("every finding in the table is implemented; a declared-but-absent check is worse than an absent one").isEmpty();
+        assertThat(needTwoVersions)
+                .as("finding 18 asks what a CHANGE stopped checking, which one version of a file cannot answer — so a plain scan reports it as not run rather than counting it among the passes")
                 .containsExactly("FAILURE_CONCEALMENT");
     }
 

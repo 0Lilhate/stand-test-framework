@@ -25,8 +25,14 @@ function levelOf(severity) {
   return severity === 'BLOCK' ? 'error' : 'warning';
 }
 
-/** Every detector as a SARIF rule, in the table's own order, so ruleIndex is stable across runs. */
-function rules() {
+/**
+ * Every detector as a SARIF rule, in the table's own order, so ruleIndex is stable across runs.
+ *
+ * `enabled` reflects THIS invocation rather than the table: finding 18 needs the artifact's previous
+ * version, so it is off in a plain scan and on when `--against` supplied one. A rule that claimed to
+ * be enabled while nothing ran it would be the same lie by a different route.
+ */
+function rules(notRun) {
   return detectors().detectors.map((detector) => ({
     id: detector.ruleId,
     name: detector.ruleId,
@@ -37,7 +43,7 @@ function rules() {
       level: levelOf(detector.severity),
       // Not omitted — declared and switched off. The difference is the whole reporting discipline of
       // this kit: what did not run has to be visible, or a partial pass reads as a full one.
-      enabled: detector.implemented !== false,
+      enabled: !notRun.includes(detector.ruleId),
     },
     properties: {
       finding: detector.finding,
@@ -83,7 +89,7 @@ function locationOf(finding, contents) {
  * @param notRun rule ids that did not run in this mode
  */
 export function toSarif(findings, contents = {}, notRun = []) {
-  const declared = rules();
+  const declared = rules(notRun);
   const index = new Map(declared.map((rule, position) => [rule.id, position]));
 
   const results = findings.map((finding) => {

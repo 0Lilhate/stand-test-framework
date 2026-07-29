@@ -17,7 +17,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { scanArtifact, blocking, render, gates, kindOf } from './lib/scan.mjs';
+import { scanArtifact, scanDiff, blocking, render, gates, kindOf } from './lib/scan.mjs';
 import { readResults, skipWarning } from './lib/junit.mjs';
 import { fingerprint, normalise } from './lib/fingerprint.mjs';
 import { kbStatus } from './lib/kb.mjs';
@@ -113,6 +113,9 @@ function commandScan(argv) {
   // names that describe what each fixture violates, and a build file called after its violation is
   // not a build file to any detector — the artifact kind comes from the path, deliberately.
   const alias = argumentValue(argv, '--as');
+  // The artifact as the base branch has it: `git show origin/main:<path> > /tmp/prev`. With it the
+  // eighteenth finding can run — what a change stopped checking is not visible in one version.
+  const against = argumentValue(argv, '--against');
   const files = positional(argv);
   const policy = policyOf(process.cwd());
   let findings = [];
@@ -125,8 +128,12 @@ function commandScan(argv) {
     const content = readFileSync(file, 'utf8');
     contents[alias || file] = content;
     findings = findings.concat(scanArtifact(content, alias || file, policy));
+    if (against !== null) {
+      const previous = existsSync(against) ? readFileSync(against, 'utf8') : '';
+      findings = findings.concat(scanDiff(previous, content, alias || file));
+    }
   }
-  const { ran, notRun } = gates();
+  const { ran, notRun } = gates({ previousVersion: against !== null && files.length > 0 });
   if (argumentValue(argv, '--format') === 'sarif') {
     // The same gate without a session: CI reads this whether or not anybody ran an agent.
     process.stdout.write(`${JSON.stringify(toSarif(findings, contents, notRun), null, 2)}\n`);
@@ -178,7 +185,12 @@ function commandPreWrite(payload) {
   const content = intendedContent(payload.tool_name, payload.tool_input || {});
   if (!content) proceed();
 
-  const findings = scanArtifact(content, path, policyOf(cwd));
+  // Both versions are here: what stands on disk and what is about to replace it. So the eighteenth
+  // finding runs at the one moment it is cheapest to act on — a red test being quietly made green is
+  // refused while it is happening, rather than noticed in a review of the commit that did it.
+  const previous = existsSync(join(cwd, path)) ? readFileSync(join(cwd, path), 'utf8') : '';
+  const before = payload.tool_name === 'Write' ? previous : (payload.tool_input || {}).old_string || '';
+  const findings = scanArtifact(content, path, policyOf(cwd)).concat(scanDiff(before, content, path));
   const stoppers = blocking(findings);
   if (stoppers.length > 0) {
     block(`Запись отвергнута: ${stoppers.length} блокирующих находок в ${path}\n\n`
@@ -462,7 +474,9 @@ function commandKbValidate(argv) {
   const result = validateKnowledgeBase(process.cwd());
   const stoppers = blocking(result.findings);
   if (argumentValue(argv, '--format') === 'sarif') {
-    process.stdout.write(`${JSON.stringify(toSarif(result.findings, {}, result.notChecked), null, 2)}\n`);
+    // kb-validate's own "not checked" list is prose about the schemas, not rule ids: it has no rule
+    // to switch off, and passing it as one would invent a rule that does not exist.
+    process.stdout.write(`${JSON.stringify(toSarif(result.findings, {}, []), null, 2)}\n`);
   } else if (argv.includes('--json')) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else if (result.files === 0) {
@@ -527,7 +541,7 @@ function commandStatus(payload) {
     + (dropped ? `\n⚠ пермит на запись в KB от ${dropped.issuedAt} снят: он принадлежал прошлой сессии` : ''));
 }
 
-const VALUE_FLAGS = new Set(['--gate', '--verdict', '--as', '--reason', '--document', '--source', '--format']);
+const VALUE_FLAGS = new Set(['--gate', '--verdict', '--as', '--reason', '--document', '--source', '--format', '--against']);
 
 function argumentValue(argv, name) {
   const index = argv.indexOf(name);

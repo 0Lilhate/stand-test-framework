@@ -39,6 +39,7 @@
 .claude/hooks/corpus/unsanctioned-dependencies.gradle.kts.txt
 .claude/hooks/corpus/validator-bypass-test.java.txt
 .claude/hooks/detectors.json
+.claude/hooks/lib/conceal.mjs
 .claude/hooks/lib/doctor.mjs
 .claude/hooks/lib/fingerprint.mjs
 .claude/hooks/lib/junit.mjs

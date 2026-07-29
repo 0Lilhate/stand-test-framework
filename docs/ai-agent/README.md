@@ -71,14 +71,15 @@ docs/ai-agent/
       stand-test-kb-resolver.md        stages 2+4 — Read/Grep/Glob only, keeps the KB out of the authoring context
     hooks/           ← the enforcement layer the HOST runs, model or no model (Claude Code only)
       stand-guard.mjs  pre-write / post-write / pre-bash / post-run / stop / subagent-stop / record-gate / scan
-                       scan --format sarif --exit-code — the SAME gate in CI, with no session and
-                       no model: findings become pull-request annotations, and the finding that
-                       cannot run in a full scan is declared disabled rather than omitted
+                       scan --format sarif --exit-code [--against <base version>] — the SAME gate in
+                       CI, with no session and no model: findings become pull-request annotations,
+                       and a rule is declared enabled only if it actually ran in that invocation
                        kb-status / kb-validate / alias-check — the KB checked at the site that USES it,
                        because the schema tests live in the SDK repo and do not travel with the bundle
                        kb-write-permit — curated KB writes are declared by path before the content
                        exists; the human confirms each write, kb-write re-reads what landed
-      detectors.json   17 of the 18 safety findings, as data
+      detectors.json   all 18 safety findings, as data — the eighteenth needs the artifact's
+                       previous version (the disk, or `--against` in CI) and says so when it lacks one
       lib/, corpus/    the engine and the golden fixtures it is proven against
   .opencode/         ← THE SAME BUNDLE for opencode — identical skills/commands/rules/workflows, plus
       AGENTS.md      ← opencode-specific manual (load model, command/skill index); the pipeline
