@@ -21,7 +21,7 @@ the order.
 |---|---|---|
 | These rules | `.opencode/rules/*.md` | auto-loaded as project instructions |
 | Skills (17) | `.opencode/skills/<name>/SKILL.md` | on demand, via the Skill tool |
-| Commands (13) | `.opencode/commands/<name>.md` | when the user invokes `/<name>` |
+| Commands (14) | `.opencode/commands/<name>.md` | when the user invokes `/<name>` |
 | Workflows (2) | `.opencode/workflows/*.md` | **not** auto-loaded — read when a command points at one |
 
 Load a skill the moment its trigger matches. Do not re-derive its content from memory: the templates,

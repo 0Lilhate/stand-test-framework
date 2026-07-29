@@ -27,6 +27,7 @@
 .claude/commands/stand-test-ingest-spec.md
 .claude/commands/stand-test-java.md
 .claude/commands/stand-test-kb-update.md
+.claude/commands/stand-test-kit-doctor.md
 .claude/commands/stand-test-review-generated-test.md
 .claude/commands/stand-test-review-kb-candidates.md
 .claude/commands/stand-test-validate.md
@@ -38,6 +39,7 @@
 .claude/hooks/corpus/unsanctioned-dependencies.gradle.kts.txt
 .claude/hooks/corpus/validator-bypass-test.java.txt
 .claude/hooks/detectors.json
+.claude/hooks/lib/doctor.mjs
 .claude/hooks/lib/fingerprint.mjs
 .claude/hooks/lib/junit.mjs
 .claude/hooks/lib/kb-checks.mjs
@@ -114,6 +116,7 @@
 .opencode/commands/stand-test-ingest-spec.md
 .opencode/commands/stand-test-java.md
 .opencode/commands/stand-test-kb-update.md
+.opencode/commands/stand-test-kit-doctor.md
 .opencode/commands/stand-test-review-generated-test.md
 .opencode/commands/stand-test-review-kb-candidates.md
 .opencode/commands/stand-test-validate.md

@@ -66,4 +66,13 @@ tasks.test {
         rootDir.resolve("README.md"),
         rootDir.resolve("docs/ai-agent/README.md"),
     ).withPropertyName("standTestCountBearingDocs")
+
+    // The installer and the manifest sit at the BUNDLE ROOT, outside both copies, so the tree above
+    // does not cover them. KitManifestTest re-derives the manifest from the bundle and compares:
+    // undeclared, an edit to either would leave that test UP-TO-DATE and a stale manifest would ship
+    // — which is the same trap this file already warns about twice.
+    inputs.files(
+        rootDir.resolve("docs/ai-agent/MANIFEST.json"),
+        rootDir.resolve("docs/ai-agent/install.mjs"),
+    ).withPropertyName("standTestKitManifest")
 }

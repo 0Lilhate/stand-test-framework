@@ -13,6 +13,9 @@ docs/ai-agent/
   usage-guide.md     ← worked walkthrough (RU): OpenAPI spec → KB → env → Java test
   example-test-case-specification.md  ← how to WRITE the input case so the run needs no
                        blocking questions (stays in the SDK repo; not part of the bundle)
+  install.mjs        ← installer: copies strictly by MANIFEST.json, dry-run by default
+  MANIFEST.json      ← every shipped path + content hash; travels with the kit so `doctor` can
+                       answer "which version is this, and what has been edited since"
   knowledge-base/    ← THE KB CONTRACT — schemas + worked examples (consumers copy the layout
                        to knowledge-base/ and replace examples with real entries)
     README.md, schema/*.schema.json,
@@ -40,7 +43,7 @@ docs/ai-agent/
       stand-test-test-review/          SKILL.md + review-checklist.md + flakiness-checklist.md
                                        + generated-test-review-template.md + before-committing-checklist.md + example-review.md
       stand-test-debugging/            SKILL.md + debugging-report-template.md
-    commands/        ← 13 workflows as slash commands
+    commands/        ← 14 workflows as slash commands
       stand-test-generate-java-test.md /stand-test-generate-java-test — TEXT CASE → VALIDATED TEST (umbrella, start here)
       stand-test-design.md      /stand-test-design   — text case → KB lookup → scenario design
       stand-test-yaml.md        /stand-test-yaml     — design → AI-format scenario (+ gates)
@@ -54,6 +57,7 @@ docs/ai-agent/
       stand-test-apply-kb-candidates.md  /stand-test-apply-kb-candidates  — approved candidates → curated KB
       stand-test-generate-env.md /stand-test-generate-env — KB → registry config (yml/application.yml)
       stand-test-debug.md       /stand-test-debug    — failed test → debugging report
+      stand-test-kit-doctor.md  /stand-test-kit-doctor — is this installation the kit, and can it run?
     rules/           ← the only auto-loaded part of the bundle (Claude reads .claude/rules/**)
       stand-test-guardrails.md  ← non-negotiable constraints (mirrors ForbiddenOperation)
       stand-test-pipeline.md    ← binding stage order + gates; the .claude counterpart of
@@ -87,12 +91,18 @@ checklists and worked example by relative path, so the bundle works wherever it 
 
 ## Installation into a consumer project (e.g. QA_TEST)
 
-1. Copy the bundle contents into the consumer repo:
-   `cp -R docs/ai-agent/.claude/* <consumer-repo>/.claude/`
-   (merge with an existing `.claude/`; nothing here collides with generic skills).
-   For opencode: `cp -R docs/ai-agent/.opencode/* <consumer-repo>/.opencode/`, then move
-   `opencode.json` up to `<consumer-repo>/` — its `instructions` paths (`.opencode/AGENTS.md`,
-   `.opencode/rules/**/*.md`) resolve from the directory that contains `.opencode/`.
+1. Install by manifest, not by directory copy:
+   `node docs/ai-agent/install.mjs <consumer-repo>` — dry-run, prints what it would write —
+   then the same with `--apply`. It copies exactly what `MANIFEST.json` lists, leaves a file you
+   have edited locally alone unless you add `--force`, and drops the manifest beside the bundle so
+   the installation can later be checked. A `cp -R` carries whatever happens to be in the
+   directory, which is how machine-local residue reached consumers before.
+   For opencode add `--host opencode`, then move `opencode.json` up to `<consumer-repo>/` — its
+   `instructions` paths (`.opencode/AGENTS.md`, `.opencode/rules/**/*.md`) resolve from the
+   directory that contains `.opencode/`.
+   Then: `node .claude/hooks/stand-guard.mjs doctor` — version, files that did not arrive, files
+   edited since, hooks that are not wired. Every other check that guards this kit lives in the SDK
+   repository and does not travel; this one does.
 2. Verify the consumer project has: the SDK modules on the test classpath (BOM + junit or
    starter + adapters + config/allure) and its environment registry
    (`stand-test-environments.yml` or `application.yml` `stand.test.environments.*`).

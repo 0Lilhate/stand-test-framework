@@ -101,12 +101,12 @@ class PromptFrontmatterRequiredKeysTest {
     private static final Pattern SCHEMA_REFERENCE = Pattern.compile("^[A-Za-z0-9][A-Za-z0-9._/-]*\\.schema\\.json$");
 
     /**
-     * Thirty-four prompts per copy: 17 skills, 13 commands, 2 rules, 2 workflows. Stated as a floor so
+     * Thirty-five prompts per copy: 17 skills, 14 commands, 2 rules, 2 workflows. Stated as a floor so
      * a wrongly resolved bundle root cannot pass by finding nothing and comparing an empty set
      * against itself. The Claude-only subagents are extra and deliberately not counted here — the
      * floor is about both copies contributing.
      */
-    private static final int PROMPTS_PER_BUNDLE = 34;
+    private static final int PROMPTS_PER_BUNDLE = 35;
 
     private static Path aiAgentRoot() {
         Path current = Paths.get("").toAbsolutePath();
@@ -219,7 +219,7 @@ class PromptFrontmatterRequiredKeysTest {
         });
 
         assertThat(problems).as("frontmatter of the shipped prompts").isEmpty();
-        assertThat(prompts).as("both copies must contribute %d prompts each (17 skills + 13 commands + 2 rules + 2 workflows), plus the Claude-only subagents; a smaller listing means the bundle root resolved wrongly", PROMPTS_PER_BUNDLE)
+        assertThat(prompts).as("both copies must contribute %d prompts each (17 skills + 14 commands + 2 rules + 2 workflows), plus the Claude-only subagents; a smaller listing means the bundle root resolved wrongly", PROMPTS_PER_BUNDLE)
                 .hasSizeGreaterThanOrEqualTo(BUNDLES.size() * PROMPTS_PER_BUNDLE);
     }
 

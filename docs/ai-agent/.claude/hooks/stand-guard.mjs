@@ -15,13 +15,15 @@
 // its own bug — a broken guard must not become a broken session.
 
 import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { scanArtifact, blocking, render, gates, kindOf } from './lib/scan.mjs';
 import { readResults, skipWarning } from './lib/junit.mjs';
 import { fingerprint, normalise } from './lib/fingerprint.mjs';
 import { kbStatus } from './lib/kb.mjs';
 import { validateKnowledgeBase, checkAliases } from './lib/kb-checks.mjs';
 import { classify, validateFileSet, reviewRecordFor, describe } from './lib/permit.mjs';
+import { diagnose, render as renderReport } from './lib/doctor.mjs';
 import * as state from './lib/state.mjs';
 
 const SAFETY_GATE = 'safety-review';
@@ -485,6 +487,19 @@ function commandAliasCheck(argv) {
   proceed(lines.join('\n'));
 }
 
+/**
+ * Is this installation the kit, and can it run?
+ *
+ * The one command that answers the questions a consumer cannot otherwise ask: which version arrived,
+ * what has been edited since, whether the hooks are wired at all. Every other mechanism that holds the
+ * bundle together lives in the SDK repository and stopped existing when the kit was copied.
+ */
+function commandDoctor(argv) {
+  const report = diagnose(dirname(fileURLToPath(import.meta.url)), process.cwd());
+  process.stdout.write(argv.includes('--json') ? `${JSON.stringify(report, null, 2)}\n` : `${renderReport(report)}\n`);
+  process.exit(argv.includes('--exit-code') && report.problems.length > 0 ? 1 : 0);
+}
+
 function commandStatus(payload) {
   const cwd = (payload && payload.cwd) || process.cwd();
   // A new session inherits no permission from an old one: a permit is about what is being done now.
@@ -544,12 +559,13 @@ try {
     case 'post-write': commandPostWrite(readStdin()); break;
     case 'subagent-stop': commandSubagentStop(readStdin()); break;
     case 'kb-write-permit': commandKbWritePermit(argv); break;
+    case 'doctor': commandDoctor(argv); break;
     case 'kb-status': commandKbStatus(argv); break;
     case 'kb-validate': commandKbValidate(argv); break;
     case 'alias-check': commandAliasCheck(argv); break;
     case 'status': commandStatus({}); break;
     default:
-      process.stdout.write('stand-guard: scan | pre-write | post-write | pre-bash | post-run | record-gate | kb-write-permit | stop | subagent-stop | kb-status | kb-validate | alias-check | status\n');
+      process.stdout.write('stand-guard: scan | pre-write | post-write | pre-bash | post-run | record-gate | kb-write-permit | stop | subagent-stop | kb-status | kb-validate | alias-check | doctor | status\n');
       process.exit(0);
   }
 } catch (error) {
