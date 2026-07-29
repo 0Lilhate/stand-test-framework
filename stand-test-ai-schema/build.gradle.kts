@@ -80,5 +80,9 @@ tasks.test {
     // every tree declared above. Undeclared, a double-escaped pattern re-introduced tomorrow would
     // leave that test UP-TO-DATE and green — the same trap this file warns about twice already, and
     // exactly the shape of the defect the test exists to catch.
-    inputs.dir(rootDir.resolve("docs/agent-evaluation/dataset")).withPropertyName("standTestEvaluationDataset")
+    // The whole of docs/agent-evaluation: the corpus AND the contract it is validated against.
+    // Declaring only the dataset would leave an edited schema invisible — the test that proves the
+    // README's "все 15 файлов проходят валидацию" would stay UP-TO-DATE and green while the rule it
+    // checks had changed underneath it.
+    inputs.dir(rootDir.resolve("docs/agent-evaluation")).withPropertyName("standTestEvaluationDataset")
 }
