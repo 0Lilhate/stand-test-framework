@@ -19,9 +19,10 @@ docs/ai-agent/
     services/ endpoints/ kafka/ db/ grpc/ environments/ mappings/   (example-*.yml + README each)
     candidates/      ← staging area written by spec ingestion; never the curated KB
   .claude/           ← THE BUNDLE — copy its contents into the consumer repo's .claude/
-    skills/          ← 16 self-contained skills, each with its templates/checklists/examples
+    skills/          ← 17 self-contained skills, each with its templates/checklists/examples
       stand-test-case-analysis/        SKILL.md + test-case-analysis-template.md + example-text-case.md
       stand-test-kb-lookup/            SKILL.md + kb-lookup-result-template.yml + example-kb-lookup-result.yml
+      stand-test-kb-bootstrap/         SKILL.md — cold start: the registry's aliases into an empty KB
       stand-test-kb-update/            SKILL.md + kb-update-report-template.md + kb-entry-review-checklist.md
       stand-test-spec-ingestion/       SKILL.md + unstructured-spec-ingestion-checklist.md + extraction-report-template.md + source-document-template.yml
       stand-test-spec-extraction/      SKILL.md + business-flow-candidate-template.yml + business-rule-candidate-template.yml
@@ -39,13 +40,14 @@ docs/ai-agent/
       stand-test-test-review/          SKILL.md + review-checklist.md + flakiness-checklist.md
                                        + generated-test-review-template.md + before-committing-checklist.md + example-review.md
       stand-test-debugging/            SKILL.md + debugging-report-template.md
-    commands/        ← 12 workflows as slash commands
+    commands/        ← 13 workflows as slash commands
       stand-test-generate-java-test.md /stand-test-generate-java-test — TEXT CASE → VALIDATED TEST (umbrella, start here)
       stand-test-design.md      /stand-test-design   — text case → KB lookup → scenario design
       stand-test-yaml.md        /stand-test-yaml     — design → AI-format scenario (+ gates)
       stand-test-java.md        /stand-test-java     — design → Java DSL test (+ gates)
       stand-test-validate.md    /stand-test-validate — final readiness gate before commit
       stand-test-review-generated-test.md /stand-test-review-generated-test — existing test → KB-alignment + review
+      stand-test-bootstrap-kb.md /stand-test-bootstrap-kb — empty KB → candidates from the registry + existing SDK tests
       stand-test-kb-update.md   /stand-test-kb-update — spec (OpenAPI/proto/SQL/...) → KB entries
       stand-test-ingest-spec.md /stand-test-ingest-spec — unstructured spec (PDF/DOCX/ФС/ТЗ) → KB candidates
       stand-test-review-kb-candidates.md /stand-test-review-kb-candidates — staged candidates → review report (human gate)
@@ -59,6 +61,14 @@ docs/ai-agent/
     workflows/       ← 2 multi-command pipeline docs (not auto-loaded; referenced by the KB commands)
       ingest-unstructured-spec-to-kb.md    document → staged candidates
       review-and-apply-kb-candidates.md    candidates → human review → curated write
+    agents/          ← 3 subagents: the stages a SEPARATE context must run (Claude Code only)
+      stand-test-safety-reviewer.md    stage 8 — no Write, so it reports what it finds instead of fixing it
+      stand-test-quality-reviewer.md   stage 11 — reads the ORIGINAL case, not the design
+      stand-test-kb-resolver.md        stages 2+4 — Read/Grep/Glob only, keeps the KB out of the authoring context
+    hooks/           ← the enforcement layer the HOST runs, model or no model (Claude Code only)
+      stand-guard.mjs  pre-write / pre-bash / post-run / stop / subagent-stop / record-gate / scan / kb-status
+      detectors.json   17 of the 18 safety findings, as data
+      lib/, corpus/    the engine and the golden fixtures it is proven against
   .opencode/         ← THE SAME BUNDLE for opencode — identical skills/commands/rules/workflows, plus
       AGENTS.md      ← opencode-specific manual (load model, command/skill index); the pipeline
                        itself lives in rules/stand-test-pipeline.md, shared by both bundles

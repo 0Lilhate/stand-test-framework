@@ -20,8 +20,8 @@ the order.
 | Asset | Path | Discovery |
 |---|---|---|
 | These rules | `.claude/rules/*.md` | auto-loaded as project instructions |
-| Skills (16) | `.claude/skills/<name>/SKILL.md` | on demand, via the Skill tool |
-| Commands (12) | `.claude/commands/<name>.md` | when the user invokes `/<name>` |
+| Skills (17) | `.claude/skills/<name>/SKILL.md` | on demand, via the Skill tool |
+| Commands (13) | `.claude/commands/<name>.md` | when the user invokes `/<name>` |
 | Workflows (2) | `.claude/workflows/*.md` | **not** auto-loaded — read when a command points at one |
 
 Load a skill the moment its trigger matches. Do not re-derive its content from memory: the templates,
@@ -78,7 +78,11 @@ slice of it — invoking one does not license skipping the stages before it. On 
 - **The KB is the only source of contract detail.** Endpoint paths, topic names, tables, columns and
   gRPC methods come from the knowledge base, the case text, or a recorded assumption — never from
   plausibility. No entry ⇒ `missing` ⇒ a blocking question. An empty KB means many questions; that is
-  the correct outcome, not a reason to fill the gaps yourself.
+  the correct outcome, not a reason to fill the gaps yourself. On day one run
+  `/stand-test-bootstrap-kb`: it moves the environment registry's ALIASES into the base — the one
+  thing a person has already curated — and nothing else. An alias the registry attests is a recorded
+  assumption rather than a question; a path, field, table or method is a question however much is
+  known about the alias that owns it.
 - **Ask sparingly, but do not invent.** Prefer a safe, explicitly recorded assumption over a
   question; escalate only what changes the test's meaning (missing alias, exact expected values for
   an equals-only check, write permission, correlation strategy, auth identity, an unknown operation

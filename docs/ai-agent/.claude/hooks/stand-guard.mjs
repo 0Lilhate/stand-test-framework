@@ -19,6 +19,7 @@ import { join } from 'node:path';
 import { scanArtifact, blocking, render, gates, kindOf } from './lib/scan.mjs';
 import { readResults, skipWarning } from './lib/junit.mjs';
 import { fingerprint, normalise } from './lib/fingerprint.mjs';
+import { kbStatus } from './lib/kb.mjs';
 import * as state from './lib/state.mjs';
 
 const SAFETY_GATE = 'safety-review';
@@ -294,6 +295,28 @@ function commandSubagentStop(payload) {
   proceed();
 }
 
+/**
+ * What the registry declares and the knowledge base does not yet know.
+ *
+ * The cold start turns on this list, and it is read off the files rather than recalled: an alias a
+ * person curated in the registry may be assumed, one nobody wrote down anywhere may not.
+ */
+function commandKbStatus(argv) {
+  const status = kbStatus(process.cwd());
+  if (argv.includes('--json')) {
+    proceed(JSON.stringify(status, null, 2));
+  }
+  const lines = [`реестр окружений: ${status.registry || 'НЕ НАЙДЕН'}`,
+    `база знаний: ${status.knowledgeBase.present ? `${status.knowledgeBase.ids} записей` : 'НЕТ'}`];
+  for (const [kind, value] of Object.entries(status.kinds)) {
+    lines.push(`  ${kind}: в реестре ${value.registry.length}, нет в KB ${value.missing.length}${value.missing.length > 0 ? ` (${value.missing.join(', ')})` : ''}`);
+  }
+  lines.push(status.missingTotal > 0
+    ? `\n${status.missingTotal} алиасов засвидетельствованы реестром, но отсутствуют в KB — это рабочий список /stand-test-bootstrap-kb.\nКонтрактные детали (пути, поля, таблицы, gRPC-методы) так не берутся: их не свидетельствует ни один реестр.`
+    : '\nвсе алиасы реестра известны базе знаний');
+  proceed(lines.join('\n'));
+}
+
 function commandStatus(payload) {
   const cwd = (payload && payload.cwd) || process.cwd();
   const current = state.readState(cwd);
@@ -346,9 +369,10 @@ try {
     case 'record-gate': commandRecordGate(argv, {}); break;
     case 'stop': commandStop(readStdin()); break;
     case 'subagent-stop': commandSubagentStop(readStdin()); break;
+    case 'kb-status': commandKbStatus(argv); break;
     case 'status': commandStatus({}); break;
     default:
-      process.stdout.write('stand-guard: scan | pre-write | pre-bash | post-run | record-gate | stop | subagent-stop | status\n');
+      process.stdout.write('stand-guard: scan | pre-write | pre-bash | post-run | record-gate | stop | subagent-stop | kb-status | status\n');
       process.exit(0);
   }
 } catch (error) {

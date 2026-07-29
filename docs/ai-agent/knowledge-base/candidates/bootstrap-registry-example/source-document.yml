@@ -1,0 +1,18 @@
+# Worked example — what /stand-test-bootstrap-kb --from-registry stages on day one.
+# The "document" here is the consumer's own environment registry: the one file the project must
+# already have for the SDK to start, and therefore the one source that is human-curated by
+# construction. Nothing in this directory is a contract detail; see registry-aliases.candidates.yml.
+document:
+  documentId: bootstrap-registry
+  documentName: "stand-test-environments.yml — реестр окружений проекта-потребителя"
+  documentType: unknown
+  documentVersion: null
+  documentDate: null
+  sourcePath: src/test/resources/stand-test-environments.yml
+  sourceHash: null
+  domain: null
+  systems: []
+  relatedDocuments: []
+  ingestedAt: "2026-07-29"
+  ingestedBy: stand-test-kb-bootstrap
+  status: candidates_created

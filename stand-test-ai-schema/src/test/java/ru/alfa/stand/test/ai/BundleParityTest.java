@@ -39,6 +39,9 @@ class BundleParityTest {
     private static final Set<String> PATH_ADAPTED = new TreeSet<>(Set.of(
             "rules/stand-test-guardrails.md",
             "rules/stand-test-pipeline.md",
+            "commands/stand-test-bootstrap-kb.md",
+            "skills/stand-test-kb-bootstrap/SKILL.md",
+            "skills/stand-test-kb-lookup/SKILL.md",
             "skills/stand-test-java-dsl-authoring/example-provisioned-prelude.java"));
 
     /**

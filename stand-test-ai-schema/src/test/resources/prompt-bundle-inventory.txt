@@ -19,6 +19,7 @@
 .claude/agents/stand-test-quality-reviewer.md
 .claude/agents/stand-test-safety-reviewer.md
 .claude/commands/stand-test-apply-kb-candidates.md
+.claude/commands/stand-test-bootstrap-kb.md
 .claude/commands/stand-test-debug.md
 .claude/commands/stand-test-design.md
 .claude/commands/stand-test-generate-env.md
@@ -39,6 +40,7 @@
 .claude/hooks/detectors.json
 .claude/hooks/lib/fingerprint.mjs
 .claude/hooks/lib/junit.mjs
+.claude/hooks/lib/kb.mjs
 .claude/hooks/lib/scan.mjs
 .claude/hooks/lib/state.mjs
 .claude/hooks/stand-guard.mjs
@@ -61,6 +63,7 @@
 .claude/skills/stand-test-java-dsl-authoring/example-provisioned-prelude.java
 .claude/skills/stand-test-java-dsl-authoring/java-test-template.java
 .claude/skills/stand-test-java-dsl-authoring/sdk-boundary-checklist.md
+.claude/skills/stand-test-kb-bootstrap/SKILL.md
 .claude/skills/stand-test-kb-candidate-apply/SKILL.md
 .claude/skills/stand-test-kb-candidate-review/SKILL.md
 .claude/skills/stand-test-kb-candidate-review/conflict-item-template.yml
@@ -101,6 +104,7 @@
 .opencode/.gitignore
 .opencode/AGENTS.md
 .opencode/commands/stand-test-apply-kb-candidates.md
+.opencode/commands/stand-test-bootstrap-kb.md
 .opencode/commands/stand-test-debug.md
 .opencode/commands/stand-test-design.md
 .opencode/commands/stand-test-generate-env.md
@@ -130,6 +134,7 @@
 .opencode/skills/stand-test-java-dsl-authoring/example-provisioned-prelude.java
 .opencode/skills/stand-test-java-dsl-authoring/java-test-template.java
 .opencode/skills/stand-test-java-dsl-authoring/sdk-boundary-checklist.md
+.opencode/skills/stand-test-kb-bootstrap/SKILL.md
 .opencode/skills/stand-test-kb-candidate-apply/SKILL.md
 .opencode/skills/stand-test-kb-candidate-review/SKILL.md
 .opencode/skills/stand-test-kb-candidate-review/conflict-item-template.yml
