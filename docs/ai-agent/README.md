@@ -71,6 +71,9 @@ docs/ai-agent/
       stand-test-kb-resolver.md        stages 2+4 — Read/Grep/Glob only, keeps the KB out of the authoring context
     hooks/           ← the enforcement layer the HOST runs, model or no model (Claude Code only)
       stand-guard.mjs  pre-write / post-write / pre-bash / post-run / stop / subagent-stop / record-gate / scan
+                       scan --format sarif --exit-code — the SAME gate in CI, with no session and
+                       no model: findings become pull-request annotations, and the finding that
+                       cannot run in a full scan is declared disabled rather than omitted
                        kb-status / kb-validate / alias-check — the KB checked at the site that USES it,
                        because the schema tests live in the SDK repo and do not travel with the bundle
                        kb-write-permit — curated KB writes are declared by path before the content

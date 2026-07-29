@@ -24,6 +24,7 @@ import { kbStatus } from './lib/kb.mjs';
 import { validateKnowledgeBase, checkAliases } from './lib/kb-checks.mjs';
 import { classify, validateFileSet, reviewRecordFor, describe } from './lib/permit.mjs';
 import { diagnose, render as renderReport } from './lib/doctor.mjs';
+import { toSarif } from './lib/sarif.mjs';
 import * as state from './lib/state.mjs';
 
 const SAFETY_GATE = 'safety-review';
@@ -115,15 +116,21 @@ function commandScan(argv) {
   const files = positional(argv);
   const policy = policyOf(process.cwd());
   let findings = [];
+  const contents = {};
   for (const file of files) {
     if (!existsSync(file)) {
       process.stderr.write(`нет файла: ${file}\n`);
       continue;
     }
-    findings = findings.concat(scanArtifact(readFileSync(file, 'utf8'), alias || file, policy));
+    const content = readFileSync(file, 'utf8');
+    contents[alias || file] = content;
+    findings = findings.concat(scanArtifact(content, alias || file, policy));
   }
   const { ran, notRun } = gates();
-  if (argv.includes('--json')) {
+  if (argumentValue(argv, '--format') === 'sarif') {
+    // The same gate without a session: CI reads this whether or not anybody ran an agent.
+    process.stdout.write(`${JSON.stringify(toSarif(findings, contents, notRun), null, 2)}\n`);
+  } else if (argv.includes('--json')) {
     process.stdout.write(`${JSON.stringify({ findings, gatesRun: ran, gatesNotRun: notRun }, null, 2)}\n`);
   } else {
     findings.forEach((item) => process.stdout.write(`${render(item)}\n`));
@@ -454,7 +461,9 @@ function commandKbStatus(argv) {
 function commandKbValidate(argv) {
   const result = validateKnowledgeBase(process.cwd());
   const stoppers = blocking(result.findings);
-  if (argv.includes('--json')) {
+  if (argumentValue(argv, '--format') === 'sarif') {
+    process.stdout.write(`${JSON.stringify(toSarif(result.findings, {}, result.notChecked), null, 2)}\n`);
+  } else if (argv.includes('--json')) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else if (result.files === 0) {
     process.stdout.write('база знаний не найдена: нечего проверять\n');
@@ -518,7 +527,7 @@ function commandStatus(payload) {
     + (dropped ? `\n⚠ пермит на запись в KB от ${dropped.issuedAt} снят: он принадлежал прошлой сессии` : ''));
 }
 
-const VALUE_FLAGS = new Set(['--gate', '--verdict', '--as', '--reason', '--document', '--source']);
+const VALUE_FLAGS = new Set(['--gate', '--verdict', '--as', '--reason', '--document', '--source', '--format']);
 
 function argumentValue(argv, name) {
   const index = argv.indexOf(name);

@@ -45,6 +45,7 @@
 .claude/hooks/lib/kb-checks.mjs
 .claude/hooks/lib/kb.mjs
 .claude/hooks/lib/permit.mjs
+.claude/hooks/lib/sarif.mjs
 .claude/hooks/lib/scan.mjs
 .claude/hooks/lib/state.mjs
 .claude/hooks/stand-guard.mjs
