@@ -20,6 +20,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -172,17 +173,40 @@ class KnowledgeBaseSchemaValidationTest {
     }
 
     @Test
-    @DisplayName("cross-entity references in the shipped examples are consistent in both directions")
+    @DisplayName("no id is declared twice within one collection — a second declaration resolves by file order")
+    void collectionIds_areUniqueAcrossFiles() {
+        List<String> duplicated = new ArrayList<>();
+        for (String[] collection : new String[][] {
+            {"services", "services"}, {"endpoints", "endpoints"}, {"kafka", "kafkaTopics"},
+            {"db", "datasources"}, {"db", "dbTables"}, {"db", "dbProbes"},
+            {"grpc", "grpcTargets"}, {"environments", "environments"}, {"mappings", "testCaseMappings"}
+        }) {
+            Set<String> seen = new HashSet<>();
+            for (JsonNode entry : collectionAcross(collection[0], collection[1])) {
+                JsonNode id = entry.get("id");
+                if (id != null && !seen.add(id.asText())) {
+                    duplicated.add(collection[1] + "/" + id.asText());
+                }
+            }
+        }
+
+        assertThat(duplicated)
+                .as("two entries under one id are two different answers to the same lookup, chosen by whichever file was read last — this is how ift came to mean two things")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("cross-entity references are consistent in both directions, across every file of every collection")
     void crossReferences_consistent() {
-        JsonNode services = readYaml(KB_DIR.resolve("services/example-service.yml")).get("services");
-        JsonNode endpoints = readYaml(KB_DIR.resolve("endpoints/example-endpoints.yml")).get("endpoints");
-        JsonNode topics = readYaml(KB_DIR.resolve("kafka/example-topics.yml")).get("kafkaTopics");
-        JsonNode datasources = readYaml(KB_DIR.resolve("db/example-datasources.yml")).get("datasources");
-        JsonNode probes = readYaml(KB_DIR.resolve("db/example-db-probes.yml")).get("dbProbes");
-        JsonNode dbTables = readYaml(KB_DIR.resolve("db/example-db-tables.yml")).get("dbTables");
-        JsonNode grpcTargets = readYaml(KB_DIR.resolve("grpc/example-grpc-targets.yml")).get("grpcTargets");
-        JsonNode environments = readYaml(KB_DIR.resolve("environments/example-env.yml")).get("environments");
-        final JsonNode mappings = readYaml(KB_DIR.resolve("mappings/example-test-case-mapping.yml")).get("testCaseMappings");
+        JsonNode services = collectionAcross("services", "services");
+        JsonNode endpoints = collectionAcross("endpoints", "endpoints");
+        JsonNode topics = collectionAcross("kafka", "kafkaTopics");
+        JsonNode datasources = collectionAcross("db", "datasources");
+        JsonNode probes = collectionAcross("db", "dbProbes");
+        JsonNode dbTables = collectionAcross("db", "dbTables");
+        JsonNode grpcTargets = collectionAcross("grpc", "grpcTargets");
+        JsonNode environments = collectionAcross("environments", "environments");
+        final JsonNode mappings = collectionAcross("mappings", "testCaseMappings");
 
         Set<String> serviceIds = ids(services);
         Set<String> endpointIds = ids(endpoints);
@@ -272,6 +296,32 @@ class KnowledgeBaseSchemaValidationTest {
                 }
             }
         }
+    }
+
+    /**
+     * One collection assembled from EVERY file that declares it, rather than from one chosen file.
+     *
+     * <p>Reading a collection out of a single example file is the blind spot that let two different
+     * {@code ift} environments live in the base at once: each file was valid, each was consistent with
+     * itself, and nothing ever compared them. A collection spans files, so a check about a collection
+     * has to as well.
+     */
+    private static JsonNode collectionAcross(String directory, String key) {
+        var merged = MAPPER.createArrayNode();
+        try (Stream<Path> walk = Files.walk(KB_DIR.resolve(directory))) {
+            walk.filter(Files::isRegularFile)
+                    .filter(file -> file.getFileName().toString().endsWith(".yml"))
+                    .sorted()
+                    .forEach(file -> {
+                        JsonNode entries = readYaml(file).get(key);
+                        if (entries != null) {
+                            entries.forEach(merged::add);
+                        }
+                    });
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to walk " + KB_DIR.resolve(directory), e);
+        }
+        return merged;
     }
 
     private static Set<String> ids(JsonNode array) {

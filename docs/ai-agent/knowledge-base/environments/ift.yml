@@ -1,5 +1,10 @@
 # Curated environment binding for the IFT stand. Schema: ../schema/environment.schema.json
 #
+# ONE entry per environment id, and this file is where `ift` lives. It used to be declared here AND
+# in example-env.yml with disjoint bindings, so a lookup for `ift` found two different answers and
+# resolved them by file order — which is to say at random. The example file now shows the shape on
+# `dev` alone.
+#
 # The KB stores env-var REFERENCES (names), never values: the source document's `servers` entry is a
 # generated absolute URL and is deliberately NOT recorded here. `/stand-test-generate-env` renders
 # this file into stand-test-environments.yml (plain JUnit, refs-only) or application.yml
@@ -14,7 +19,26 @@ environments:
     services:
       - serviceId: showcase-mock
         baseUrlRef: SHOWCASE_MOCK_BASE_URL
+      - serviceId: client-service
+        baseUrlRef: CLIENT_SERVICE_BASE_URL
+    grpcTargets:
+      - targetId: result-grpc-service
+        targetRef: RESULT_GRPC_TARGET
+    kafka:
+      bootstrapServersRef: KAFKA_BOOTSTRAP_SERVERS
+      securityProtocolRef: KAFKA_SECURITY_PROTOCOL
+      topics:
+        - topicId: request-created-topic
+          actualName: ift.client.request-created.v1
+    datasources:
+      - datasourceId: client-db
+        urlRef: CLIENT_DB_URL
+        userRef: CLIENT_DB_USER
+        passwordRef: CLIENT_DB_PASSWORD
     secrets:
       mode: external
       allowedRefPrefixes:
+        - CLIENT_
+        - KAFKA_
+        - RESULT_
         - SHOWCASE_
