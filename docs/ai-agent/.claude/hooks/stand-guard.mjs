@@ -16,7 +16,7 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { scanArtifact, blocking, render, gates } from './lib/scan.mjs';
+import { scanArtifact, blocking, render, gates, kindOf } from './lib/scan.mjs';
 import { readResults, skipWarning } from './lib/junit.mjs';
 import { fingerprint, normalise } from './lib/fingerprint.mjs';
 import * as state from './lib/state.mjs';
@@ -59,6 +59,27 @@ function intendedContent(toolName, input) {
   if (toolName === 'Edit') return input.new_string || '';
   if (toolName === 'MultiEdit') return (input.edits || []).map((edit) => edit.new_string || '').join('\n');
   return '';
+}
+
+// The knowledge base has its own human gate, and a dot-directory is the machinery's own bookkeeping.
+const NOT_AN_ARTIFACT = [/^knowledge-base\//, /(^|\/)\./];
+
+/**
+ * Whether a path is something the safety gate must cover before the session may end.
+ *
+ * Everything written is SCANNED — that does not change, and a secret in a markdown report is still
+ * refused at the moment of writing. What narrows here is the bookkeeping: an artifact is what the
+ * stand can execute (a test, a scenario or fixture document, the build file that decides what the
+ * test runs with), because that is what a safety review is a review OF.
+ *
+ * Registering every written file instead meant the analysis, the design and the readiness report
+ * each became an artifact demanding a verdict, and the first full pipeline ended in a Stop gate
+ * naming five files, none of them a test. The plan's own first risk is that a gate which is always
+ * red gets switched off — and it takes the accurate findings with it.
+ */
+function isReviewableArtifact(path) {
+  if (NOT_AN_ARTIFACT.some((pattern) => pattern.test(path))) return false;
+  return ['java', 'document', 'build'].includes(kindOf(path));
 }
 
 function policyOf(cwd) {
@@ -126,7 +147,7 @@ function commandPreWrite(payload) {
       + 'Это guardrails SDK, а не советы: исправьте содержимое, не обходите проверку.');
   }
 
-  state.recordArtifact(path, content, cwd);
+  if (isReviewableArtifact(path)) state.recordArtifact(path, content, cwd);
   const notes = findings.filter((item) => item.severity !== 'BLOCK');
   proceed(notes.length > 0 ? `⚠ ${notes.length} находок уровня HIGH в ${path}:\n${notes.map(render).join('\n')}` : '');
 }

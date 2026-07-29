@@ -100,8 +100,12 @@ class GuardGateRecordingTest {
 
     /** Writes the fixture into the scratch project and announces it the way a real Write would. */
     private static Answer writeArtifact(Path project, String fixture) {
-        String content = read(fixture);
-        Path file = project.resolve(ARTIFACT);
+        return preWrite(project, ARTIFACT, read(fixture));
+    }
+
+    /** Stages content at a path and puts it through the hook that guards writes. */
+    private static Answer preWrite(Path project, String relative, String content) {
+        Path file = project.resolve(relative);
         try {
             Files.createDirectories(file.getParent());
             Files.writeString(file, content, StandardCharsets.UTF_8);
@@ -208,6 +212,60 @@ class GuardGateRecordingTest {
 
         assertThat(answer.exitCode()).as("'pass' is the value of a flag; treating it as a path would fail the existence check for the wrong reason").isZero();
         assertThat(state(project).path("gates").path("safety-review").path("verdict").asText()).isEqualTo("PASS");
+    }
+
+    @Test
+    @DisplayName("the design and the report do not hold the session — a gate is a gate on what the stand executes")
+    void preWrite_ofProseDoesNotMakeAnArtifact(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+
+        assertThat(preWrite(project, "docs/case-analysis.md", "# Анализ кейса\n\nЗаказ создаётся, статус ждём в БД.\n").exitCode()).isZero();
+        assertThat(preWrite(project, "docs/readiness-report.md", "# Отчёт\n\nСтадии 1-11 пройдены.\n").exitCode()).isZero();
+
+        assertThat(state(project).path("artifacts").isEmpty())
+                .as("stages 1-5 write five such documents, and each one demanding a safety verdict is how a gate becomes the thing people switch off")
+                .isTrue();
+        assertThat(run(project, stopPayload(project), "stop").exitCode()).isZero();
+    }
+
+    @Test
+    @DisplayName("a scenario document does hold it — narrowing the bookkeeping must not narrow it past what runs")
+    void preWrite_ofAScenarioDocumentMakesAnArtifact(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+        String scenario = """
+                {"scenarioId": "order-accepted", "environment": "ift", "steps": [
+                  {"id": "await-order", "type": "db.expectEventually", "timeout": "30s"}]}
+                """;
+
+        assertThat(preWrite(project, "src/test/resources/scenarios/order.json", scenario).exitCode()).isZero();
+
+        assertThat(state(project).path("artifacts").fieldNames()).toIterable().containsExactly("src/test/resources/scenarios/order.json");
+        assertThat(run(project, stopPayload(project), "stop").exitCode()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("a knowledge-base mapping does not hold it either — that channel answers to the promotion gate, not to this one")
+    void preWrite_ofAKnowledgeBaseMappingMakesNoArtifact(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+
+        assertThat(preWrite(project, "knowledge-base/mappings/order-accepted.yml", "caseId: order-accepted\nscenarioId: order-accepted\n").exitCode())
+                .as("mappings/ is the one channel the agent may write, so the write itself must go through")
+                .isZero();
+
+        assertThat(state(project).path("artifacts").isEmpty()).isTrue();
+        assertThat(run(project, stopPayload(project), "stop").exitCode()).isZero();
+    }
+
+    @Test
+    @DisplayName("prose is still scanned — a credential quoted in a report is refused at the moment of writing")
+    void preWrite_ofProseIsStillScanned(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+
+        Answer answer = preWrite(project, "docs/readiness-report.md",
+                "# Отчёт\n\nЗапрос уходил с заголовком `Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature`.\n");
+
+        assertThat(answer.exitCode()).as("what narrowed is the bookkeeping, not the scan; a secret in a markdown file is committed the moment it is written").isEqualTo(2);
+        assertThat(answer.output()).contains("SECRET_IN_SOURCE");
     }
 
     /** What the hook answered: the exit code is the contract, the text is what the model is shown. */
