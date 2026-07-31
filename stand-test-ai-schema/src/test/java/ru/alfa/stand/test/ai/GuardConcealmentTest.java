@@ -117,20 +117,38 @@ class GuardConcealmentTest {
         }
     }
 
+    /**
+     * Coverage is counted against the artifact, so the assertions are about THIS finding rather than
+     * about a total. The totals moved when the summary line stopped reporting the table's size and
+     * started reporting how much of it a Java file is the subject of; what has not moved, and is the
+     * point of the test, is that finding 18 is missing for one nameable reason and present the moment
+     * that reason is answered.
+     */
     @Test
-    @DisplayName("a scan of one artifact still reports the finding as not run, and with a previous version all eighteen run")
+    @DisplayName("the eighteenth finding is reported as waiting for the other version, and runs the moment it has one")
     void coverage_dependsOnHavingBothVersions(@TempDir Path temporary) throws IOException {
         Path project = temporary.toRealPath();
         write(project, "after.java", TWO_ASSERTIONS);
 
         JsonNode alone = report(run(project, "", List.of("scan", "after.java", "--json")));
-        assertThat(alone.path("gatesRun")).hasSize(17);
-        assertThat(alone.path("gatesNotRun").path(0).asText()).isEqualTo("FAILURE_CONCEALMENT");
+        assertThat(ids(alone.path("gatesRun"))).doesNotContain("FAILURE_CONCEALMENT");
+        assertThat(ids(alone.path("gatesNotRun"))).contains("FAILURE_CONCEALMENT");
+        assertThat(alone.path("gatesNotRunReasons").path("FAILURE_CONCEALMENT").asText())
+                .as("not run for want of the other version — not because a java file is outside its subject")
+                .isEqualTo("previousVersion");
 
         JsonNode compared = report(compare(project, TWO_ASSERTIONS, TWO_ASSERTIONS));
-        assertThat(compared.path("gatesRun")).as("the eighteenth check is not absent — it was waiting for the other version").hasSize(18);
-        assertThat(compared.path("gatesNotRun")).isEmpty();
+        assertThat(ids(compared.path("gatesRun")))
+                .as("the eighteenth check is not absent — it was waiting for the other version")
+                .contains("FAILURE_CONCEALMENT");
+        assertThat(compared.path("gatesNotRunReasons").path("FAILURE_CONCEALMENT").isMissingNode()).isTrue();
         assertThat(compared.path("findings")).as("the same content twice conceals nothing").isEmpty();
+    }
+
+    private static java.util.TreeSet<String> ids(JsonNode array) {
+        java.util.TreeSet<String> found = new java.util.TreeSet<>();
+        array.forEach(item -> found.add(item.asText()));
+        return found;
     }
 
     @Test
@@ -196,6 +214,137 @@ class GuardConcealmentTest {
     }
 
     @Test
+    @DisplayName("an assertion moved into a comment is a deleted assertion — that is the whole of it, in one keystroke")
+    void commentingOutAnAssertion_isADeletion(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+
+        Answer lineComment = compare(project, TWO_ASSERTIONS,
+                TWO_ASSERTIONS.replace("        assertThat(result.status())", "        // assertThat(result.status())"));
+        assertThat(findings(lineComment))
+                .as("counting the raw text left the count untouched, so the cheapest way to make a red test green was also the quietest")
+                .containsExactly("FAILURE_CONCEALMENT");
+        assertThat(lineComment.output()).contains("было 2, стало 1");
+
+        Answer blockComment = compare(project, TWO_ASSERTIONS,
+                TWO_ASSERTIONS.replace("        assertThat(result.status()).isEqualTo(200);", "        /* assertThat(result.status()).isEqualTo(200); */"));
+        assertThat(findings(blockComment)).containsExactly("FAILURE_CONCEALMENT");
+    }
+
+    @Test
+    @DisplayName("an assertion ADDED in a comment was never a proof — the count must not rise for it either")
+    void anAssertionInAComment_isNotACheck(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+        String commentary = TWO_ASSERTIONS.replace("    }\n}", "        // assertThat(result.body()).isNotNull(); — оставлено на потом\n    }\n}");
+
+        assertThat(findings(compare(project, TWO_ASSERTIONS, commentary)))
+                .as("if a commented assertion counted, the next real deletion would be paid for by it")
+                .isEmpty();
+        assertThat(findings(compare(project, commentary, TWO_ASSERTIONS)))
+                .as("and removing the commentary is not a deletion of anything")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("@Disabled written inside a comment disables nothing")
+    void disabledInAComment_isNotADisabledTest(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+
+        assertThat(findings(compare(project, TWO_ASSERTIONS, TWO_ASSERTIONS.replace("    @Test", "    // @Disabled — так делать нельзя\n    @Test"))))
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("the SDK's own assertions are counted — the catalogue named six methods that do not exist and missed the ones that do")
+    void theSdkAssertions_areCounted(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+        String scenario = """
+                class OrderScenarioTest {
+                    void t() {
+                        Scenario scenario = Scenario.builder("order-flow")
+                                .step(RestStep.get("orders-service", "/v1/orders/${id}")
+                                        .expectStatus(200)
+                                        .assertPath("$.status", "DONE")
+                                        .assertPathContains("$.tags", "retail")
+                                        .build())
+                                .step(DbStep.expectEventually("orders-db")
+                                        .sql("SELECT status FROM test_data.orders WHERE id = :id")
+                                        .expectValue("DONE")
+                                        .withinSeconds(10)
+                                        .build())
+                                .build();
+                    }
+                }
+                """;
+
+        Answer stripped = compare(project, scenario,
+                scenario.replace(".assertPath(\"$.status\", \"DONE\")", "")
+                        .replace(".expectValue(\"DONE\")", ""));
+
+        assertThat(findings(stripped))
+                .as(".assertPath is the most used assertion in the repository and .expectValue is the only one db.expectEventually has; neither was in the catalogue")
+                .containsExactly("FAILURE_CONCEALMENT");
+        assertThat(stripped.output()).contains("было 4, стало 2");
+    }
+
+    @Test
+    @DisplayName("a wait spelled the way the DSL spells it counts as a wait")
+    void withinSeconds_isATimeout(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+        String waiting = "class T { void t() { assertThat(a).isTrue(); KafkaStep.expect(\"topic\").withinSeconds(30).build(); } }\n";
+
+        Answer inflated = compare(project, waiting, waiting.replace("withinSeconds(30)", "withinSeconds(300)"));
+
+        assertThat(findings(inflated)).containsExactly("FAILURE_CONCEALMENT");
+        assertThat(inflated.output()).contains("30000ms", "300000ms");
+    }
+
+    @Test
+    @DisplayName("in the executable AI format the count follows the assertions the schema actually has")
+    void theDocumentFormat_countsItsOwnAssertions(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+        String document = """
+                {
+                  "scenarioId": "order-flow",
+                  "environment": "ift",
+                  "steps": [
+                    { "id": "create", "type": "rest.post", "service": "orders-service", "path": "/v1/orders", "expect": { "status": 201 } },
+                    { "id": "await", "type": "rest.expectEventually", "service": "orders-service", "path": "/v1/orders/${orderId}", "timeout": "30s",
+                      "expect": { "assert": [ { "path": "$.status", "equals": "DONE" }, { "path": "$.id", "notNull": true } ] } }
+                  ]
+                }
+                """;
+        write(project, "before.json", document);
+        write(project, "after.json", document.replace(", { \"path\": \"$.id\", \"notNull\": true }", ""));
+
+        Answer answer = run(project, "", List.of("scan", "after.json", "--against", "before.json", "--json"));
+
+        assertThat(findings(answer))
+                .as("the catalogue looked for `assertions:`/`matcher:`, which the executable schema does not have — so the branch was dead on every scenario the kit produces")
+                .containsExactly("FAILURE_CONCEALMENT");
+        assertThat(answer.output()).contains("было 2, стало 1");
+    }
+
+    @Test
+    @DisplayName("a document that never calls itself a scenario is not word-searched for assertion keys")
+    void documentThatIsNotAScenario_isNotCounted(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+
+        String fixture = "{\n  \"externalId\": \"order-${testRunId}\",\n  \"status\": \"NEW\",\n  \"customer\": { \"status\": \"ACTIVE\" }\n}\n";
+        write(project, "before.json", fixture);
+        write(project, "after.json", fixture.replace("  \"status\": \"NEW\",\n", ""));
+        assertThat(findings(run(project, "", List.of("scan", "after.json", "--against", "before.json", "--json"))))
+                .as("`status` in a REST fixture is a field of the body; counting it made stand-test-fixture-authoring unable to edit its own output")
+                .isEmpty();
+
+        String candidate = "documentId: fs-lgoty\nentries:\n  - id: orders-db\n    status: needs-review\n  - id: clients-db\n    status: needs-review\n";
+        write(project, "before.yml", candidate);
+        write(project, "after.yml", candidate.replace("  - id: clients-db\n    status: needs-review\n", ""));
+        assertThat(findings(run(project, "", List.of("scan", "after.yml", "--against", "before.yml", "--json"))))
+                .as("promoting a KB candidate removes entries — the ordinary work of the job, and the false BLOCK this branch existed to stop causing")
+                .isEmpty();
+    }
+
+    @Test
     @DisplayName("the write hook refuses the deletion as it happens, comparing the file on disk with what would replace it")
     void preWrite_refusesTheConcealment(@TempDir Path temporary) throws IOException {
         Path project = temporary.toRealPath();
@@ -232,7 +381,10 @@ class GuardConcealmentTest {
                 disabled.add(rule.path("id").asText());
             }
         });
-        assertThat(disabled).as("with a previous version supplied, nothing is switched off").isEmpty();
+        assertThat(disabled)
+                .as("with a previous version supplied, finding 18 is on; what stays off is only what a java file is "
+                        + "not the subject of, and declaring that as a gap would be the opposite overstatement")
+                .doesNotContain("FAILURE_CONCEALMENT");
         assertThat(log.path("runs").path(0).path("results").path(0).path("ruleId").asText()).isEqualTo("FAILURE_CONCEALMENT");
         assertThat(log.path("runs").path(0).path("results").path(0).path("level").asText()).isEqualTo("error");
     }

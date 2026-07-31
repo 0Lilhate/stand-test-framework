@@ -41,6 +41,16 @@ registry additions, build-file diffs.
 | 16 | Kafka expect without a per-run discriminator | a `kafka.expect` with neither `correlationIdFromContext()`/`correlation: {fromContext: true}` nor a `${...}`-derived `key` — a constant `.key(...)` alone (no `fromContext`) is refused at run time (two concurrent runs match each other's messages on a shared topic) | BLOCK |
 | 17 | Shared mutable state in the test class | `static` mutable fields, or reused mutable instance objects, holding run-varying data (counters, captured values, shared builders) instead of flowing through captures / `${testRunId}` — the runner and step executors are shared across parallel test threads, so this races | HIGH |
 
+**What the automated half does NOT cover, so the eye covers it.** The write hook runs this table as
+`detectors.json`, and coverage depends on the artifact: findings 1, 3, 6, 8 and 11 are about DELIVERY
+and do not run over prose (`.md`/`.txt`) — an address in a report is a quotation, not a route to a
+stand. Findings 2, 13 and 14 do run there, because a credential is committed wherever it is written.
+The scan says so itself: `проверено находок: N из 18 (<вид>)`, with a reason beside every one that did
+not run, so a clean scan can be read for what it actually checked. Within Java the scanner reads
+imports, markers and step-anchored SQL rather than an AST, so reflection, a fully-qualified class name
+inline, a helper in a neighbouring file and a property spelled with spaces all pass it. Read the
+artifact; a clean hook is not a clean review.
+
 Runtime backstop for 1–7, 9 and 16 exists (`ForbiddenOperation`-keyed validator + adapter guards +
 JSON Schema; the DB write-guard and Kafka executor fail closed on an untagged seed / undiscriminated
 expect), but the review must catch them **statically** — a violation that only explodes at run time
@@ -60,6 +70,25 @@ is the only net.
 5. Write the report per
    [`safety-review-template.md`](../stand-test-safety-review/safety-review-template.md):
    verdict `PASS` / `PASS-WITH-NOTES` / `BLOCK`, findings with file:line, exact fix per finding.
+6. **Record the verdict**, naming exactly the artifacts it covers:
+   `node <bundle>/hooks/stand-guard.mjs record-gate --gate safety-review --verdict PASS <files>`.
+
+## Who runs this, and who records it
+
+The review runs in a SEPARATE context — the `stand-test-safety-reviewer` subagent, which has no
+`Write`. A context that has just written a test reviews its own intent rather than the lines it
+produced, and an error made while authoring is missed on review for the same reason it was made.
+
+The verdict is recorded by the context that CALLED the reviewer, not by the reviewer: judgement and
+bookkeeping are kept apart. `record-gate` does not take the verdict on trust — it re-runs the
+deterministic half and refuses a `PASS` laid over a blocking finding, and it refuses one when no
+subagent has finished since the artifact was last written. Editing an artifact after its review drops
+the coverage automatically, because the record is bound to the content's hash rather than to the fact
+that a review happened.
+
+Without that record the session cannot end: the Stop hook holds every executable artifact — a test, a
+scenario or fixture document, a build file — that no passed review covers. A review performed and
+never recorded therefore reads, to everything downstream, exactly like a review nobody ran.
 
 ## Rules
 

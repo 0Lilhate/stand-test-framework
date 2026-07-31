@@ -118,8 +118,29 @@ class GuardMappingTest {
         }
     }
 
+    /**
+     * The payload the host sends for one event, with the fields that say it is the host sending it.
+     *
+     * <p>The event name is a parameter rather than a constant because {@code subagent-stop} now reads
+     * it: the record of a finished subagent is the whole of the safety gate's evidence that the review
+     * ran somewhere other than the context that wrote the code, and the guard sits in the run's own
+     * allow-list. A hook that accepted a bare {@code cwd} accepted that evidence from the run itself.
+     */
+    private static String payload(Path project, String event) {
+        return MAPPER.createObjectNode()
+                .put("cwd", project.toString())
+                .put("hook_event_name", event)
+                .put("session_id", "test-session")
+                .toString();
+    }
+
     private static String payload(Path project) {
-        return MAPPER.createObjectNode().put("cwd", project.toString()).toString();
+        return payload(project, "Stop");
+    }
+
+    /** The host's own signal that a separate context ran and finished. */
+    private static String subagentPayload(Path project) {
+        return payload(project, "SubagentStop");
     }
 
     /** A test written, reviewed by a fresh context and gated — everything but the traceability record. */
@@ -134,7 +155,7 @@ class GuardMappingTest {
                         .put("content", source))
                 .toString();
         assertThat(run(project, write, "pre-write").exitCode()).isZero();
-        run(project, payload(project), "subagent-stop");
+        run(project, subagentPayload(project), "subagent-stop");
         assertThat(run(project, "", "record-gate", "--verdict", "PASS", relative).exitCode()).isZero();
         return project;
     }
@@ -201,7 +222,7 @@ class GuardMappingTest {
                 .toString();
         write(project, "src/test/resources/fixtures/order.json", document);
         run(project, write, "pre-write");
-        run(project, payload(project), "subagent-stop");
+        run(project, subagentPayload(project), "subagent-stop");
         run(project, "", "record-gate", "--verdict", "PASS", "src/test/resources/fixtures/order.json");
 
         assertThat(run(project, payload(project), "stop").exitCode())
@@ -222,7 +243,7 @@ class GuardMappingTest {
                         .put("content", TEST_SOURCE))
                 .toString();
         run(project, write, "pre-write");
-        run(project, payload(project), "subagent-stop");
+        run(project, subagentPayload(project), "subagent-stop");
 
         Answer typo = run(project, "", "record-gate", "--verdict", "PASS", "--case", "order-scenari", ARTIFACT);
         assertThat(typo.exitCode()).isEqualTo(2);

@@ -109,9 +109,23 @@ class ClaudeSettingsSafetyTest {
         return inner.startsWith("./") ? inner.substring(2) : inner;
     }
 
+    /**
+     * The same subject as the other host spells it.
+     *
+     * <p>Each bundle protects ITS OWN directory, so {@code .opencode/hooks/**} and
+     * {@code .claude/hooks/**} are one policy written twice — as is the host settings file, which is
+     * {@code opencode.json} there and {@code settings.json} here. Comparing them literally would report
+     * a divergence that does not exist, and the alternative — leaving the second bundle's own assets
+     * out of its deny list — is the hole this normalisation exists to let us close.
+     */
+    private static String asClaudeSpells(String subject) {
+        return subject.replace(".opencode/opencode.json", ".claude/settings.json").replace(".opencode/", ".claude/");
+    }
+
     /** Whether a glob refused by opencode is also refused here — by the same path or a wider one. */
     private static boolean covers(Set<String> deniedSubjects, String opencodeGlob) {
-        String target = opencodeGlob.startsWith("**/") ? opencodeGlob.substring(3) : opencodeGlob;
+        String stripped = opencodeGlob.startsWith("**/") ? opencodeGlob.substring(3) : opencodeGlob;
+        String target = asClaudeSpells(stripped);
         for (String subject : deniedSubjects) {
             String candidate = subject.startsWith("**/") ? subject.substring(3) : subject;
             if (candidate.equals(target)) {

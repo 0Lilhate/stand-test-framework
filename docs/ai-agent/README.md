@@ -71,6 +71,10 @@ docs/ai-agent/
       stand-test-kb-resolver.md        stages 2+4 — Read/Grep/Glob only, keeps the KB out of the authoring context
     hooks/           ← the enforcement layer the HOST runs, model or no model (Claude Code only)
       stand-guard.mjs  pre-write / post-write / pre-bash / post-run / stop / subagent-stop / record-gate / scan
+                       pre-bash also refuses a file WRITTEN BY THE SHELL — `cat > Test.java`, `tee`,
+                       `sed -i`, `cp` into the tree — because pre-write is wired to Write/Edit only,
+                       and that route delivers the same content with nothing scanned and no artifact
+                       recorded, so the Stop gate would end the session with nothing to review
                        scan --format sarif --exit-code [--against <base version>] — the SAME gate in
                        CI, with no session and no model: findings become pull-request annotations,
                        and a rule is declared enabled only if it actually ran in that invocation

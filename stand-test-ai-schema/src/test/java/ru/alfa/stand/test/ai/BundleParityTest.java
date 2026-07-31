@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -61,16 +63,25 @@ class BundleParityTest {
     /**
      * Assets that legitimately exist only in the Claude copy: the enforcement layer.
      *
-     * <p>Hooks, subagents and {@code settings.json} are Claude Code mechanisms with no byte-identical
-     * opencode twin — opencode reaches the same checker through a plugin and expresses permissions in
+     * <p>Subagents and {@code settings.json} are Claude Code mechanisms with no byte-identical opencode
+     * twin — opencode declares agents in its own format and expresses permissions in
      * {@code opencode.json}. Listing them here rather than widening the walk keeps the asymmetry
      * deliberate: an asset that lands in {@code .claude/} without appearing on this prefix list still
      * fails the parity check, which is what makes "copy it across" the default answer.
      *
+     * <p>{@code hooks/} used to be on this list and is not any more. The guard is plain Node and cares
+     * nothing for the host: what is Claude-specific is the WIRING — the events in {@code settings.json}
+     * — not the code. While the directory shipped once, the second bundle carried eighteen references
+     * to {@code hooks/stand-guard.mjs} and no {@code hooks/} at all, so its kb-lookup skill instructed
+     * the model to establish something "MECHANICALLY, never from memory" with a command that was not
+     * there. The hooks now ship to both and are compared byte for byte; every path they used to spell
+     * as {@code .claude} is derived from the installed directory instead, which is what lets them be
+     * identical rather than path-adapted.
+     *
      * <p>What the two copies must NOT diverge on is policy, and file-level parity cannot see that —
      * {@code opencode.json} is opencode-only. {@code ClaudeSettingsSafetyTest} owns that comparison.
      */
-    private static final Set<String> CLAUDE_ONLY_PREFIXES = new TreeSet<>(Set.of("settings.json", "hooks/", "agents/"));
+    private static final Set<String> CLAUDE_ONLY_PREFIXES = new TreeSet<>(Set.of("settings.json", "agents/"));
 
     private static boolean isClaudeOnly(String relativePath) {
         return CLAUDE_ONLY_PREFIXES.stream().anyMatch(relativePath::startsWith);
@@ -111,6 +122,53 @@ class BundleParityTest {
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read " + file, e);
         }
+    }
+
+    /**
+     * A command an asset tells the model to run must exist in the bundle that asset ships in.
+     *
+     * <p>This is the check whose absence let the opencode copy carry eighteen references to
+     * {@code hooks/stand-guard.mjs} while shipping no {@code hooks/} directory. The kb-lookup skill was
+     * the sharp end: it instructs the model to establish attestation "MECHANICALLY, never from memory"
+     * by running {@code kb-status} — a command that, on that host, was not there. An instruction to run
+     * a missing command does not fail loudly; it degrades into the recollection the instruction exists
+     * to forbid.
+     *
+     * <p>Both spellings are read. {@code <bundle>/hooks/…} is the placeholder the shared assets use so
+     * they can stay byte-identical between copies, and the literal directory name is what the
+     * path-adapted ones use.
+     */
+    @Test
+    @DisplayName("every command an asset names resolves to a file in the same bundle")
+    void referencedCommands_exist() {
+        Pattern reference = Pattern.compile("(?:<bundle>|\\.claude|\\.opencode)/(hooks/[A-Za-z0-9_.-]+\\.mjs)");
+        List<String> dangling = new ArrayList<>();
+        List<String> seen = new ArrayList<>();
+
+        for (String bundle : List.of(".claude", ".opencode")) {
+            Path root = bundleRoot(bundle);
+            for (var entry : shippedFiles(bundle).entrySet()) {
+                if (!entry.getKey().endsWith(".md")) {
+                    continue;
+                }
+                Matcher matcher = reference.matcher(read(entry.getValue()));
+                while (matcher.find()) {
+                    seen.add(bundle + "/" + entry.getKey());
+                    if (!Files.exists(root.resolve(matcher.group(1)))) {
+                        dangling.add(bundle + "/" + entry.getKey() + " → " + matcher.group(1));
+                    }
+                }
+            }
+        }
+
+        assertThat(seen)
+                .as("the pattern found no command reference at all — an empty sweep passes this test by checking "
+                        + "nothing, which is the failure it was written to catch one level up")
+                .isNotEmpty();
+        assertThat(dangling)
+                .as("an asset that tells the model to run a command the bundle does not carry is worse than one that "
+                        + "says nothing: the instruction reads as mechanical and resolves to memory")
+                .isEmpty();
     }
 
     @Test

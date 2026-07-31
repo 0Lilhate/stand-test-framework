@@ -45,8 +45,14 @@ Validation report: verdict `READY` / `READY-WITH-NOTES` / `NOT-READY`, evidence 
      }
      ```
 4. **Safety review** — [`stand-test-safety-review`](../skills/stand-test-safety-review/SKILL.md)
-   over the final artifacts (yes, again — post-compilation edits happen). BLOCK = NOT-READY.
-5. **Quality review** — [`stand-test-test-review`](../skills/stand-test-test-review/SKILL.md)
+   over the final artifacts (yes, again — post-compilation edits happen), in the
+   `stand-test-safety-reviewer` SUBAGENT. BLOCK = NOT-READY. Record the verdict from THIS context:
+   `node <bundle>/hooks/stand-guard.mjs record-gate --gate safety-review --verdict PASS <files>`.
+   The re-review is not ceremony: the gate is bound to the CONTENT's hash, so an edit made after the
+   earlier verdict has already dropped its coverage, and a "gates: PASS" table over an uncovered
+   artifact is the one shape of clean report nobody can tell from a real one.
+5. **Quality review** — [`stand-test-test-review`](../skills/stand-test-test-review/SKILL.md),
+   in the `stand-test-quality-reviewer` SUBAGENT, against the ORIGINAL case text
    + [`review-checklist.md`](../skills/stand-test-test-review/review-checklist.md)
    + [`flakiness-checklist.md`](../skills/stand-test-test-review/flakiness-checklist.md).
 6. **Report readiness** — assemble the report:

@@ -78,9 +78,13 @@ class GuardRunJournalTest {
 
     /** Runs {@code post-run} as the host would after a gradle command. */
     private static String postRun(Path project) {
+        return postRun(project, "./gradlew test");
+    }
+
+    private static String postRun(Path project, String buildCommand) {
         String payload = MAPPER.createObjectNode()
                 .put("cwd", project.toString())
-                .set("tool_input", MAPPER.createObjectNode().put("command", "./gradlew test"))
+                .set("tool_input", MAPPER.createObjectNode().put("command", buildCommand))
                 .toString();
         List<String> command = new ArrayList<>(List.of("node", repositoryRoot().resolve(GUARD).toString(), "post-run"));
         try {
@@ -153,7 +157,39 @@ class GuardRunJournalTest {
         Path project = temporary.toRealPath();
         writeSuite(project, "services/payments/build/test-results/test", "TEST-ru.alfa.qa.test.PaymentScenarioTest.xml", ALL_SKIPPED_SUITE);
 
-        assertThat(postRun(project)).contains("BUILD SUCCESSFUL, но выполнено 0 тестов из 3");
+        // "Сборка зелёная" rather than Gradle's own words: the same check now reads Maven's surefire
+        // reports, and a warning naming one build tool would be wrong half the time it fires.
+        assertThat(postRun(project)).contains("Сборка зелёная, но выполнено 0 тестов из 3");
+    }
+
+    /**
+     * The same claim, for the other build tool.
+     *
+     * <p>Maven was missing twice over and silently: {@code target} sat in the "not worth walking" list,
+     * so surefire's reports were never found, and the command filter matched {@code gradlew} alone, so
+     * the hook returned before looking. A Maven consumer therefore got the quiet answer that means
+     * "nothing to report" for the run that most needed reporting — and {@code pom.xml} has been in the
+     * dependency detector's own file list all along, so this is a consumer the kit already claims.
+     */
+    @Test
+    @DisplayName("a Maven run is read too — surefire reports, and mvn is a build command")
+    void postRun_readsSurefireReports(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+        writeSuite(project, "qa-module/target/surefire-reports", "TEST-ru.alfa.qa.test.PaymentScenarioTest.xml", ALL_SKIPPED_SUITE);
+
+        assertThat(postRun(project, "mvn -q test"))
+                .as("a green Maven build over a suite that executed nothing says so nowhere else")
+                .contains("Сборка зелёная, но выполнено 0 тестов из 3");
+    }
+
+    @Test
+    @DisplayName("a Maven failure reaches the journal with a fingerprint, as a Gradle one does")
+    void postRun_journalsAMavenFailure(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+        writeSuite(project, "qa-module/target/failsafe-reports", "TEST-ru.alfa.qa.test.OrderScenarioTest.xml", FAILING_SUITE);
+
+        assertThat(postRun(project, "./mvnw verify")).contains("OrderScenarioTest", "отпечаток");
+        assertThat(journal(project)).hasSize(1);
     }
 
     @Test

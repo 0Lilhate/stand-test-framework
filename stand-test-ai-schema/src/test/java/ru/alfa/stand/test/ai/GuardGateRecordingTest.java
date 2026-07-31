@@ -103,15 +103,22 @@ class GuardGateRecordingTest {
         return preWrite(project, ARTIFACT, read(fixture));
     }
 
-    /** Stages content at a path and puts it through the hook that guards writes. */
+    /**
+     * Puts content through the hook that guards writes, then leaves it on disk.
+     *
+     * <p>In that order, which is the host's: {@code PreToolUse} fires BEFORE the file is touched, so
+     * what the hook finds on disk is the PREVIOUS version — for a first write, nothing at all. This
+     * helper used to stage the content first and announce it afterwards, which handed the hook a file
+     * already holding exactly what was about to be written; harmless while the hook only ever looked
+     * at {@code tool_input}, and a lie the moment it started reading the disk to see what a change
+     * introduces.
+     *
+     * <p>The content lands afterwards whatever the verdict, because two of the tests here need a file
+     * that exists on disk and was never registered as this session's artifact — which is precisely
+     * what a refused write leaves behind when someone writes it anyway.
+     */
     private static Answer preWrite(Path project, String relative, String content) {
         Path file = project.resolve(relative);
-        try {
-            Files.createDirectories(file.getParent());
-            Files.writeString(file, content, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new UncheckedIOException("could not stage " + file, e);
-        }
         String payload = MAPPER.createObjectNode()
                 .put("cwd", project.toString())
                 .put("tool_name", "Write")
@@ -119,7 +126,14 @@ class GuardGateRecordingTest {
                         .put("file_path", file.toString())
                         .put("content", content))
                 .toString();
-        return run(project, payload, "pre-write");
+        Answer answer = run(project, payload, "pre-write");
+        try {
+            Files.createDirectories(file.getParent());
+            Files.writeString(file, content, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException("could not stage " + file, e);
+        }
+        return answer;
     }
 
     private static JsonNode state(Path project) {
@@ -134,8 +148,21 @@ class GuardGateRecordingTest {
         }
     }
 
+    /**
+     * The payload the host really sends, rather than the smallest one the hook happened to accept.
+     *
+     * <p>{@code cwd} alone was enough while {@code subagent-stop} recorded whatever reached it, and
+     * that permissiveness was the hole: the guard sits in the run's own allow-list, so a session could
+     * type {@code stand-guard.mjs subagent-stop} and manufacture the sole evidence that stage 8 ran in
+     * a separate context. The hook now asks whether the call came from the host, and an emulation that
+     * omits the host's own fields is testing a caller that does not exist.
+     */
     private static String stopPayload(Path project) {
-        return MAPPER.createObjectNode().put("cwd", project.toString()).toString();
+        return MAPPER.createObjectNode()
+                .put("cwd", project.toString())
+                .put("hook_event_name", "SubagentStop")
+                .put("session_id", "test-session")
+                .toString();
     }
 
     /** The host's own signal that a separate context ran and finished. */

@@ -164,7 +164,11 @@ class KitBatchTest {
     private static String generatingRunner(boolean withMapping) {
         return "writeArtifact(" + quote(ARTIFACT) + ", " + quote(TEST_SOURCE) + ");\n"
                 + (withMapping ? "writeArtifact('knowledge-base/mappings/order.yml', " + quote(MAPPING) + ");\n" : "")
-                + "guard(['subagent-stop'], JSON.stringify({ cwd: project }));\n"
+                // The host's own fields, because subagent-stop reads them: the record of a finished
+                // subagent is the safety gate's only evidence that stage 8 ran in a separate context,
+                // and the guard is in the run's allow-list — a bare cwd let the run supply that
+                // evidence about itself.
+                + "guard(['subagent-stop'], JSON.stringify({ cwd: project, hook_event_name: 'SubagentStop', session_id: 'batch' }));\n"
                 + "guard(['record-gate', '--verdict', 'PASS', " + quote(ARTIFACT) + "]);\n"
                 + "console.log('готово');\n";
     }

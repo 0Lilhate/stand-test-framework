@@ -1,0 +1,71 @@
+// SAFETY FIXTURE — the four DB shapes the kit's own crib prescribes: nothing here is a finding.
+// Stored as .java.txt so nothing compiles it.
+//
+// This one exists because its absence was the defect. Finding 3 had no fixture at all, so nothing
+// executed the claim that it stays quiet on the sanctioned set — and it did not: `DbStep.query` is a
+// FACTORY taking a datasource alias, which went to the SQL classifier as though it were a statement;
+// `db.cleanup` must carry a bare DELETE because the SDK appends `WHERE <col> = :testRunId` itself;
+// `db.write` is an INSERT with no `:testRunId` anywhere, undone afterwards by the primary key it
+// declares. Three of the four shapes the kit tells the model to write could not be written through
+// the kit's own hook, and neither could this file's counterpart in the skill directory.
+//
+// A gate that refuses the sanctioned examples is one people switch off, and it takes the seventeen
+// accurate findings with it.
+package ru.alfa.qa.test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
+import ru.alfa.stand.test.core.client.StandClient;
+import ru.alfa.stand.test.core.scenario.Scenario;
+import ru.alfa.stand.test.db.DbStep;
+import ru.alfa.stand.test.junit.StandTest;
+import ru.alfa.stand.test.rest.RestStep;
+
+@StandTest
+class SanctionedDbWritesTest {
+
+    @Test
+    void orderIsProjected(StandClient stand) {
+        Scenario scenario = Scenario.builder("orders-projection")
+                .environment("ift")
+                // A marker column exists, so the row is seeded tagged and reaped by the paired cleanup.
+                .step(DbStep.seed("orders-db")
+                        .id("seed-order")
+                        .sql("INSERT INTO test_data.orders(id, status, test_run_id) VALUES (:id, 'NEW', :testRunId)")
+                        .taggedByTestRunId("test_run_id")
+                        .param("id", "order-${testRunId}")
+                        .build())
+                // No marker column on this business table: the primary key is declared instead, and the
+                // run's undo-log compensates by it. No :testRunId appears anywhere in the statement.
+                .step(DbStep.write("clients-db")
+                        .id("write-client")
+                        .sql("INSERT INTO app.clients(client_id, name) VALUES (:client_id, 'ACME')")
+                        .param("client_id", "client-${testRunId}")
+                        .identifiedBy("client_id")
+                        .build())
+                // A REST query parameter — not SQL, and never was.
+                .step(RestStep.get("orders-service", "/v1/orders")
+                        .id("list-orders")
+                        .query("status", "NEW")
+                        .expectStatus(200)
+                        .build())
+                // The argument is a datasource alias; the statement is in .sql(...).
+                .step(DbStep.query("orders-db")
+                        .id("read-status")
+                        .sql("SELECT status FROM test_data.orders WHERE id = :id")
+                        .param("id", "order-${testRunId}")
+                        .capture("status", "status")
+                        .build())
+                // Bare DELETE by contract: the SDK appends WHERE test_run_id = :testRunId. An author's
+                // own WHERE here is refused, and stays refused — see destructive-sql-test.java.txt.
+                .step(DbStep.cleanup("orders-db")
+                        .id("cleanup-orders")
+                        .sql("DELETE FROM test_data.orders")
+                        .whereTestRunId("test_run_id")
+                        .build())
+                .build();
+
+        assertThat(stand.run(scenario).isSuccessful()).isTrue();
+    }
+}

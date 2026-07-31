@@ -31,8 +31,13 @@ this command adds the KB-alignment gate and works when the original design artif
    (`StandTestAssertionError` vs `StandTestException`) respected.
 4. **Safety review** — run [`stand-test-safety-review`](../skills/stand-test-safety-review/SKILL.md)
    in full (raw clients, URLs, secrets, destructive SQL, `Thread.sleep`, unbounded timeouts,
-   fixed ids without `${testRunId}`, production envs).
-5. **Quality review** — run [`stand-test-test-review`](../skills/stand-test-test-review/SKILL.md)
+   fixed ids without `${testRunId}`, production envs), in the `stand-test-safety-reviewer` SUBAGENT.
+   Record the verdict from THIS context:
+   `node <bundle>/hooks/stand-guard.mjs record-gate --gate safety-review --verdict PASS <files>`.
+   A test written earlier is no exception — the record covers content, not history, and an inherited
+   test that nothing has reviewed is exactly what this command exists to look at.
+5. **Quality review** — run [`stand-test-test-review`](../skills/stand-test-test-review/SKILL.md),
+   in the `stand-test-quality-reviewer` SUBAGENT
    (coverage vs the case, assertion correctness incl. equals-only asymmetry, flakiness,
    cleanup pairing, reporting metadata, negative paths).
 6. **Compile** — `./gradlew compileTestJava` (plus `checkstyleTest` where wired) in the consumer

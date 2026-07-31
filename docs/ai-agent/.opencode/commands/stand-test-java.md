@@ -38,8 +38,13 @@ starter vs plain JUnit; base package; existing template tests).
    [`stand-test-fixture-authoring`](../skills/stand-test-fixture-authoring/SKILL.md).
 6. **Compile** — `./gradlew compileTestJava` (plus `checkstyleTest` where wired) in the
    consumer project. Fix compile/style findings by regenerating, not by suppressions.
-7. **Safety review** — [`stand-test-safety-review`](../skills/stand-test-safety-review/SKILL.md);
-   any BLOCK → back to step 1.
+7. **Safety review** — [`stand-test-safety-review`](../skills/stand-test-safety-review/SKILL.md),
+   run by the `stand-test-safety-reviewer` SUBAGENT; any BLOCK → back to step 1. Then record the
+   verdict from THIS context, naming the artifacts it covers:
+   `node <bundle>/hooks/stand-guard.mjs record-gate --gate safety-review --verdict PASS <files>`.
+   Invoking this command rather than the umbrella does not license skipping either half: the hook
+   refuses a PASS the scan disagrees with, and one recorded with no subagent finished since the
+   artifact was last written — and without the record the session cannot end.
 
 ## Mandatory checks
 

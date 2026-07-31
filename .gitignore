@@ -76,3 +76,11 @@ docs/ai-agent/knowledge-base/candidates/**/_source/
 knowledge-base/candidates/**/_source/
 # Ad-hoc drop location for raw spec documents fed into ingestion — same rule: verbatim, never commit.
 docs/source/
+### stand-guard per-run state (never commit) ###
+# The kit's hooks keep one state file per PROJECT: which artifacts a session wrote, which gates
+# covered which content hash, the run journal. It is an artefact of one session in one checkout —
+# committing it would make a stale gate verdict travel to everyone else, and the Stop gate would then
+# hold a session over an artifact nobody in that checkout has. The bundle's own .gitignore covers the
+# copy under docs/ai-agent/; this covers the root harness, where running the guard by hand leaves it.
+.claude/.stand-test/
+.opencode/.stand-test/

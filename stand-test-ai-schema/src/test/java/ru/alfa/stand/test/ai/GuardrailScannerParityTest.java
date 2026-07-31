@@ -13,6 +13,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
@@ -32,10 +33,12 @@ import ru.alfa.stand.test.core.validation.ForbiddenOperation;
  * moving the detectors out of Java was to keep the regexes, not to fork the dictionary.
  *
  * <p>The second half runs the scanner as a process against the golden corpus. A table of regexes
- * that nobody executes is a table that rots: the corpus is six fixtures written to violate specific
+ * that nobody executes is a table that rots: the corpus is eight fixtures written to violate specific
  * findings, and the assertion is not "it found something" but "it found exactly these and stayed
  * silent on the clean ones". A scanner that fires on the sanctioned examples is one people switch
- * off, and then the accurate findings stop working too.
+ * off, and then the accurate findings stop working too. That is not hypothetical: finding 3 carried no
+ * fixture at all, and was refusing three of the four DB shapes the kit's own crib prescribes — the
+ * pair {@code destructive-sql-test} / {@code sanctioned-db-writes} is what a fixture would have said.
  *
  * <p>Skipped rather than failed when {@code node} is absent: the SDK builds on machines that have no
  * reason to carry a JavaScript runtime, and a Java build that fails for lack of one would be a
@@ -66,6 +69,8 @@ class GuardrailScannerParityTest {
             "raw-transport-test.java.txt", Map.of("HARDCODED_STAND_URL", 1L, "DIRECT_TRANSPORT_CLIENT", 3L),
             "validator-bypass-test.java.txt", Map.of("VALIDATOR_BYPASS", 2L),
             "shared-state-test.java.txt", Map.of("HARDCODED_CORRELATION_ID", 1L, "SDK_EXCEPTION_SWALLOWED", 1L, "SHARED_MUTABLE_TEST_STATE", 2L),
+            "destructive-sql-test.java.txt", Map.of("DESTRUCTIVE_SQL_WITHOUT_ALLOW", 4L),
+            "sanctioned-db-writes.java.txt", Map.of(),
             "clean-declarative-test.java.txt", Map.of());
 
     private static Path repositoryRoot() {
@@ -197,16 +202,66 @@ class GuardrailScannerParityTest {
                 .isEmpty();
     }
 
+    /**
+     * Coverage is a fact about the ARTIFACT, and the answer used to be a fact about the table.
+     *
+     * <p>Seventeen ran and one did not — printed under every scan of every kind. On a Java file it was
+     * wrong by six: the timeout walk, the script-key check, the fixed-id heuristic, the Kafka
+     * discriminator and the dependency check have no Java branch at all, and the transport detector's
+     * two branches are Java imports and parsed documents. Overstating coverage is the failure this
+     * whole reporting discipline exists to prevent, and the summary line was committing it.
+     *
+     * <p>The numbers below are therefore asserted against the table rather than written down: a
+     * detector added or re-scoped changes them, and hard-coding either count would put this test back
+     * where the line was.
+     */
     @Test
-    @DisplayName("the scanner reports which findings ran and which did not, in every answer")
+    @DisplayName("the scanner reports coverage of the artifact in front of it, not of the table")
     void scanner_reportsItsOwnCoverage() {
         String json = scan("clean-declarative-test.java.txt");
         try {
             JsonNode answer = MAPPER.readTree(json);
-            assertThat(answer.path("gatesRun")).as("a clean report from part of the set is not a clean report from all of it").hasSize(17);
-            assertThat(answer.path("gatesNotRun")).hasSize(1);
+            Set<String> expectedRun = new TreeSet<>();
+            Set<String> expectedNotRun = new TreeSet<>();
+            for (JsonNode detector : detectorTable().path("detectors")) {
+                boolean subject = appliesToKind(detector, "java");
+                boolean needsBothVersions = "previousVersion".equals(detector.path("requires").asText(null));
+                (subject && !needsBothVersions ? expectedRun : expectedNotRun).add(detector.path("ruleId").asText());
+            }
+
+            assertThat(ids(answer.path("gatesRun")))
+                    .as("a clean report from part of the set is not a clean report from all of it")
+                    .isEqualTo(expectedRun);
+            assertThat(ids(answer.path("gatesNotRun"))).isEqualTo(expectedNotRun);
+            assertThat(expectedNotRun)
+                    .as("a java artifact is not the subject of every finding, and if it were this test would be vacuous")
+                    .isNotEmpty();
+
+            JsonNode reasons = answer.path("gatesNotRunReasons");
+            assertThat(reasons.path("FAILURE_CONCEALMENT").asText())
+                    .as("the reason has to travel with the id: 'the caller supplied one version' and 'this kind is not "
+                            + "its subject' are different answers, and merging them says less than the scan knows")
+                    .isEqualTo("previousVersion");
+            assertThat(reasons.path("UNSANCTIONED_DEPENDENCY").asText()).isEqualTo("kind");
         } catch (IOException e) {
             throw new IllegalStateException("the scanner did not answer with JSON:\n" + json, e);
         }
+    }
+
+    /** Whether the table says this kind of artifact is the detector's subject. Mirrors `appliesToKind`. */
+    private static boolean appliesToKind(JsonNode detector, String kind) {
+        for (JsonNode skipped : detector.path("notOn")) {
+            if (kind.equals(skipped.asText())) {
+                return false;
+            }
+        }
+        String appliesTo = detector.path("appliesTo").asText("");
+        return "any".equals(appliesTo) || kind.equals(appliesTo);
+    }
+
+    private static Set<String> ids(JsonNode array) {
+        Set<String> found = new TreeSet<>();
+        array.forEach(item -> found.add(item.asText()));
+        return found;
     }
 }

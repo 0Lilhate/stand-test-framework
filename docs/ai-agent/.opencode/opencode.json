@@ -35,6 +35,12 @@
       "powershell*": "deny"
     },
     "edit": {
+      "**/.opencode/hooks/**": "deny",
+      "**/.opencode/rules/**": "deny",
+      "**/.opencode/skills/**": "deny",
+      "**/.opencode/commands/**": "deny",
+      "**/.opencode/workflows/**": "deny",
+      "**/.opencode/opencode.json": "deny",
       "**/checkstyle.xml": "deny",
       "**/pmd.xml": "deny",
       "**/pmd-ruleset.xml": "deny",

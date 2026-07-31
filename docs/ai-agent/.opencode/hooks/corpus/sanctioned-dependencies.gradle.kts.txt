@@ -1,0 +1,10 @@
+// SAFETY FIXTURE — a consumer build file that adds only what the kit sanctions.
+// Stored as .gradle.kts.txt so Gradle never reads it. Handed to the scan as "build.gradle.kts".
+dependencies {
+    testImplementation(platform("ru.alfa.stand.test:stand-test-bom:1.0.0"))
+    testImplementation("ru.alfa.stand.test:stand-test-sdk")
+    testImplementation("io.qameta.allure:allure-junit5:2.29.1")
+    testImplementation("com.networknt:json-schema-validator:1.5.4")
+    testImplementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
+    testImplementation("org.postgresql:postgresql:42.7.4")
+}

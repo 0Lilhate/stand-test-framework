@@ -42,7 +42,11 @@ stretching the format.
    document left the executable subset — fix or fall back to Workflow 3.
 4. **Safety review** — run
    [`stand-test-safety-review`](../skills/stand-test-safety-review/SKILL.md) over document +
-   fixtures + runner test. Any BLOCK finding → regenerate (never hand-patch around a rail).
+   fixtures + runner test, in the `stand-test-safety-reviewer` SUBAGENT. Any BLOCK finding →
+   regenerate (never hand-patch around a rail). Then record the verdict from THIS context:
+   `node <bundle>/hooks/stand-guard.mjs record-gate --gate safety-review --verdict PASS <files>` —
+   the scenario document and every fixture are executable artifacts, and the session cannot end
+   while one of them is uncovered.
 5. **Finalize** — emit the runner test, apply
    [`before-committing-checklist.md`](../skills/stand-test-test-review/before-committing-checklist.md),
    then hand off to [Workflow 4](stand-test-validate.md).

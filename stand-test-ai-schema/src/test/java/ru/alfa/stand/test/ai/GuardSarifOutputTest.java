@@ -109,10 +109,20 @@ class GuardSarifOutputTest {
         });
 
         assertThat(disabled)
-                .as("omitting it would let a dashboard read eighteen checks where seventeen ran — the same lie the text report refuses to tell")
-                .containsExactly("FAILURE_CONCEALMENT");
-        assertThat(sarif(scan("raw-transport-test.java.txt")).path("runs").path(0).path("invocations").path(0)
-                .path("toolConfigurationNotifications")).hasSize(1);
+                .as("omitting a rule would let a dashboard read eighteen checks where twelve ran — the same lie the "
+                        + "text report refuses to tell. Finding 18 wants the other version; the rest are findings a "
+                        + "java artifact is simply not the subject of, and both are declared rather than dropped")
+                .contains("FAILURE_CONCEALMENT", "UNSANCTIONED_DEPENDENCY", "UNBOUNDED_TIMEOUT");
+        JsonNode notifications = sarif(scan("raw-transport-test.java.txt")).path("runs").path(0)
+                .path("invocations").path(0).path("toolConfigurationNotifications");
+        assertThat(notifications).hasSameSizeAs(disabled);
+        List<String> texts = new ArrayList<>();
+        notifications.forEach(item -> texts.add(item.path("message").path("text").asText()));
+        assertThat(texts)
+                .as("the reason travels with the id: a dashboard that cannot tell 'not applicable' from 'not supplied' "
+                        + "shows a gap where there is none")
+                .anyMatch(text -> text.contains("нет прежней версии"))
+                .anyMatch(text -> text.contains("вид артефакта"));
     }
 
     @Test
