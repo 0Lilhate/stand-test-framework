@@ -13,6 +13,7 @@ import ru.alfa.stand.test.core.environment.AuthScheme;
 import ru.alfa.stand.test.core.environment.CorrelationConfig;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
 import ru.alfa.stand.test.core.environment.DatasourceDefinition;
+import ru.alfa.stand.test.core.environment.EnvironmentConfigFormat;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.GrpcTargetDefinition;
@@ -33,10 +34,15 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  * config-class {@link StandTestException} with a dotted location. Field names are kebab-case
  * (canonical); the camelCase spelling is also accepted. Only <strong>references</strong>
  * (environment-variable names) are stored, never resolved addresses/secrets.
+ *
+ * <p>The one root key besides {@code environments} is {@code version}: the <em>format</em> version of the
+ * document, governed by {@link EnvironmentConfigFormat}. It is what turns "this file was written for a
+ * newer SDK" from {@code Unknown field '<new-section>'} into a message naming both versions and the
+ * action. Absent means version 1, so every file written before versioning existed keeps loading unchanged.
  */
 public final class EnvironmentConfig {
 
-    private static final Set<String> ROOT_KEYS = Set.of("environments");
+    private static final Set<String> ROOT_KEYS = Set.of("environments", EnvironmentConfigFormat.VERSION_FIELD);
     private static final Set<String> ENV_KEYS = Set.of("services", "topics", "datasources", "grpc-targets", "grpcTargets", "kafka-cluster", "kafkaCluster", "kafka-clusters", "kafkaClusters");
     private static final Set<String> SERVICE_KEYS = Set.of("base-url-ref", "baseUrlRef", "correlation", "auth");
 
@@ -62,6 +68,7 @@ public final class EnvironmentConfig {
         }
         Map<String, Object> document = asMap(root, "<document>");
         checkKnownKeys(document, ROOT_KEYS, "<document>");
+        EnvironmentConfigFormat.requireSupported(document.get(EnvironmentConfigFormat.VERSION_FIELD), "<document>");
         Map<String, Object> environments = namedMap(document.get("environments"), "environments");
         Map<String, EnvironmentDefinition> result = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : environments.entrySet()) {

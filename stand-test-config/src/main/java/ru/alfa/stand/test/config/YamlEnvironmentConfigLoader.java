@@ -5,9 +5,11 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.UnaryOperator;
+import ru.alfa.stand.test.core.environment.EnvironmentConfigFormat;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
 import ru.alfa.stand.test.core.exception.StandTestException;
@@ -21,8 +23,9 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  * {@value #DEFAULT_RESOURCE_ALT}) is used. Otherwise the familiar {@value #APPLICATION_RESOURCE} (or
  * {@value #APPLICATION_RESOURCE_ALT}) is consulted: its {@code stand.test.environments} section — either
  * nested ({@code stand: test: environments:}) or with dotted keys — is read with the exact same schema
- * the Spring Boot starter binds, so one configuration style serves both worlds; an application.yml
- * without that section contributes nothing. When no source is present the result is an empty registry
+ * the Spring Boot starter binds (including the sibling {@code stand.test.version} declaring the registry
+ * format version), so one configuration style serves both worlds; an application.yml without that section
+ * contributes nothing. When no source is present the result is an empty registry
  * (unchanged behaviour). Malformed YAML, unknown keys and invalid references are reported as
  * config-class {@link StandTestException}.
  */
@@ -94,37 +97,45 @@ public final class YamlEnvironmentConfigLoader {
         if (content == null || content.isBlank()) {
             return new InMemoryEnvironmentRegistry(Map.of());
         }
-        Object environments = standTestEnvironments(SafeYaml.load(content));
-        if (environments == null) {
+        Map<String, Object> document = standTestSection(SafeYaml.load(content));
+        if (document.get("environments") == null) {
             // The application.yml belongs to the app; without a stand.test.environments section it
             // contributes nothing — same fail-safe outcome as having no config file at all.
             return new InMemoryEnvironmentRegistry(Map.of());
         }
-        return EnvironmentConfig.toRegistry(Map.of("environments", environments));
+        return EnvironmentConfig.toRegistry(document);
     }
 
     /**
-     * Extracts the {@code stand.test.environments} subtree, accepting both the nested spelling
-     * ({@code stand: test: environments:}) and dotted keys at any join point
-     * ({@code stand.test: environments:}, {@code stand.test.environments:}) — mirroring how Spring's
-     * relaxed binding treats the same document.
+     * Extracts the {@code stand.test} subtree as a config document — its {@code environments} section plus
+     * the {@code version} declaring the registry FORMAT version, so the same {@code application.yml} means
+     * the same thing whether it is read here or bound by the Spring starter. Both the nested spelling
+     * ({@code stand: test: environments:}) and dotted keys at any join point ({@code stand.test:
+     * environments:}, {@code stand.test.environments:}) are accepted, mirroring how Spring's relaxed
+     * binding treats the same document; a dotted key wins over the nested one, as before.
      */
-    private static Object standTestEnvironments(Object root) {
+    private static Map<String, Object> standTestSection(Object root) {
+        Map<String, Object> document = new LinkedHashMap<>();
         if (!(root instanceof Map<?, ?> map)) {
-            return null;
-        }
-        Object dotted = map.get("stand.test.environments");
-        if (dotted != null) {
-            return dotted;
+            return document;
         }
         Object standTest = map.get("stand.test");
         if (standTest == null && map.get("stand") instanceof Map<?, ?> stand) {
             standTest = stand.get("test");
         }
         if (standTest instanceof Map<?, ?> standTestMap) {
-            return standTestMap.get("environments");
+            putIfPresent(document, "environments", standTestMap.get("environments"));
+            putIfPresent(document, EnvironmentConfigFormat.VERSION_FIELD, standTestMap.get(EnvironmentConfigFormat.VERSION_FIELD));
         }
-        return null;
+        putIfPresent(document, "environments", map.get("stand.test.environments"));
+        putIfPresent(document, EnvironmentConfigFormat.VERSION_FIELD, map.get("stand.test." + EnvironmentConfigFormat.VERSION_FIELD));
+        return document;
+    }
+
+    private static void putIfPresent(Map<String, Object> document, String key, Object value) {
+        if (value != null) {
+            document.put(key, value);
+        }
     }
 
     private static String readFile(String path) {

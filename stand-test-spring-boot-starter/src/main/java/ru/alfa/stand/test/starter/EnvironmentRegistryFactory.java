@@ -6,6 +6,7 @@ import java.util.Set;
 import ru.alfa.stand.test.core.environment.AuthConfig;
 import ru.alfa.stand.test.core.environment.CorrelationConfig;
 import ru.alfa.stand.test.core.environment.DatasourceDefinition;
+import ru.alfa.stand.test.core.environment.EnvironmentConfigFormat;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.GrpcTargetDefinition;
@@ -57,6 +58,7 @@ public final class EnvironmentRegistryFactory {
      * @return an immutable registry over the configured environments (possibly empty)
      */
     public static EnvironmentRegistry build(StandTestProperties properties) {
+        EnvironmentConfigFormat.requireSupported(properties.getVersion(), "stand.test");
         Map<String, EnvironmentDefinition> environments = new LinkedHashMap<>();
         for (Map.Entry<String, StandTestProperties.Environment> entry : properties.getEnvironments().entrySet()) {
             String name = entry.getKey();

@@ -132,6 +132,13 @@ YAML DSL ────────────────┘                    
   variable name — the double-resolution trap). Service credentials otherwise follow this value-twin/ref
   model: an optional per-service `AuthConfig` (BASIC/BEARER) makes the REST executor inject
   `Authorization` at execution time — the sanctioned path; inline auth headers in scenarios stay banned.
+- **The registry configuration is versioned** by `EnvironmentConfigFormat` in `core/environment/` — one
+  constant (`SUPPORTED_VERSION`) read by *both* front-ends, which is the anti-drift device for the two
+  hand-maintained mappers. A document declaring no `version` (file root) / `stand.test.version` (starter)
+  is format version 1, so every pre-existing configuration loads unchanged; a newer version is refused
+  with a message naming both versions and the action, instead of the fail-closed loader's bare
+  `Unknown field`. A section added after version 1 must declare the version it arrived in — that rule is
+  what makes the promise real rather than nominal.
 - Value types are immutable `record`s with defensive copies (`List`/`Set`/`Map.copyOf`).
 
 ## Current state & where to work

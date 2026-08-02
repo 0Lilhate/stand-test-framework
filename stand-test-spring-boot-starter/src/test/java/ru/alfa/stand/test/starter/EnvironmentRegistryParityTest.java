@@ -147,6 +147,20 @@ class EnvironmentRegistryParityTest {
     }
 
     @Test
+    @DisplayName("both surfaces refuse a format version newer than the SDK reads, with the same message")
+    void bothSurfacesRejectANewerFormatVersion() {
+        StandTestProperties properties = new StandTestProperties();
+        properties.setVersion(99);
+
+        assertThatThrownBy(() -> EnvironmentRegistryFactory.build(properties))
+                .hasMessageContaining("format version 99")
+                .hasMessageContaining("upgrade the stand-test-* dependencies");
+        assertThatThrownBy(() -> loadFromYaml("version: 99\nenvironments: {}\n"))
+                .hasMessageContaining("format version 99")
+                .hasMessageContaining("upgrade the stand-test-* dependencies");
+    }
+
+    @Test
     @DisplayName("endpoint value fields are deliberately starter-only: the config YAML surface rejects them fail-closed")
     void valueFieldsAreStarterOnly() {
         assertThatThrownBy(() -> loadFromYaml("""

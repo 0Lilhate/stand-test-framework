@@ -65,6 +65,7 @@ wire, just with an empty executor list.
 stand:
   test:
     enabled: true
+    version: 1                # registry FORMAT version (not the SDK version); absent means 1
     await:
       timeout: 30s
       poll-interval: 500ms
@@ -100,6 +101,18 @@ stand:
 > **The `*Ref` values are environment-variable names, never values.** `CLIENT_SERVICE_URL`,
 > `MAIN_DB_PASSWORD`, `KAFKA_BOOTSTRAP` etc. are resolved by the adapters from the OS environment at
 > execution time — the SDK keeps endpoints and secrets out of source.
+
+## Registry format version (`stand.test.version`)
+
+The version of the environment-registry **format**, not of the SDK — the exact mirror of the root
+`version` key in `stand-test-environments.yml`, decided by the same core constant
+(`EnvironmentConfigFormat`), so both surfaces read and refuse the same documents:
+
+| Declared | Behaviour |
+|---|---|
+| absent | bound as `1`; an existing `application.yml` keeps working unchanged |
+| ≤ supported | bound |
+| > supported | context startup fails with a message naming the declared version, the supported one and the action (upgrade `stand-test-*`) — never `Unknown field` |
 
 ## Endpoint & credential values via Spring placeholders
 

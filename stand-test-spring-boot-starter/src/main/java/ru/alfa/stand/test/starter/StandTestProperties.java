@@ -33,6 +33,15 @@ public class StandTestProperties {
      */
     private boolean enabled = true;
 
+    /**
+     * Declared <strong>format</strong> version of the environment registry (not the SDK version), mirroring
+     * the root {@code version} key of {@code stand-test-environments.yml}. Absent means version 1, so every
+     * configuration written before versioning existed keeps binding unchanged; a version newer than this
+     * SDK reads is rejected with a message naming both versions. See
+     * {@link ru.alfa.stand.test.core.environment.EnvironmentConfigFormat}.
+     */
+    private Integer version;
+
     private final Await await = new Await();
 
     private final Reporting reporting = new Reporting();
@@ -45,6 +54,14 @@ public class StandTestProperties {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public Integer getVersion() {
+        return version;
+    }
+
+    public void setVersion(Integer version) {
+        this.version = version;
     }
 
     public Await getAwait() {

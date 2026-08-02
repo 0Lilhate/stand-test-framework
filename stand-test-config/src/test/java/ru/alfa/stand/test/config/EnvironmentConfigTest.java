@@ -7,6 +7,7 @@ import ru.alfa.stand.test.core.environment.AuthConfig;
 import ru.alfa.stand.test.core.environment.AuthScheme;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
 import ru.alfa.stand.test.core.environment.DatasourceDefinition;
+import ru.alfa.stand.test.core.environment.EnvironmentConfigFormat;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.exception.StandTestException;
@@ -321,5 +322,86 @@ class EnvironmentConfigTest {
                 """);
 
         assertThat(registry.environment("ift")).isPresent();
+    }
+
+    // ---- registry format version (BR-37) ----
+
+    @Test
+    @DisplayName("a file without 'version' is read as format version 1 — existing files load unchanged")
+    void fileWithoutVersionIsReadAsV1() {
+        EnvironmentRegistry registry = parse("""
+                environments:
+                  ift:
+                    services:
+                      client-service: { base-url-ref: CLIENT_SERVICE_URL }
+                """);
+
+        assertThat(registry.environment("ift").orElseThrow().service("client-service")).isPresent();
+    }
+
+    @Test
+    @DisplayName("an explicitly declared supported version is accepted (1 and the current one alike)")
+    void declaredSupportedVersionIsAccepted() {
+        assertThat(parse("""
+                version: 1
+                environments:
+                  ift:
+                    services:
+                      client-service: { base-url-ref: CLIENT_SERVICE_URL }
+                """).environment("ift")).isPresent();
+        assertThat(parse("""
+                version: 1
+                environments:
+                  ift: {}
+                """).environment("ift")).isPresent();
+    }
+
+    @Test
+    @DisplayName("a newer format version fails with a VERSION message, not with 'Unknown field' — this is the whole point of BR-37")
+    void newerFormatVersionFailsWithVersionMessage() {
+        assertThatThrownBy(() -> parse("""
+                version: 99
+                environments:
+                  ift: {}
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("format version 99")
+                .hasMessageContaining("up to " + EnvironmentConfigFormat.SUPPORTED_VERSION)
+                .hasMessageContaining("upgrade the stand-test-* dependencies")
+                .hasMessageNotContaining("Unknown field");
+    }
+
+    @Test
+    @DisplayName("a non-integer or non-positive version is rejected — fail-closed survives the new key")
+    void nonIntegerVersionIsRejected() {
+        assertThatThrownBy(() -> parse("version: \"2\"\nenvironments: {}\n"))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("whole number");
+        assertThatThrownBy(() -> parse("version: 2.5\nenvironments: {}\n"))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("whole number");
+        assertThatThrownBy(() -> parse("version: 0\nenvironments: {}\n"))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("positive");
+        assertThatThrownBy(() -> parse("version: -1\nenvironments: {}\n"))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("positive");
+    }
+
+    @Test
+    @DisplayName("'version' declared twice is a duplicate key — the safe loader rejects it before the mapper sees it")
+    void duplicateVersionKeyIsRejected() {
+        assertThatThrownBy(() -> parse("version: 1\nversion: 2\nenvironments: {}\n"))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("duplicate key");
+    }
+
+    @Test
+    @DisplayName("'version' is the ONLY new root key — any other root key is still rejected")
+    void rootKeyWhitelistStaysClosed() {
+        assertThatThrownBy(() -> parse("versions: 2\nenvironments: {}\n"))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("Unknown field 'versions'")
+                .hasMessageContaining("<document>");
     }
 }

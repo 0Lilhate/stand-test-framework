@@ -7,6 +7,12 @@
       "defaultValue": true
     },
     {
+      "name": "stand.test.version",
+      "type": "java.lang.Integer",
+      "description": "Declared FORMAT version of the environment registry (not the SDK version). Absent means 1; a version newer than this SDK reads is rejected with a message naming both versions and the action, instead of a bind failure on an unknown key.",
+      "defaultValue": 1
+    },
+    {
       "name": "stand.test.await.timeout",
       "type": "java.time.Duration",
       "description": "Default total wait for the reusable AwaitPolicy bean.",

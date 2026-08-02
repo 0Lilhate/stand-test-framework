@@ -5,8 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import ru.alfa.stand.test.core.environment.EnvironmentConfigFormat;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.SecretReferences;
+import ru.alfa.stand.test.core.exception.StandTestException;
 
 /**
  * Unit tests for the endpoint value fields (Spring-resolved twins of the {@code *-ref} fields):
@@ -154,6 +156,35 @@ class EnvironmentRegistryFactoryTest {
         assertThatThrownBy(() -> EnvironmentRegistryFactory.build(properties))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("baseUrlRef must not be blank");
+    }
+
+    // ---- registry format version and UI applications (BR-27, BR-31, BR-37) ----
+
+    @Test
+    @DisplayName("no declared version binds as format version 1 — an existing application.yml keeps working")
+    void absentVersion_bindsAsInitialFormat() {
+        StandTestProperties properties = new StandTestProperties();
+        StandTestProperties.Environment ift = new StandTestProperties.Environment();
+        StandTestProperties.Service service = new StandTestProperties.Service();
+        service.setBaseUrlRef("CLIENT_SERVICE_URL");
+        ift.getServices().put("client-service", service);
+        properties.getEnvironments().put("ift", ift);
+
+        assertThat(properties.getVersion()).isNull();
+        assertThat(EnvironmentRegistryFactory.build(properties).environment("ift").orElseThrow().service("client-service")).isPresent();
+    }
+
+    @Test
+    @DisplayName("a stand.test.version newer than this SDK reads fails with the version message, from the same core constant the file surface uses")
+    void newerVersion_failsWithVersionMessage() {
+        StandTestProperties properties = new StandTestProperties();
+        properties.setVersion(EnvironmentConfigFormat.SUPPORTED_VERSION + 1);
+
+        assertThatThrownBy(() -> EnvironmentRegistryFactory.build(properties))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("format version " + (EnvironmentConfigFormat.SUPPORTED_VERSION + 1))
+                .hasMessageContaining("stand.test")
+                .hasMessageNotContaining("Unknown field");
     }
 
     private static String resolveLiteral(String reference) {

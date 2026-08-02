@@ -130,6 +130,59 @@ class YamlEnvironmentConfigLoaderTest {
         assertThat(registry.environment("from-application")).isEmpty();
     }
 
+    @Test
+    @DisplayName("the application.yml path carries stand.test.version too, so one file means the same thing here and on the starter")
+    void readsApplicationYamlFormatVersion(@TempDir Path dir) throws Exception {
+        Files.writeString(dir.resolve("application.yml"), """
+                stand:
+                  test:
+                    version: 1
+                    environments:
+                      dev:
+                        services:
+                          svc: { base-url-ref: SVC_URL }
+                """, StandardCharsets.UTF_8);
+
+        EnvironmentRegistry registry = loader(key -> null, directoryClassLoader(dir)).load();
+
+        assertThat(registry.environment("dev").orElseThrow().service("svc").orElseThrow().baseUrlRef())
+                .isEqualTo("SVC_URL");
+    }
+
+    @Test
+    @DisplayName("a newer stand.test.version in application.yml is refused with the version message, nested or dotted alike")
+    void applicationYamlNewerVersionRejected(@TempDir Path dir) throws Exception {
+        Files.writeString(dir.resolve("application.yml"), """
+                stand:
+                  test:
+                    version: 99
+                    environments:
+                      dev:
+                        services:
+                          svc: { base-url-ref: SVC_URL }
+                """, StandardCharsets.UTF_8);
+
+        ClassLoader nested = directoryClassLoader(dir);
+        assertThatThrownBy(() -> loader(key -> null, nested).load())
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("format version 99");
+
+        Path dotted = dir.resolve("dotted");
+        Files.createDirectories(dotted);
+        Files.writeString(dotted.resolve("application.yml"), """
+                stand.test.version: 99
+                stand.test.environments:
+                  dev:
+                    services:
+                      svc: { base-url-ref: SVC_URL }
+                """, StandardCharsets.UTF_8);
+
+        ClassLoader dottedLoader = directoryClassLoader(dotted);
+        assertThatThrownBy(() -> loader(key -> null, dottedLoader).load())
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("format version 99");
+    }
+
     private static ClassLoader directoryClassLoader(Path dir) throws Exception {
         return new java.net.URLClassLoader(new java.net.URL[] {dir.toUri().toURL()}, null);
     }

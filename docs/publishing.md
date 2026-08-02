@@ -50,6 +50,36 @@ STAND_TEST_PUBLISH_USERNAME=ci-user STAND_TEST_PUBLISH_PASSWORD=*** ./gradlew pu
 Snapshots need no ceremony: leave the `-SNAPSHOT` version in place and run `publish` against the
 snapshot repository (step 3 with the snapshots URL).
 
+## Environment-registry format version (a second, slower version number)
+
+The artifact version above is not the only compatibility surface. Consumers share a configuration file
+(`stand-test-environments.yml`, or `stand.test.*` in `application.yml`), and that file has its own
+**format version** — the root key `version` / `stand.test.version`, whose supported value is the
+constant `EnvironmentConfigFormat.SUPPORTED_VERSION` in `stand-test-core`.
+
+Why it exists: the registry loader is fail-closed, so before versioning, a file carrying a section
+introduced by a newer SDK failed on an older one with `Unknown field '<section>'` — a message that
+says nothing about what to do. With the key, that same file produces "format version N, this SDK
+supports up to M — upgrade `stand-test-*`".
+
+**The rule this puts on a release.** A change that adds a section to the registry format must:
+
+1. bump `SUPPORTED_VERSION`, so a document using the new section declares a version an older SDK can
+   recognise as newer than its own;
+2. be released **after** a version of the SDK that already understands the `version` key — otherwise
+   the older SDK still meets `Unknown field` and the promise is void.
+
+Point 2 costs nothing while the SDK is unpublished (no consumer holds a version that would refuse the
+key), and it is the reason the key was introduced before the first release rather than after it. Once
+published, the ordering is a real constraint on release planning.
+
+| Compatibility question | Answer |
+|---|---|
+| Old file, new SDK | reads (a file without `version` is format version 1) |
+| New file, new SDK | reads |
+| New file (higher `version`), old SDK that knows the key | refuses with a version message naming both versions and the action |
+| New file, SDK predating the key | `Unknown field 'version'` — the case point 2 above exists to prevent |
+
 ## Consumption
 
 External consumers import the BOM once and reference modules without versions:

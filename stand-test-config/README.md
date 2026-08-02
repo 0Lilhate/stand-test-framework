@@ -36,6 +36,7 @@ Add the module (typically `testImplementation`) and drop a `stand-test-environme
 classpath (`src/test/resources`):
 
 ```yaml
+version: 1                                        # registry FORMAT version (optional; absent means 1)
 environments:
   ift:
     services:
@@ -62,6 +63,20 @@ environments:
       audit:
         bootstrap-servers-ref: AUDIT_KAFKA_BOOTSTRAP
 ```
+
+## Format version (root key `version`)
+
+`version` is the version of the **file format**, not of the SDK. It exists because this loader is
+fail-closed: without it, a file carrying a section a newer SDK introduced would fail on an older SDK
+with the unhelpful `Unknown field '<section>'`. The rules (shared with the Spring starter through
+`EnvironmentConfigFormat` in `stand-test-core`, so the two surfaces cannot disagree):
+
+| Declared | Behaviour |
+|---|---|
+| absent | read as `1` — every file written before versioning existed loads unchanged |
+| ≤ supported | read |
+| > supported | refused with a message naming the file's version, the supported one and the action (upgrade `stand-test-*`) |
+| not a whole number, or ≤ 0 | configuration error (fail-closed) |
 
 **Multiple Kafka clusters:** the single `kafka-cluster` is the environment's default; `kafka-clusters`
 whitelists named clusters, and a topic selects one via `cluster: <alias>` (e.g.
