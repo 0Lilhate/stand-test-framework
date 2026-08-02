@@ -138,7 +138,11 @@ YAML DSL ────────────────┘                    
   is format version 1, so every pre-existing configuration loads unchanged; a newer version is refused
   with a message naming both versions and the action, instead of the fail-closed loader's bare
   `Unknown field`. A section added after version 1 must declare the version it arrived in — that rule is
-  what makes the promise real rather than nominal.
+  what makes the promise real rather than nominal. **`ui-applications` (version 2)** whitelists UI
+  application aliases (`base-url-ref`, `default-viewport`/`viewport-profiles`, `trace`, `auth` with the
+  service spelling `scheme`); `Scenario` gets no browser fields — viewport and the rest are configuration.
+  `ui.*` steps are not implemented (that is `stand-test-ui`, unbuilt), but the pre-flight guardrail
+  `NON_WHITELISTED_UI_APPLICATION` for the `application` alias already is.
 - Value types are immutable `record`s with defensive copies (`List`/`Set`/`Map.copyOf`).
 
 ## Current state & where to work

@@ -23,6 +23,11 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  *   <tr><td>not a whole number, or {@code <= 0}</td><td>rejected as a configuration error (fail-closed)</td></tr>
  * </table>
  *
+ * <p>Sections introduced after version 1 additionally require the document to <em>declare</em> the
+ * version they arrived in ({@link #requireSectionSupported}). Without that rule the version key would
+ * guarantee nothing in practice: a file could carry a newer section while still claiming version 1, and
+ * an older SDK would again meet {@code Unknown field} instead of a version message.
+ *
  * <p>Two surfaces read this: {@code stand-test-config}'s {@code stand-test-environments.yml} (root key
  * {@code version}) and the Spring Boot starter ({@code stand.test.version}). Keeping the numbers and the
  * wording here is what stops the two hand-maintained mappers from disagreeing about what they can read.
@@ -35,13 +40,11 @@ public final class EnvironmentConfigFormat {
     /** The format version of a document that declares none — every file written before versioning existed. */
     public static final int INITIAL_VERSION = 1;
 
-    /**
-     * The highest registry format version this SDK build can read. Bumped by the change that introduces a
-     * new section into the format — and never before an SDK that already understands the {@code version}
-     * key has been released, or the older SDK still meets {@code Unknown field} and the diagnosis is void
-     * (see {@code docs/publishing.md}).
-     */
-    public static final int SUPPORTED_VERSION = 1;
+    /** The highest registry format version this SDK build can read. */
+    public static final int SUPPORTED_VERSION = 2;
+
+    /** Format version in which the per-environment {@code ui-applications} section was introduced. */
+    public static final int UI_APPLICATIONS_SINCE_VERSION = 2;
 
     private EnvironmentConfigFormat() {
     }
@@ -71,6 +74,27 @@ public final class EnvironmentConfigFormat {
                     + ", or remove the newer sections and declare version " + SUPPORTED_VERSION + ".");
         }
         return (int) version;
+    }
+
+    /**
+     * Enforces that a section introduced after {@link #INITIAL_VERSION} is used only in a document that
+     * declares at least the version it arrived in.
+     *
+     * @param declaredVersion the effective version returned by {@link #requireSupported}
+     * @param section the section name as spelled in configuration (for example {@code ui-applications})
+     * @param since the first format version carrying the section
+     * @param location the configuration location for the error message
+     * @throws StandTestException if the document declares an older version than the section requires
+     */
+    public static void requireSectionSupported(int declaredVersion, String section, int since, String location) {
+        if (declaredVersion >= since) {
+            return;
+        }
+        throw new StandTestException("Section '" + section + "' at " + location + " requires environment registry format version "
+                + since + ", but the document declares version " + declaredVersion
+                + " — declare the format version at the configuration root ('" + VERSION_FIELD + ": " + since
+                + "' in stand-test-environments.yml, 'stand.test." + VERSION_FIELD + ": " + since
+                + "' on the Spring starter) so an SDK that predates this section refuses with a version message instead of 'Unknown field'.");
     }
 
     private static long wholeNumber(Object declared, String location) {

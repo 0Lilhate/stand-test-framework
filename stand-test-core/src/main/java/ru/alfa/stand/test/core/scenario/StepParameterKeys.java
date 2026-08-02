@@ -19,6 +19,8 @@ public final class StepParameterKeys {
     public static final String DB_PREFIX = "db.";
     /** Prefix of the core step type produced for a gRPC step (for example {@code grpc.unary}). */
     public static final String GRPC_PREFIX = "grpc.";
+    /** Prefix of the core step type produced for a UI step (for example {@code ui.open}). */
+    public static final String UI_PREFIX = "ui.";
 
     /** Parameter key: HTTP method name. */
     public static final String METHOD = "method";
@@ -81,6 +83,9 @@ public final class StepParameterKeys {
     public static final String IDENTIFIED_BY = "identifiedBy";
     /** Parameter key (expectEventually): the poll interval between probes, in milliseconds. */
     public static final String POLL_INTERVAL_MILLIS = "pollIntervalMillis";
+
+    /** Parameter key: logical UI application alias resolved via the environment registry. */
+    public static final String APPLICATION = "application";
 
     /** Parameter key: logical gRPC target alias resolved via the environment registry. */
     public static final String TARGET = "target";

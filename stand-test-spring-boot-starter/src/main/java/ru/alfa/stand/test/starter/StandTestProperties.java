@@ -8,6 +8,7 @@ import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import ru.alfa.stand.test.core.environment.AuthScheme;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
+import ru.alfa.stand.test.core.environment.UiAuthScheme;
 
 /**
  * Bindable configuration for the stand-test SDK, rooted at {@code stand.test}.
@@ -142,8 +143,8 @@ public class StandTestProperties {
     }
 
     /**
-     * A single whitelisted environment: its logical services, datasources, topics, gRPC targets and
-     * (optional) Kafka cluster, all keyed by alias.
+     * A single whitelisted environment: its logical services, datasources, topics, gRPC targets, UI
+     * applications and (optional) Kafka cluster, all keyed by alias.
      */
     public static class Environment {
 
@@ -156,6 +157,8 @@ public class StandTestProperties {
         private final Map<String, GrpcTarget> grpcTargets = new LinkedHashMap<>();
 
         private final Map<String, KafkaCluster> kafkaClusters = new LinkedHashMap<>();
+
+        private final Map<String, UiApplication> uiApplications = new LinkedHashMap<>();
 
         private KafkaCluster kafkaCluster;
 
@@ -185,6 +188,153 @@ public class StandTestProperties {
 
         public Map<String, KafkaCluster> getKafkaClusters() {
             return kafkaClusters;
+        }
+
+        public Map<String, UiApplication> getUiApplications() {
+            return uiApplications;
+        }
+    }
+
+    /**
+     * A logical UI application: the alias a scenario addresses instead of a URL. {@code baseUrlRef} is a
+     * reference (an env-var name), {@code baseUrl} its Spring-resolved value twin — mutually exclusive,
+     * exactly as for a {@link Service}. Everything about how the run is performed (viewport, trace, sign-in)
+     * lives here rather than in the scenario, so the core scenario model stays free of browser fields.
+     *
+     * <p>Requires {@code stand.test.version: 2} or higher — the format version in which this section
+     * arrived.
+     */
+    public static class UiApplication {
+
+        private String baseUrl;
+
+        private String baseUrlRef;
+
+        private String defaultViewport;
+
+        private final Map<String, Viewport> viewportProfiles = new LinkedHashMap<>();
+
+        /**
+         * Whether a browser trace may be recorded: {@code off} (default) or {@code on-failure}. Bound as a
+         * string rather than the enum because YAML resolves an unquoted {@code off} to the boolean
+         * {@code false}; the shared core parser turns both spellings into the same mode.
+         */
+        private String trace;
+
+        private UiAuth auth;
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+
+        public String getBaseUrlRef() {
+            return baseUrlRef;
+        }
+
+        public void setBaseUrlRef(String baseUrlRef) {
+            this.baseUrlRef = baseUrlRef;
+        }
+
+        public String getDefaultViewport() {
+            return defaultViewport;
+        }
+
+        public void setDefaultViewport(String defaultViewport) {
+            this.defaultViewport = defaultViewport;
+        }
+
+        public Map<String, Viewport> getViewportProfiles() {
+            return viewportProfiles;
+        }
+
+        public String getTrace() {
+            return trace;
+        }
+
+        public void setTrace(String trace) {
+            this.trace = trace;
+        }
+
+        public UiAuth getAuth() {
+            return auth;
+        }
+
+        public void setAuth(UiAuth auth) {
+            this.auth = auth;
+        }
+    }
+
+    /**
+     * A named viewport size of a {@link UiApplication}, in CSS pixels.
+     */
+    public static class Viewport {
+
+        private int width;
+
+        private int height;
+
+        public int getWidth() {
+            return width;
+        }
+
+        public void setWidth(int width) {
+            this.width = width;
+        }
+
+        public int getHeight() {
+            return height;
+        }
+
+        public void setHeight(int height) {
+            this.height = height;
+        }
+    }
+
+    /**
+     * Sign-in configuration of a {@link UiApplication}. The scheme is spelled {@code scheme} — the same key
+     * a service's {@link Auth} uses — and every credential is a {@code *-ref} reference, never a value:
+     * there is deliberately no value twin here, because a UI credential has no non-secret reading.
+     */
+    public static class UiAuth {
+
+        private UiAuthScheme scheme;
+
+        private String credentialsPoolRef;
+
+        private final List<String> roles = new ArrayList<>();
+
+        private String discoveryAccountRef;
+
+        public UiAuthScheme getScheme() {
+            return scheme;
+        }
+
+        public void setScheme(UiAuthScheme scheme) {
+            this.scheme = scheme;
+        }
+
+        public String getCredentialsPoolRef() {
+            return credentialsPoolRef;
+        }
+
+        public void setCredentialsPoolRef(String credentialsPoolRef) {
+            this.credentialsPoolRef = credentialsPoolRef;
+        }
+
+        public List<String> getRoles() {
+            return roles;
+        }
+
+        public String getDiscoveryAccountRef() {
+            return discoveryAccountRef;
+        }
+
+        public void setDiscoveryAccountRef(String discoveryAccountRef) {
+            this.discoveryAccountRef = discoveryAccountRef;
         }
     }
 

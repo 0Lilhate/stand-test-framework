@@ -27,7 +27,8 @@ import ru.alfa.stand.test.core.scenario.StepParameterKeys;
  * ({@link ForbiddenOperation#NON_WHITELISTED_ENVIRONMENT}) and every step's logical alias must resolve in
  * that environment pre-flight — a REST {@code service} ({@link ForbiddenOperation#NON_WHITELISTED_SERVICE}),
  * a Kafka {@code topic} ({@link ForbiddenOperation#NON_WHITELISTED_TOPIC}), a gRPC {@code target}
- * ({@link ForbiddenOperation#NON_WHITELISTED_GRPC_TARGET}) and a {@code db.*} {@code datasource}
+ * ({@link ForbiddenOperation#NON_WHITELISTED_GRPC_TARGET}), a {@code ui.*} {@code application}
+ * ({@link ForbiddenOperation#NON_WHITELISTED_UI_APPLICATION}) and a {@code db.*} {@code datasource}
  * ({@link ForbiddenOperation#NON_WHITELISTED_DATASOURCE}) — so a typo'd alias in ANY step aborts the run
  * before an earlier step can mutate the stand, not only when the adapter later resolves it. A {@code db.*}
  * step's inline SQL must additionally not be destructive or unclassifiable
@@ -136,10 +137,19 @@ public final class DefaultScenarioValidator implements ScenarioValidator {
 
     /**
      * Pre-flight alias whitelist: every step's logical alias (REST {@code service}, Kafka {@code topic},
-     * gRPC {@code target}, {@code db.*} {@code datasource}) must resolve in the environment, so a typo'd or
-     * non-whitelisted alias in ANY step aborts the run before an earlier step can mutate the stand — not only
-     * when the adapter later resolves it. Only a plain string alias is checked (a step that omits the alias
-     * is a per-adapter schema concern); adapters re-resolve as defence in depth (plan §8.6).
+     * gRPC {@code target}, UI {@code application}, {@code db.*} {@code datasource}) must resolve in the
+     * environment, so a typo'd or non-whitelisted alias in ANY step aborts the run before an earlier step can
+     * mutate the stand — not only when the adapter later resolves it. Only a plain string alias is checked (a
+     * step that omits the alias is a per-adapter schema concern); adapters re-resolve as defence in depth
+     * (plan §8.6).
+     *
+     * <p>For a {@code ui.*} step this is what rejects a non-whitelisted application before a browser is
+     * started. Note the shared limit of {@code checkAlias}, which matters more here than elsewhere: only a
+     * <em>declared</em> alias is checked, so a step omitting the parameter passes — for the other
+     * transports the adapter's parameter schema and its own re-resolution close that (plan §8.6), and for
+     * {@code ui.*} the schema of the not-yet-shipped UI step owns the "alias is required" rule. A prefix
+     * that reaches no branch of this dispatch is silently unguarded, which is why every branch carries a
+     * test proving the guardrail fires — and one proving it stops firing when the branch is removed.
      */
     private static void checkAliasWhitelist(GenericStep step, EnvironmentDefinition environment, List<ValidationIssue> issues) {
         String type = step.type();
@@ -151,6 +161,8 @@ public final class DefaultScenarioValidator implements ScenarioValidator {
             checkAlias(step, StepParameterKeys.TOPIC, environment, ForbiddenOperation.NON_WHITELISTED_TOPIC, "Topic", EnvironmentDefinition::topic, issues);
         } else if (type.startsWith(StepParameterKeys.GRPC_PREFIX)) {
             checkAlias(step, StepParameterKeys.TARGET, environment, ForbiddenOperation.NON_WHITELISTED_GRPC_TARGET, "gRPC target", EnvironmentDefinition::grpcTarget, issues);
+        } else if (type.startsWith(StepParameterKeys.UI_PREFIX)) {
+            checkAlias(step, StepParameterKeys.APPLICATION, environment, ForbiddenOperation.NON_WHITELISTED_UI_APPLICATION, "UI application", EnvironmentDefinition::uiApplication, issues);
         }
     }
 

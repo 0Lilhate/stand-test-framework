@@ -1,6 +1,7 @@
 package ru.alfa.stand.test.core.environment;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.DisplayName;
@@ -22,7 +23,7 @@ class EnvironmentConfigFormatTest {
         assertThat(EnvironmentConfigFormat.requireSupported(1, "<document>")).isEqualTo(1);
         assertThat(EnvironmentConfigFormat.requireSupported(EnvironmentConfigFormat.SUPPORTED_VERSION, "<document>"))
                 .isEqualTo(EnvironmentConfigFormat.SUPPORTED_VERSION);
-        assertThat(EnvironmentConfigFormat.requireSupported(1L, "<document>")).isEqualTo(1);
+        assertThat(EnvironmentConfigFormat.requireSupported(2L, "<document>")).isEqualTo(2);
     }
 
     @Test
@@ -63,4 +64,28 @@ class EnvironmentConfigFormatTest {
                 .hasMessageContaining("FORMAT version (not the SDK version)");
     }
 
+    @Test
+    @DisplayName("a section introduced after version 1 requires the document to declare at least that version")
+    void laterSection_requiresItsVersion() {
+        assertThatCode(() -> EnvironmentConfigFormat.requireSectionSupported(
+                2, "ui-applications", EnvironmentConfigFormat.UI_APPLICATIONS_SINCE_VERSION, "environments.ift.ui-applications"))
+                .doesNotThrowAnyException();
+
+        assertThatThrownBy(() -> EnvironmentConfigFormat.requireSectionSupported(
+                1, "ui-applications", EnvironmentConfigFormat.UI_APPLICATIONS_SINCE_VERSION, "environments.ift.ui-applications"))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("ui-applications")
+                .hasMessageContaining("requires environment registry format version 2")
+                .hasMessageContaining("declares version 1")
+                .hasMessageContaining("stand.test.version: 2");
+    }
+
+    @Test
+    @DisplayName("the UI section is exactly what version 2 introduced, and version 2 is what this SDK supports")
+    void uiApplicationsSection_arrivedInTheSupportedVersion() {
+        assertThat(EnvironmentConfigFormat.UI_APPLICATIONS_SINCE_VERSION).isEqualTo(2);
+        assertThat(EnvironmentConfigFormat.SUPPORTED_VERSION)
+                .as("a section this SDK parses cannot require a version this SDK refuses to read")
+                .isGreaterThanOrEqualTo(EnvironmentConfigFormat.UI_APPLICATIONS_SINCE_VERSION);
+    }
 }

@@ -183,6 +183,37 @@ class YamlEnvironmentConfigLoaderTest {
                 .hasMessageContaining("format version 99");
     }
 
+    @Test
+    @DisplayName("the ui-applications section is readable through application.yml too, and its version gate applies there as well")
+    void readsApplicationYamlUiApplications(@TempDir Path dir) throws Exception {
+        Files.writeString(dir.resolve("application.yml"), """
+                stand.test.version: 2
+                stand.test.environments:
+                  dev:
+                    ui-applications:
+                      client-portal: { base-url-ref: CLIENT_PORTAL_URL }
+                """, StandardCharsets.UTF_8);
+
+        assertThat(loader(key -> null, directoryClassLoader(dir)).load()
+                .environment("dev").orElseThrow()
+                .uiApplication("client-portal").orElseThrow().baseUrlRef())
+                .isEqualTo("CLIENT_PORTAL_URL");
+
+        Path undeclared = dir.resolve("no-version");
+        Files.createDirectories(undeclared);
+        Files.writeString(undeclared.resolve("application.yml"), """
+                stand.test.environments:
+                  dev:
+                    ui-applications:
+                      client-portal: { base-url-ref: CLIENT_PORTAL_URL }
+                """, StandardCharsets.UTF_8);
+
+        ClassLoader withoutVersion = directoryClassLoader(undeclared);
+        assertThatThrownBy(() -> loader(key -> null, withoutVersion).load())
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("requires environment registry format version 2");
+    }
+
     private static ClassLoader directoryClassLoader(Path dir) throws Exception {
         return new java.net.URLClassLoader(new java.net.URL[] {dir.toUri().toURL()}, null);
     }

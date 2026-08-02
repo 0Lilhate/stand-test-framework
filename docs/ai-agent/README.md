@@ -211,7 +211,7 @@ gRPC custom metadata. Source of truth: `ai/stand-test-ai-generation-rules.md` +
 ## Safety constraints and prohibitions
 
 The hard rules live in the bundle: [`.claude/rules/stand-test-guardrails.md`](.claude/rules/stand-test-guardrails.md)
-(mirrors the 15-code `ForbiddenOperation` enum + review-only rules), with detection patterns
+(mirrors the 16-code `ForbiddenOperation` enum + review-only rules), with detection patterns
 in [`.claude/skills/stand-test-safety-review/safety-checklist.md`](.claude/skills/stand-test-safety-review/safety-checklist.md).
 Summary: aliases only, no secrets, no sleeps, bounded timeouts, no destructive SQL,
 SDK-owned `testRunId`/`correlationId`, no pipeline/validator bypass, no production envs,

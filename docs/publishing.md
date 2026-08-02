@@ -64,8 +64,8 @@ supports up to M — upgrade `stand-test-*`".
 
 **The rule this puts on a release.** A change that adds a section to the registry format must:
 
-1. bump `SUPPORTED_VERSION`, so a document using the new section declares a version an older SDK can
-   recognise as newer than its own;
+1. bump `SUPPORTED_VERSION` and register the section's first version (as `ui-applications` did for
+   version 2), so a document using it must declare that version;
 2. be released **after** a version of the SDK that already understands the `version` key — otherwise
    the older SDK still meets `Unknown field` and the promise is void.
 

@@ -22,6 +22,11 @@ import ru.alfa.stand.test.core.environment.KafkaClusterDefinition;
 import ru.alfa.stand.test.core.environment.SecretReferences;
 import ru.alfa.stand.test.core.environment.ServiceEndpointDefinition;
 import ru.alfa.stand.test.core.environment.TopicDefinition;
+import ru.alfa.stand.test.core.environment.UiApplicationDefinition;
+import ru.alfa.stand.test.core.environment.UiAuthConfig;
+import ru.alfa.stand.test.core.environment.UiAuthScheme;
+import ru.alfa.stand.test.core.environment.UiTraceMode;
+import ru.alfa.stand.test.core.environment.ViewportProfile;
 import ru.alfa.stand.test.core.exception.StandTestException;
 
 /**
@@ -43,10 +48,13 @@ import ru.alfa.stand.test.core.exception.StandTestException;
 public final class EnvironmentConfig {
 
     private static final Set<String> ROOT_KEYS = Set.of("environments", EnvironmentConfigFormat.VERSION_FIELD);
-    private static final Set<String> ENV_KEYS = Set.of("services", "topics", "datasources", "grpc-targets", "grpcTargets", "kafka-cluster", "kafkaCluster", "kafka-clusters", "kafkaClusters");
+    private static final Set<String> ENV_KEYS = Set.of("services", "topics", "datasources", "grpc-targets", "grpcTargets", "kafka-cluster", "kafkaCluster", "kafka-clusters", "kafkaClusters", "ui-applications", "uiApplications");
     private static final Set<String> SERVICE_KEYS = Set.of("base-url-ref", "baseUrlRef", "correlation", "auth");
 
     private static final Set<String> AUTH_KEYS = Set.of("scheme", "username-ref", "usernameRef", "password-ref", "passwordRef", "token-ref", "tokenRef");
+    private static final Set<String> UI_APPLICATION_KEYS = Set.of("base-url-ref", "baseUrlRef", "default-viewport", "defaultViewport", "viewport-profiles", "viewportProfiles", "trace", "auth");
+    private static final Set<String> UI_AUTH_KEYS = Set.of("scheme", "credentials-pool-ref", "credentialsPoolRef", "roles", "discovery-account-ref", "discoveryAccountRef");
+    private static final Set<String> VIEWPORT_KEYS = Set.of("width", "height");
     private static final Set<String> TOPIC_KEYS = Set.of("name", "correlation", "cluster");
     private static final Set<String> DATASOURCE_KEYS = Set.of("url-ref", "urlRef", "user-ref", "userRef", "password-ref", "passwordRef", "allowed-schemas", "allowedSchemas", "write-allowed", "writeAllowed");
     private static final Set<String> GRPC_KEYS = Set.of("target-ref", "targetRef", "correlation");
@@ -68,16 +76,16 @@ public final class EnvironmentConfig {
         }
         Map<String, Object> document = asMap(root, "<document>");
         checkKnownKeys(document, ROOT_KEYS, "<document>");
-        EnvironmentConfigFormat.requireSupported(document.get(EnvironmentConfigFormat.VERSION_FIELD), "<document>");
+        int version = EnvironmentConfigFormat.requireSupported(document.get(EnvironmentConfigFormat.VERSION_FIELD), "<document>");
         Map<String, Object> environments = namedMap(document.get("environments"), "environments");
         Map<String, EnvironmentDefinition> result = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : environments.entrySet()) {
-            result.put(entry.getKey(), environment(entry.getKey(), entry.getValue()));
+            result.put(entry.getKey(), environment(entry.getKey(), entry.getValue(), version));
         }
         return new InMemoryEnvironmentRegistry(result);
     }
 
-    private static EnvironmentDefinition environment(String name, Object value) {
+    private static EnvironmentDefinition environment(String name, Object value, int version) {
         String location = "environments." + name;
         Map<String, Object> fields = asMap(value, location);
         checkKnownKeys(fields, ENV_KEYS, location);
@@ -102,7 +110,84 @@ public final class EnvironmentConfig {
         for (Map.Entry<String, Object> entry : namedMap(pick(fields, "kafka-clusters", "kafkaClusters"), location + ".kafka-clusters").entrySet()) {
             kafkaClusters.put(entry.getKey(), kafkaCluster(entry.getValue(), location + ".kafka-clusters." + entry.getKey()));
         }
-        return build(location, () -> new EnvironmentDefinition(name, services, topics, datasources, grpcTargets, kafkaCluster, kafkaClusters));
+        Map<String, UiApplicationDefinition> uiApplications = uiApplications(pick(fields, "ui-applications", "uiApplications"), location, version);
+        return build(location, () -> new EnvironmentDefinition(name, services, topics, datasources, grpcTargets, kafkaCluster, kafkaClusters, uiApplications));
+    }
+
+    /**
+     * Reads the per-environment {@code ui-applications} section — the whitelist that makes a UI application
+     * addressable by a logical alias instead of a URL. The section arrived with format version
+     * {@link EnvironmentConfigFormat#UI_APPLICATIONS_SINCE_VERSION}, so a document carrying it must declare
+     * at least that version: without the declaration an SDK that predates the section would meet the bare
+     * {@code Unknown field 'ui-applications'} this versioning exists to replace.
+     */
+    private static Map<String, UiApplicationDefinition> uiApplications(Object value, String environmentLocation, int version) {
+        String location = environmentLocation + ".ui-applications";
+        if (value == null) {
+            return Map.of();
+        }
+        EnvironmentConfigFormat.requireSectionSupported(version, "ui-applications", EnvironmentConfigFormat.UI_APPLICATIONS_SINCE_VERSION, location);
+        Map<String, UiApplicationDefinition> result = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : namedMap(value, location).entrySet()) {
+            result.put(entry.getKey(), uiApplication(entry.getKey(), entry.getValue(), location + "." + entry.getKey()));
+        }
+        return result;
+    }
+
+    private static UiApplicationDefinition uiApplication(String alias, Object value, String location) {
+        Map<String, Object> fields = asMap(value, location);
+        checkKnownKeys(fields, UI_APPLICATION_KEYS, location);
+        String baseUrlRef = requireReference(fields, "base-url-ref", "baseUrlRef", location);
+        String defaultViewport = optionalString(pick(fields, "default-viewport", "defaultViewport"), location + ".default-viewport");
+        Map<String, ViewportProfile> viewportProfiles = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : namedMap(pick(fields, "viewport-profiles", "viewportProfiles"), location + ".viewport-profiles").entrySet()) {
+            viewportProfiles.put(entry.getKey(), viewportProfile(entry.getValue(), location + ".viewport-profiles." + entry.getKey()));
+        }
+        UiTraceMode trace = traceMode(fields.get("trace"), location + ".trace");
+        UiAuthConfig auth = uiAuth(fields.get("auth"), location + ".auth");
+        return build(location, () -> new UiApplicationDefinition(alias, baseUrlRef, defaultViewport, viewportProfiles, trace, auth));
+    }
+
+    private static ViewportProfile viewportProfile(Object value, String location) {
+        Map<String, Object> fields = asMap(value, location);
+        checkKnownKeys(fields, VIEWPORT_KEYS, location);
+        int width = requireInt(fields.get("width"), location + ".width");
+        int height = requireInt(fields.get("height"), location + ".height");
+        return build(location, () -> new ViewportProfile(width, height));
+    }
+
+    /**
+     * Reads the {@code trace} flag through the core parser both surfaces share (which is also where the
+     * YAML-1.1 {@code off == false} subtlety is handled), re-labelling its rejection with this file's
+     * dotted location.
+     */
+    private static UiTraceMode traceMode(Object value, String location) {
+        try {
+            return UiTraceMode.fromConfig(value);
+        } catch (IllegalArgumentException rejected) {
+            throw new StandTestException("Field 'trace' at " + location + ": " + rejected.getMessage(), rejected);
+        }
+    }
+
+    private static UiAuthConfig uiAuth(Object value, String location) {
+        if (value == null) {
+            return null;
+        }
+        Map<String, Object> fields = asMap(value, location);
+        checkKnownKeys(fields, UI_AUTH_KEYS, location);
+        UiAuthScheme scheme = uiAuthScheme(requireString(fields, "scheme", "scheme", location), location);
+        String credentialsPoolRef = optionalReference(fields, "credentials-pool-ref", "credentialsPoolRef", location);
+        String discoveryAccountRef = optionalReference(fields, "discovery-account-ref", "discoveryAccountRef", location);
+        List<String> roles = stringList(fields.get("roles"), location + ".roles");
+        return build(location, () -> new UiAuthConfig(scheme, credentialsPoolRef, roles, discoveryAccountRef));
+    }
+
+    private static UiAuthScheme uiAuthScheme(String scheme, String location) {
+        try {
+            return UiAuthScheme.valueOf(scheme.trim().replace('-', '_').toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException unknown) {
+            throw new StandTestException("Field 'scheme' at " + location + " must be one of " + Set.of(UiAuthScheme.values()) + ", but was '" + scheme + "'");
+        }
     }
 
     private static ServiceEndpointDefinition service(String alias, Object value, String location) {
@@ -274,6 +359,34 @@ public final class EnvironmentConfig {
             throw new StandTestException("Field at " + location + " must be a boolean");
         }
         return flag;
+    }
+
+    private static int requireInt(Object value, String location) {
+        if (!(value instanceof Integer number)) {
+            throw new StandTestException("Field at " + location + " must be a whole number, but found " + typeOf(value));
+        }
+        return number;
+    }
+
+    /**
+     * Reads a list of non-blank strings, preserving order AND duplicates — unlike {@link #stringSet}, whose
+     * deduplication would hide a repeated entry from the value type's own invariant check.
+     */
+    private static List<String> stringList(Object value, String location) {
+        if (value == null) {
+            return List.of();
+        }
+        if (!(value instanceof List<?> list)) {
+            throw new StandTestException("Field at " + location + " must be a list of strings");
+        }
+        List<String> result = new ArrayList<>();
+        for (Object item : new ArrayList<>(list)) {
+            if (!(item instanceof String text) || text.isBlank()) {
+                throw new StandTestException("List at " + location + " must contain only non-blank strings");
+            }
+            result.add(text);
+        }
+        return List.copyOf(result);
     }
 
     private static Set<String> stringSet(Object value, String location) {

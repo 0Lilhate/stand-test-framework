@@ -1,6 +1,7 @@
 package ru.alfa.stand.test.starter;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import ru.alfa.stand.test.core.environment.AuthConfig;
@@ -15,6 +16,10 @@ import ru.alfa.stand.test.core.environment.KafkaClusterDefinition;
 import ru.alfa.stand.test.core.environment.SecretReferences;
 import ru.alfa.stand.test.core.environment.ServiceEndpointDefinition;
 import ru.alfa.stand.test.core.environment.TopicDefinition;
+import ru.alfa.stand.test.core.environment.UiApplicationDefinition;
+import ru.alfa.stand.test.core.environment.UiAuthConfig;
+import ru.alfa.stand.test.core.environment.UiTraceMode;
+import ru.alfa.stand.test.core.environment.ViewportProfile;
 
 /**
  * Assembles an immutable {@link EnvironmentRegistry} from the mutable {@link StandTestProperties} tree.
@@ -58,16 +63,16 @@ public final class EnvironmentRegistryFactory {
      * @return an immutable registry over the configured environments (possibly empty)
      */
     public static EnvironmentRegistry build(StandTestProperties properties) {
-        EnvironmentConfigFormat.requireSupported(properties.getVersion(), "stand.test");
+        int version = EnvironmentConfigFormat.requireSupported(properties.getVersion(), "stand.test");
         Map<String, EnvironmentDefinition> environments = new LinkedHashMap<>();
         for (Map.Entry<String, StandTestProperties.Environment> entry : properties.getEnvironments().entrySet()) {
             String name = entry.getKey();
-            environments.put(name, toEnvironment(name, entry.getValue()));
+            environments.put(name, toEnvironment(name, entry.getValue(), version));
         }
         return new InMemoryEnvironmentRegistry(environments);
     }
 
-    private static EnvironmentDefinition toEnvironment(String name, StandTestProperties.Environment env) {
+    private static EnvironmentDefinition toEnvironment(String name, StandTestProperties.Environment env, int version) {
         try {
             return new EnvironmentDefinition(
                     name,
@@ -76,11 +81,74 @@ public final class EnvironmentRegistryFactory {
                     datasources(env),
                     grpcTargets(env),
                     kafkaCluster(env.getKafkaCluster()),
-                    kafkaClusters(env));
+                    kafkaClusters(env),
+                    uiApplications(env, name, version));
         } catch (IllegalArgumentException invalid) {
             throw new IllegalStateException(
                     "Invalid stand.test.environments." + name + " configuration: " + invalid.getMessage(), invalid);
         }
+    }
+
+    /**
+     * Maps the {@code ui-applications} section, gated by the same format-version rule the file surface
+     * applies: the section arrived in format version
+     * {@link EnvironmentConfigFormat#UI_APPLICATIONS_SINCE_VERSION}, so a configuration carrying it must
+     * declare at least that version. Both surfaces call the same core check, which is what keeps them from
+     * disagreeing about what they can read.
+     */
+    private static Map<String, UiApplicationDefinition> uiApplications(StandTestProperties.Environment env, String environment, int version) {
+        Map<String, StandTestProperties.UiApplication> configured = env.getUiApplications();
+        if (configured.isEmpty()) {
+            return Map.of();
+        }
+        EnvironmentConfigFormat.requireSectionSupported(
+                version, "ui-applications", EnvironmentConfigFormat.UI_APPLICATIONS_SINCE_VERSION,
+                "stand.test.environments." + environment + ".ui-applications");
+        Map<String, UiApplicationDefinition> result = new LinkedHashMap<>();
+        for (Map.Entry<String, StandTestProperties.UiApplication> entry : configured.entrySet()) {
+            String alias = entry.getKey();
+            StandTestProperties.UiApplication application = entry.getValue();
+            result.put(alias, new UiApplicationDefinition(
+                    alias,
+                    refOrLiteral(application.getBaseUrl(), application.getBaseUrlRef(), "base-url", "base-url-ref", alias),
+                    application.getDefaultViewport(),
+                    viewportProfiles(application, alias),
+                    UiTraceMode.fromConfig(application.getTrace()),
+                    uiAuth(application.getAuth(), alias)));
+        }
+        return result;
+    }
+
+    private static Map<String, ViewportProfile> viewportProfiles(StandTestProperties.UiApplication application, String alias) {
+        Map<String, ViewportProfile> result = new LinkedHashMap<>();
+        for (Map.Entry<String, StandTestProperties.Viewport> entry : application.getViewportProfiles().entrySet()) {
+            StandTestProperties.Viewport viewport = entry.getValue();
+            try {
+                result.put(entry.getKey(), new ViewportProfile(viewport.getWidth(), viewport.getHeight()));
+            } catch (IllegalArgumentException invalid) {
+                throw new IllegalArgumentException("ui application '" + alias + "' viewport profile '" + entry.getKey() + "': " + invalid.getMessage(), invalid);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Maps a UI application's sign-in section. Credentials here are references only — there is deliberately
+     * no value twin, so a UI credential cannot be routed through the Spring Environment the way an endpoint
+     * value can.
+     */
+    private static UiAuthConfig uiAuth(StandTestProperties.UiAuth auth, String alias) {
+        if (auth == null) {
+            return null;
+        }
+        if (auth.getScheme() == null) {
+            throw new IllegalArgumentException("ui application '" + alias + "' auth.scheme must not be null");
+        }
+        return new UiAuthConfig(
+                auth.getScheme(),
+                ref(auth.getCredentialsPoolRef(), "credentials-pool-ref", alias),
+                List.copyOf(auth.getRoles()),
+                ref(auth.getDiscoveryAccountRef(), "discovery-account-ref", alias));
     }
 
     private static Map<String, ServiceEndpointDefinition> services(StandTestProperties.Environment env) {

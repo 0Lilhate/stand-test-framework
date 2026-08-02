@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,7 @@ import ru.alfa.stand.test.core.environment.AuthScheme;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
+import ru.alfa.stand.test.core.environment.UiAuthScheme;
 
 /**
  * Parity guard between the two hand-maintained surface->registry mappers of the same logical schema:
@@ -146,6 +148,133 @@ class EnvironmentRegistryParityTest {
                 .hasMessageContaining("reference NAME");
     }
 
+    /**
+     * The anti-drift contract test named by ADR-UI-004: the SAME configuration — including the format
+     * version and the UI section — described through both surfaces must produce equal core records. The
+     * two mappers are hand-maintained and the UI section is the first one written into both at once, so a
+     * renamed key, a dropped field or a different default on either side surfaces here rather than at a
+     * consumer.
+     */
+    @Test
+    @DisplayName("both surfaces agree on the same config: a version-2 registry with a ui-applications section maps identically")
+    void bothSurfacesAgreeOnTheSameConfig() throws IOException {
+        StandTestProperties properties = standTestProperties();
+        properties.setVersion(2);
+        final StandTestProperties.Environment ift = properties.getEnvironments().get("ift");
+
+        StandTestProperties.UiApplication portal = new StandTestProperties.UiApplication();
+        portal.setBaseUrlRef("CLIENT_PORTAL_IFT_URL");
+        portal.setDefaultViewport("desktop");
+        portal.getViewportProfiles().put("desktop", viewport(1440, 900));
+        portal.getViewportProfiles().put("mobile", viewport(390, 844));
+        portal.setTrace("off");
+        StandTestProperties.UiAuth auth = new StandTestProperties.UiAuth();
+        auth.setScheme(UiAuthScheme.FORM);
+        auth.setCredentialsPoolRef("CLIENT_PORTAL_TEST_USERS");
+        auth.getRoles().addAll(List.of("client", "operator", "no-rights"));
+        auth.setDiscoveryAccountRef("CLIENT_PORTAL_DISCOVERY");
+        portal.setAuth(auth);
+        ift.getUiApplications().put("client-portal", portal);
+
+        StandTestProperties.UiApplication backOffice = new StandTestProperties.UiApplication();
+        backOffice.setBaseUrlRef("BACK_OFFICE_IFT_URL");
+        backOffice.setTrace("on-failure");
+        ift.getUiApplications().put("back-office", backOffice);
+
+        EnvironmentRegistry fromProperties = EnvironmentRegistryFactory.build(properties);
+        EnvironmentRegistry fromYaml = loadFromYaml("""
+                version: 2
+                environments:
+                  ift:
+                    services:
+                      client-service:
+                        base-url-ref: CLIENT_SERVICE_URL
+                        correlation:
+                          source: HEADER
+                          name: X-Correlation-Id
+                        auth:
+                          scheme: BASIC
+                          username-ref: CLIENT_USER
+                          password-ref: CLIENT_PASSWORD
+                      token-service:
+                        base-url-ref: TOKEN_SERVICE_URL
+                        auth:
+                          scheme: BEARER
+                          token-ref: TOKEN_SERVICE_TOKEN
+                    topics:
+                      events:
+                        name: ift.events.v1
+                        correlation:
+                          source: KEY
+                          name: corrId
+                      audit:
+                        name: ift.audit.v1
+                        cluster: audit
+                    kafka-clusters:
+                      audit:
+                        bootstrap-servers-ref: AUDIT_BOOTSTRAP
+                    datasources:
+                      main-db:
+                        url-ref: MAIN_DB_URL
+                        user-ref: MAIN_DB_USER
+                        password-ref: MAIN_DB_PASSWORD
+                        allowed-schemas:
+                          - test_data
+                        write-allowed: true
+                    grpc-targets:
+                      accounts:
+                        target-ref: ACCOUNTS_GRPC
+                        correlation:
+                          source: METADATA
+                          name: x-correlation-id
+                    ui-applications:
+                      client-portal:
+                        base-url-ref: CLIENT_PORTAL_IFT_URL
+                        default-viewport: desktop
+                        viewport-profiles:
+                          desktop: { width: 1440, height: 900 }
+                          mobile: { width: 390, height: 844 }
+                        trace: off
+                        auth:
+                          scheme: FORM
+                          credentials-pool-ref: CLIENT_PORTAL_TEST_USERS
+                          roles: [client, operator, no-rights]
+                          discovery-account-ref: CLIENT_PORTAL_DISCOVERY
+                      back-office:
+                        base-url-ref: BACK_OFFICE_IFT_URL
+                        trace: on-failure
+                    kafka-cluster:
+                      bootstrap-servers-ref: KAFKA_BOOTSTRAP
+                      security-protocol-ref: KAFKA_SECURITY
+                      sasl-jaas-config-ref: KAFKA_JAAS
+                """);
+
+        assertThat(fromProperties.environment("ift").orElseThrow())
+                .isEqualTo(fromYaml.environment("ift").orElseThrow());
+    }
+
+    @Test
+    @DisplayName("both surfaces gate the ui-applications section on the same declared format version")
+    void bothSurfacesRequireTheSameFormatVersion() {
+        StandTestProperties properties = new StandTestProperties();
+        StandTestProperties.Environment ift = new StandTestProperties.Environment();
+        StandTestProperties.UiApplication portal = new StandTestProperties.UiApplication();
+        portal.setBaseUrlRef("CLIENT_PORTAL_IFT_URL");
+        ift.getUiApplications().put("client-portal", portal);
+        properties.getEnvironments().put("ift", ift);
+
+        assertThatThrownBy(() -> EnvironmentRegistryFactory.build(properties))
+                .hasMessageContaining("requires environment registry format version 2");
+        assertThatThrownBy(() -> loadFromYaml("""
+                environments:
+                  ift:
+                    ui-applications:
+                      client-portal:
+                        base-url-ref: CLIENT_PORTAL_IFT_URL
+                """))
+                .hasMessageContaining("requires environment registry format version 2");
+    }
+
     @Test
     @DisplayName("both surfaces refuse a format version newer than the SDK reads, with the same message")
     void bothSurfacesRejectANewerFormatVersion() {
@@ -158,6 +287,30 @@ class EnvironmentRegistryParityTest {
         assertThatThrownBy(() -> loadFromYaml("version: 99\nenvironments: {}\n"))
                 .hasMessageContaining("format version 99")
                 .hasMessageContaining("upgrade the stand-test-* dependencies");
+    }
+
+    @Test
+    @DisplayName("both surfaces reject the same value-shaped UI reference — the UI guard cannot drift one-sided either")
+    void bothSurfacesRejectValueShapedUiReference() {
+        StandTestProperties properties = new StandTestProperties();
+        properties.setVersion(2);
+        StandTestProperties.Environment ift = new StandTestProperties.Environment();
+        StandTestProperties.UiApplication portal = new StandTestProperties.UiApplication();
+        portal.setBaseUrlRef("https://portal.ift.example");
+        ift.getUiApplications().put("client-portal", portal);
+        properties.getEnvironments().put("ift", ift);
+
+        assertThatThrownBy(() -> EnvironmentRegistryFactory.build(properties))
+                .hasMessageContaining("reference NAME");
+        assertThatThrownBy(() -> loadFromYaml("""
+                version: 2
+                environments:
+                  ift:
+                    ui-applications:
+                      client-portal:
+                        base-url-ref: https://portal.ift.example
+                """))
+                .hasMessageContaining("reference NAME");
     }
 
     @Test
@@ -230,6 +383,13 @@ class EnvironmentRegistryParityTest {
 
         properties.getEnvironments().put("ift", ift);
         return properties;
+    }
+
+    private static StandTestProperties.Viewport viewport(int width, int height) {
+        StandTestProperties.Viewport viewport = new StandTestProperties.Viewport();
+        viewport.setWidth(width);
+        viewport.setHeight(height);
+        return viewport;
     }
 
     private static StandTestProperties.Correlation correlation(CorrelationSource source, String name) {

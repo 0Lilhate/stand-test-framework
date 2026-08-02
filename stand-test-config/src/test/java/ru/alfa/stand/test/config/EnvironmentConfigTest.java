@@ -3,6 +3,7 @@ package ru.alfa.stand.test.config;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.List;
 import ru.alfa.stand.test.core.environment.AuthConfig;
 import ru.alfa.stand.test.core.environment.AuthScheme;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
@@ -10,6 +11,11 @@ import ru.alfa.stand.test.core.environment.DatasourceDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentConfigFormat;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
+import ru.alfa.stand.test.core.environment.UiApplicationDefinition;
+import ru.alfa.stand.test.core.environment.UiAuthConfig;
+import ru.alfa.stand.test.core.environment.UiAuthScheme;
+import ru.alfa.stand.test.core.environment.UiTraceMode;
+import ru.alfa.stand.test.core.environment.ViewportProfile;
 import ru.alfa.stand.test.core.exception.StandTestException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -337,6 +343,7 @@ class EnvironmentConfigTest {
                 """);
 
         assertThat(registry.environment("ift").orElseThrow().service("client-service")).isPresent();
+        assertThat(registry.environment("ift").orElseThrow().uiApplications()).isEmpty();
     }
 
     @Test
@@ -350,7 +357,7 @@ class EnvironmentConfigTest {
                       client-service: { base-url-ref: CLIENT_SERVICE_URL }
                 """).environment("ift")).isPresent();
         assertThat(parse("""
-                version: 1
+                version: 2
                 environments:
                   ift: {}
                 """).environment("ift")).isPresent();
@@ -403,5 +410,231 @@ class EnvironmentConfigTest {
                 .isInstanceOf(StandTestException.class)
                 .hasMessageContaining("Unknown field 'versions'")
                 .hasMessageContaining("<document>");
+    }
+
+    // ---- ui-applications (BR-27, BR-31) ----
+
+    @Test
+    @DisplayName("a ui-applications section parses alias, base-url-ref, viewport profiles, trace and auth")
+    void uiApplicationsSectionIsParsed() {
+        EnvironmentDefinition ift = parse("""
+                version: 2
+                environments:
+                  ift:
+                    ui-applications:
+                      client-portal:
+                        base-url-ref: CLIENT_PORTAL_IFT_URL
+                        default-viewport: desktop
+                        viewport-profiles:
+                          desktop: { width: 1440, height: 900 }
+                          mobile: { width: 390, height: 844 }
+                        trace: off
+                        auth:
+                          scheme: FORM
+                          credentials-pool-ref: CLIENT_PORTAL_TEST_USERS
+                          roles: [client, operator, no-rights]
+                          discovery-account-ref: CLIENT_PORTAL_DISCOVERY
+                """).environment("ift").orElseThrow();
+
+        UiApplicationDefinition portal = ift.uiApplication("client-portal").orElseThrow();
+        assertThat(portal.baseUrlRef()).isEqualTo("CLIENT_PORTAL_IFT_URL");
+        assertThat(portal.defaultViewport()).isEqualTo("desktop");
+        assertThat(portal.viewportProfile("mobile")).contains(new ViewportProfile(390, 844));
+        assertThat(portal.defaultViewportProfile()).contains(new ViewportProfile(1440, 900));
+        assertThat(portal.trace()).isEqualTo(UiTraceMode.OFF);
+        assertThat(portal.auth()).isEqualTo(
+                new UiAuthConfig(UiAuthScheme.FORM, "CLIENT_PORTAL_TEST_USERS", List.of("client", "operator", "no-rights"), "CLIENT_PORTAL_DISCOVERY"));
+        assertThat(ift.uiApplication("ghost-portal")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the ui section accepts the camelCase spelling of every key, like the rest of the format")
+    void uiApplicationsAcceptCamelCase() {
+        EnvironmentDefinition ift = parse("""
+                version: 2
+                environments:
+                  ift:
+                    uiApplications:
+                      client-portal:
+                        baseUrlRef: CLIENT_PORTAL_IFT_URL
+                        defaultViewport: desktop
+                        viewportProfiles:
+                          desktop: { width: 1440, height: 900 }
+                        trace: on-failure
+                        auth:
+                          scheme: storage-state
+                          credentialsPoolRef: POOL
+                          discoveryAccountRef: DISCOVERY
+                """).environment("ift").orElseThrow();
+
+        UiApplicationDefinition portal = ift.uiApplication("client-portal").orElseThrow();
+        assertThat(portal.defaultViewport()).isEqualTo("desktop");
+        assertThat(portal.trace()).isEqualTo(UiTraceMode.ON_FAILURE);
+        assertThat(portal.auth().scheme()).isEqualTo(UiAuthScheme.STORAGE_STATE);
+    }
+
+    @Test
+    @DisplayName("a ui-applications section in a version-1 document is refused with the version it needs — otherwise an older SDK would meet 'Unknown field'")
+    void uiApplicationsRequireFormatVersion2() {
+        String yaml = """
+                environments:
+                  ift:
+                    ui-applications:
+                      client-portal: { base-url-ref: CLIENT_PORTAL_IFT_URL }
+                """;
+
+        assertThatThrownBy(() -> parse(yaml))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("ui-applications")
+                .hasMessageContaining("requires environment registry format version 2")
+                .hasMessageContaining("environments.ift.ui-applications");
+        assertThatThrownBy(() -> parse("version: 1\n" + yaml))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("requires environment registry format version 2");
+    }
+
+    @Test
+    @DisplayName("a ui base-url-ref carrying a resolved URL or the SDK-internal literal marker is rejected fail-closed")
+    void uiApplicationRefRejectsValues() {
+        assertThatThrownBy(() -> parse("""
+                version: 2
+                environments:
+                  ift:
+                    ui-applications:
+                      client-portal: { base-url-ref: https://portal.ift.example }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("reference NAME")
+                .hasMessageContaining("environments.ift.ui-applications.client-portal");
+
+        assertThatThrownBy(() -> parse("""
+                version: 2
+                environments:
+                  ift:
+                    ui-applications:
+                      client-portal: { base-url-ref: "literal://https://portal.ift.example" }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("literal marker");
+    }
+
+    @Test
+    @DisplayName("ui auth references are guarded exactly like every other *-ref: a pasted credential is not a name")
+    void uiAuthRefsAreGuarded() {
+        assertThatThrownBy(() -> parse("""
+                version: 2
+                environments:
+                  ift:
+                    ui-applications:
+                      client-portal:
+                        base-url-ref: CLIENT_PORTAL_IFT_URL
+                        auth: { scheme: FORM, credentials-pool-ref: "Basic dXNlcjpwYXNz" }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("reference NAME")
+                .hasMessageContaining("client-portal.auth");
+    }
+
+    @Test
+    @DisplayName("the ui section is fail-closed: unknown keys, bad viewports, a default outside the profiles and an unknown scheme are rejected with their location")
+    void uiApplicationsFailClosed() {
+        assertThatThrownBy(() -> parse("""
+                version: 2
+                environments:
+                  ift:
+                    ui-applications:
+                      client-portal: { base-url-ref: URL, viewport: desktop }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("Unknown field 'viewport'")
+                .hasMessageContaining("environments.ift.ui-applications.client-portal");
+
+        assertThatThrownBy(() -> parse("""
+                version: 2
+                environments:
+                  ift:
+                    ui-applications:
+                      client-portal:
+                        base-url-ref: URL
+                        viewport-profiles: { desktop: { width: wide, height: 900 } }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("whole number")
+                .hasMessageContaining("viewport-profiles.desktop.width");
+
+        assertThatThrownBy(() -> parse("""
+                version: 2
+                environments:
+                  ift:
+                    ui-applications:
+                      client-portal:
+                        base-url-ref: URL
+                        default-viewport: tablet
+                        viewport-profiles: { desktop: { width: 1440, height: 900 } }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("tablet")
+                .hasMessageContaining("environments.ift.ui-applications.client-portal");
+
+        assertThatThrownBy(() -> parse("""
+                version: 2
+                environments:
+                  ift:
+                    ui-applications:
+                      client-portal:
+                        base-url-ref: URL
+                        auth: { scheme: OAUTH }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("OAUTH")
+                .hasMessageContaining("client-portal.auth");
+    }
+
+    @Test
+    @DisplayName("the ui auth key is 'scheme', not 'type' — the service spelling is the registry's one spelling (BR-37)")
+    void uiAuthUsesTheServiceSpelling() {
+        assertThatThrownBy(() -> parse("""
+                version: 2
+                environments:
+                  ift:
+                    ui-applications:
+                      client-portal:
+                        base-url-ref: URL
+                        auth: { type: FORM }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("Unknown field 'type'")
+                .hasMessageContaining("client-portal.auth");
+    }
+
+    @Test
+    @DisplayName("trace must be 'off' or 'on-failure'; an unquoted YAML 'on' (the boolean true) is refused rather than silently recording")
+    void traceValuesAreClosed() {
+        assertThatThrownBy(() -> parse("""
+                version: 2
+                environments:
+                  ift:
+                    ui-applications:
+                      client-portal: { base-url-ref: URL, trace: on }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("'off' or 'on-failure'")
+                .hasMessageContaining("environments.ift.ui-applications.client-portal.trace");
+    }
+
+    @Test
+    @DisplayName("roles keep their duplicates on the way in, so the value type's own invariant can reject them")
+    void duplicateRolesAreRejected() {
+        assertThatThrownBy(() -> parse("""
+                version: 2
+                environments:
+                  ift:
+                    ui-applications:
+                      client-portal:
+                        base-url-ref: URL
+                        auth: { scheme: FORM, credentials-pool-ref: POOL, roles: [client, client] }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("duplicates");
     }
 }

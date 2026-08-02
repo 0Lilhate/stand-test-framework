@@ -12,6 +12,7 @@ import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.ServiceEndpointDefinition;
 import ru.alfa.stand.test.core.environment.TopicDefinition;
+import ru.alfa.stand.test.core.environment.UiApplicationDefinition;
 import ru.alfa.stand.test.core.identifier.ScenarioId;
 import ru.alfa.stand.test.core.scenario.GenericStep;
 import ru.alfa.stand.test.core.scenario.Scenario;
@@ -329,6 +330,85 @@ class DefaultScenarioValidatorTest {
     }
 
     @Test
+    @DisplayName("guardrail: a ui step on a non-whitelisted application is a NON_WHITELISTED_UI_APPLICATION error, raised pre-flight")
+    void guardrail_unknownUiApplication_reportsForbiddenOp() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(uiStep("s1", "ui.open", "ghost-portal"))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, mainDbRegistry());
+
+        assertThat(result.errors()).extracting(ValidationIssue::code)
+                .contains(ForbiddenOperation.NON_WHITELISTED_UI_APPLICATION.code());
+        assertThat(result.errors()).extracting(ValidationIssue::message)
+                .anySatisfy(message -> assertThat(message).contains("UI application 'ghost-portal'").contains("ift"));
+    }
+
+    @Test
+    @DisplayName("guardrail: a whitelisted application alias passes, for every ui.* step type")
+    void guardrail_whitelistedUiApplication_passes() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(uiStep("s1", "ui.open", "client-portal"))
+                .step(uiStep("s2", "ui.click", "client-portal"))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, mainDbRegistry());
+
+        assertThat(result.isValid()).isTrue();
+    }
+
+    /**
+     * The whitelist is a dispatch on the step-type prefix, so a guardrail that is declared but wired to no
+     * prefix passes every test that only ever asserts a violation. This pair pins the wiring itself: the
+     * SAME parameters are rejected under {@code ui.} and ignored under a type no branch claims. Delete the
+     * {@code ui.} branch and the first half fails; widen the dispatch to catch everything and the second
+     * half fails.
+     */
+    @Test
+    @DisplayName("guardrail: the ui.* alias check fires because of the ui. branch — the same parameters under an unclaimed type are not checked")
+    void guardrail_uiApplicationCheck_isBoundToTheUiPrefix() {
+        Scenario onUiPrefix = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(uiStep("s1", "ui.expect", "ghost-portal"))
+                .build();
+        Scenario onUnclaimedPrefix = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(uiStep("s1", "custom.expect", "ghost-portal"))
+                .build();
+
+        assertThat(validator.validate(onUiPrefix, mainDbRegistry()).errors()).extracting(ValidationIssue::code)
+                .contains(ForbiddenOperation.NON_WHITELISTED_UI_APPLICATION.code());
+        assertThat(validator.validate(onUnclaimedPrefix, mainDbRegistry()).errors()).extracting(ValidationIssue::code)
+                .doesNotContain(ForbiddenOperation.NON_WHITELISTED_UI_APPLICATION.code());
+    }
+
+    /**
+     * The limit of the shared alias check, stated rather than left to be discovered: only a DECLARED alias
+     * is whitelisted, so a step omitting it passes this stage. For rest/kafka/grpc/db the adapter's
+     * parameter schema and its own re-resolution close the gap; for {@code ui.*} there is no adapter yet, so
+     * this test records that the "alias is required" rule is owed by the UI step schema and is not silently
+     * assumed to live here.
+     */
+    @Test
+    @DisplayName("guardrail: a step that declares no alias at all is not flagged here — requiring the alias is the step schema's rule, not the whitelist's")
+    void guardrail_missingAlias_isNotTheWhitelistsRule() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(GenericStep.of("s1", "ui.open"))
+                .step(GenericStep.of("s2", "rest.get"))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, mainDbRegistry());
+
+        assertThat(result.errors()).extracting(ValidationIssue::code)
+                .doesNotContain(
+                        ForbiddenOperation.NON_WHITELISTED_UI_APPLICATION.code(),
+                        ForbiddenOperation.NON_WHITELISTED_SERVICE.code());
+    }
+
+    @Test
     @DisplayName("the structural-only validate ignores the whitelist (no registry)")
     void structuralValidate_ignoresWhitelist() {
         Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
@@ -351,9 +431,15 @@ class DefaultScenarioValidatorTest {
         // exercised in isolation.
         ServiceEndpointDefinition service = new ServiceEndpointDefinition("client-service", "CLIENT_SERVICE_URL", null, null);
         TopicDefinition topic = new TopicDefinition("response-topic", "response.topic.physical", null, null);
+        UiApplicationDefinition application = new UiApplicationDefinition("client-portal", "CLIENT_PORTAL_URL");
         EnvironmentDefinition environment = new EnvironmentDefinition(
-                "ift", Map.of("client-service", service), Map.of("response-topic", topic), Map.of("mainDb", datasource), Map.of());
+                "ift", Map.of("client-service", service), Map.of("response-topic", topic), Map.of("mainDb", datasource), Map.of(),
+                null, Map.of(), Map.of("client-portal", application));
         return new InMemoryEnvironmentRegistry(Map.of("ift", environment));
+    }
+
+    private static GenericStep uiStep(String id, String type, String application) {
+        return new GenericStep(id, type, "", Map.of(StepParameterKeys.APPLICATION, application));
     }
 
     private static GenericStep dbStep(String id, String datasource, String sql) {

@@ -42,6 +42,9 @@ public enum ForbiddenOperation {
     /** Calling a gRPC target alias that is not whitelisted in the environment. */
     NON_WHITELISTED_GRPC_TARGET("NON_WHITELISTED_GRPC_TARGET", "Calling a gRPC target alias that is not whitelisted"),
 
+    /** Opening a UI application alias that is not whitelisted in the environment. */
+    NON_WHITELISTED_UI_APPLICATION("NON_WHITELISTED_UI_APPLICATION", "Opening a UI application alias that is not whitelisted"),
+
     /** Destructive SQL without an explicit write/destructive allow flag. */
     DESTRUCTIVE_SQL_WITHOUT_ALLOW("DESTRUCTIVE_SQL_WITHOUT_ALLOW", "Destructive SQL without an explicit write or destructive allow flag"),
 

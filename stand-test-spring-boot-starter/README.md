@@ -65,7 +65,7 @@ wire, just with an empty executor list.
 stand:
   test:
     enabled: true
-    version: 1                # registry FORMAT version (not the SDK version); absent means 1
+    version: 2                # registry FORMAT version (not the SDK version); absent means 1
     await:
       timeout: 30s
       poll-interval: 500ms
@@ -75,6 +75,19 @@ stand:
         enabled: true
     environments:
       ift:
+        ui-applications:      # requires version: 2
+          client-portal:
+            base-url-ref: CLIENT_PORTAL_IFT_URL
+            default-viewport: desktop
+            viewport-profiles:
+              desktop: { width: 1440, height: 900 }
+              mobile: { width: 390, height: 844 }
+            trace: "off"      # quote it: unquoted `off` is the YAML boolean false (accepted, but quoting says what you mean)
+            auth:             # key `scheme`, as for services; credentials are refs only — no value twin
+              scheme: FORM
+              credentials-pool-ref: CLIENT_PORTAL_TEST_USERS
+              roles: [client, operator]
+              discovery-account-ref: CLIENT_PORTAL_DISCOVERY
         services:
           client-service:
             base-url-ref: CLIENT_SERVICE_URL
@@ -114,14 +127,26 @@ The version of the environment-registry **format**, not of the SDK — the exact
 | ≤ supported | bound |
 | > supported | context startup fails with a message naming the declared version, the supported one and the action (upgrade `stand-test-*`) — never `Unknown field` |
 
+Sections introduced after version 1 must declare the version they arrived in: `ui-applications`
+requires `stand.test.version: 2`. Without that rule a configuration could carry a version-2 section
+while claiming version 1 — the very case the version key exists to diagnose.
+
+**UI applications** are addressed by alias exactly like services and topics; a scenario names
+`client-portal` and no step can carry a URL. `base-url` / `base-url-ref` behave like every other
+endpoint twin. Credentials under `auth` are **references only** — deliberately no value twin, so a UI
+credential cannot be routed through (and left in) the Spring `Environment`. Note the placeholder trap
+applies here too: never write `${VAR}` inside a UI `*-ref` — Spring collapses it before the SDK sees
+it, and the resolved address is then rejected as "not a reference name".
+
 ## Endpoint & credential values via Spring placeholders
 
-**Every** endpoint and credential field has a value twin that Spring resolves at context startup, so
-real `${VAR}` / `${VAR:default}` placeholders work uniformly:
+Every field in the table below has a value twin that Spring resolves at context startup, so real
+`${VAR}` / `${VAR:default}` placeholders work uniformly. The table is exhaustive — a field absent from
+it has no twin, and writing the value spelling for it binds nothing (see the note under the table):
 
 | Value field (Spring-resolved) | `*-ref` twin (lazy, adapter-resolved) | Resource |
 |---|---|---|
-| `base-url` | `base-url-ref` | service |
+| `base-url` | `base-url-ref` | service, **ui application** |
 | `url` | `url-ref` | datasource |
 | `target` | `target-ref` | gRPC target |
 | `bootstrap-servers` | `bootstrap-servers-ref` | Kafka cluster |
@@ -131,6 +156,11 @@ real `${VAR}` / `${VAR:default}` placeholders work uniformly:
 | `username` | `username-ref` | auth (**secret**) |
 | `token` | `token-ref` | auth (**secret**) |
 | `sasl-jaas-config` | `sasl-jaas-config-ref` | Kafka cluster (**secret**) |
+
+> **UI credentials are the deliberate exception.** `ui-applications.<alias>.auth.credentials-pool-ref`
+> and `discovery-account-ref` have **no** value twin: a UI account has no non-secret reading, and a twin
+> would materialise it in the Spring `Environment`. There is no `credentials-pool` / `discovery-account`
+> setter, so writing one binds nothing silently — use the `*-ref` spelling.
 
 ```yaml
 stand:

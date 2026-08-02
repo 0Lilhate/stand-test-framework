@@ -58,7 +58,8 @@ class ForbiddenOperationCoverageTest {
             Map.entry(ForbiddenOperation.NON_WHITELISTED_DATASOURCE, "runtime"),
             Map.entry(ForbiddenOperation.NON_WHITELISTED_SERVICE, "runtime"),
             Map.entry(ForbiddenOperation.NON_WHITELISTED_TOPIC, "runtime"),
-            Map.entry(ForbiddenOperation.NON_WHITELISTED_GRPC_TARGET, "runtime"));
+            Map.entry(ForbiddenOperation.NON_WHITELISTED_GRPC_TARGET, "runtime"),
+            Map.entry(ForbiddenOperation.NON_WHITELISTED_UI_APPLICATION, "runtime"));
 
     @Test
     @DisplayName("every core ForbiddenOperation code is catalogued as a row of the forbidden-ops table")

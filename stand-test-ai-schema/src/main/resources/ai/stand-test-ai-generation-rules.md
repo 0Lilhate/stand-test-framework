@@ -100,6 +100,7 @@ structurally by the JSON Schema; **runtime** = enforced by the core `ScenarioVal
 | `NON_WHITELISTED_SERVICE` | Use only whitelisted REST service aliases; the runtime validator rejects an unknown `service` alias pre-flight, before any step runs. | runtime |
 | `NON_WHITELISTED_TOPIC` | Use only whitelisted Kafka topic aliases; the runtime validator rejects an unknown `topic` alias pre-flight, before any step runs. | runtime |
 | `NON_WHITELISTED_GRPC_TARGET` | Use only whitelisted gRPC target aliases; the runtime validator rejects an unknown `target` alias pre-flight, before any step runs. | runtime |
+| `NON_WHITELISTED_UI_APPLICATION` | Address a UI application by its registry alias, never by URL; the runtime validator rejects an unknown `application` alias of a `ui.*` step pre-flight, before a browser is started. `ui.*` steps are not part of the executable schema subset yet — the guardrail exists so the alias rule holds the moment they are. | runtime |
 | `DESTRUCTIVE_SQL_WITHOUT_ALLOW` | No `drop`/`truncate`/`delete`/`update`/`alter` — read-only `SELECT` only. | schema + runtime |
 | `BUSINESS_LOGIC_IN_SDK` | Keep service-specific business logic out of the scenario/SDK. | prompt |
 | `IMPERATIVE_EAGER_IO` | No imperative eager-IO — the document is fully declarative. | schema |

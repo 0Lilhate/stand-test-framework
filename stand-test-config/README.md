@@ -36,7 +36,7 @@ Add the module (typically `testImplementation`) and drop a `stand-test-environme
 classpath (`src/test/resources`):
 
 ```yaml
-version: 1                                        # registry FORMAT version (optional; absent means 1)
+version: 2                                        # registry FORMAT version (optional; absent means 1)
 environments:
   ift:
     services:
@@ -62,6 +62,19 @@ environments:
     kafka-clusters:                                 # additional NAMED clusters
       audit:
         bootstrap-servers-ref: AUDIT_KAFKA_BOOTSTRAP
+    ui-applications:                                # requires version: 2
+      client-portal:
+        base-url-ref: CLIENT_PORTAL_IFT_URL         # env-var NAME, never the URL
+        default-viewport: desktop                   # must name a declared profile
+        viewport-profiles:
+          desktop: { width: 1440, height: 900 }
+          mobile: { width: 390, height: 844 }
+        trace: off                                  # off (default) | on-failure
+        auth:                                       # key `scheme`, as for services — never `type`
+          scheme: FORM                              # NONE | FORM | STORAGE_STATE | SSO
+          credentials-pool-ref: CLIENT_PORTAL_TEST_USERS
+          roles: [client, operator]
+          discovery-account-ref: CLIENT_PORTAL_DISCOVERY
 ```
 
 ## Format version (root key `version`)
@@ -77,6 +90,18 @@ with the unhelpful `Unknown field '<section>'`. The rules (shared with the Sprin
 | ≤ supported | read |
 | > supported | refused with a message naming the file's version, the supported one and the action (upgrade `stand-test-*`) |
 | not a whole number, or ≤ 0 | configuration error (fail-closed) |
+
+A section introduced after version 1 requires the document to declare at least the version it arrived
+in — `ui-applications` requires `version: 2`. That rule is what makes the promise real: it stops a file
+from carrying a version-2 section while claiming version 1, which is exactly the case an older SDK
+would greet with `Unknown field`.
+
+**UI applications.** `ui-applications` whitelists the aliases a UI scenario may address; a scenario
+names `client-portal`, and there is nowhere in a step to write a URL instead. Viewport, trace and
+sign-in are configuration, so switching a run to the mobile viewport changes this file, not a test.
+Note the YAML detail: unquoted `off` is the boolean `false` in YAML 1.1, which is accepted as the
+`off` mode; `on` is refused — the modes are `off` and `on-failure`. The `ui.*` step types themselves
+are not part of the SDK yet; the registry section and the pre-flight alias guardrail are.
 
 **Multiple Kafka clusters:** the single `kafka-cluster` is the environment's default; `kafka-clusters`
 whitelists named clusters, and a topic selects one via `cluster: <alias>` (e.g.

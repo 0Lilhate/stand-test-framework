@@ -54,7 +54,7 @@ testImplementation("ru.alfa.stand.test:stand-test-allure")  // опционал�
 переменной окружения, никогда не значение**: endpoints и секреты не попадают в исходники:
 
 ```yaml
-version: 1                                       # версия ФОРМАТА файла (не версия SDK); можно опустить — тогда 1
+version: 2                                       # версия ФОРМАТА файла (не версия SDK); можно опустить — тогда 1
 environments:
   ift:
     services:
@@ -70,6 +70,15 @@ environments:
         password-ref: MAIN_DB_PASSWORD
         allowed-schemas: [test_data]
         write-allowed: true
+    ui-applications:                             # требует version: 2
+      client-portal:
+        base-url-ref: CLIENT_PORTAL_IFT_URL      # имя переменной окружения, не URL
+        default-viewport: desktop                # профиль прогона — конфигурацией, не полем сценария
+        viewport-profiles:
+          desktop: { width: 1440, height: 900 }
+          mobile:  { width: 390, height: 844 }
+        trace: off                               # off (умолчание) | on-failure
+        auth: { scheme: FORM, credentials-pool-ref: CLIENT_PORTAL_TEST_USERS, roles: [client, operator] }
 ```
 
 ### Версия формата реестра
@@ -84,6 +93,16 @@ environments:
 | `version` ≤ поддерживаемой | читается |
 | `version` > поддерживаемой | отказ с сообщением о **версии формата**: указывает версию файла, поддерживаемую версию и что сделать (обновить `stand-test-*`) — вместо `Unknown field` |
 | не целое число или ≤ 0 | ошибка конфигурации (fail-closed) |
+
+Секции, появившиеся после версии 1, требуют явного объявления версии: `ui-applications` — это
+`version: 2`. Смысл правила в том, что более старый SDK, встретив такой файл, скажет «файл версии 2,
+поддерживается 1 — обновите SDK», а не «неизвестный ключ `ui-applications`».
+
+**UI-приложения** адресуются логическим алиасом ровно так же, как сервисы и топики: сценарий называет
+`client-portal`, реестр — единственное место, где алиас превращается в адрес, произвольный URL в шаге
+указать негде. Неизвестный алиас отвергается валидатором **до** запуска шага
+(`NON_WHITELISTED_UI_APPLICATION`). Сами `ui.*`-шаги в SDK пока не поставляются — секция реестра и
+guardrail заведены заранее (волна 1 UI-тестирования).
 
 **3. Напишите первый тест.** `@StandTest` инжектит `StandClient`, собранный из адаптеров, найденных на
 classpath — никакого кода проводки:
