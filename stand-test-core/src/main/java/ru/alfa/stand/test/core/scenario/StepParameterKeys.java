@@ -21,6 +21,13 @@ public final class StepParameterKeys {
     public static final String GRPC_PREFIX = "grpc.";
     /** Prefix of the core step type produced for a UI step (for example {@code ui.open}). */
     public static final String UI_PREFIX = "ui.";
+    /**
+     * The one UI step type core knows by name, because the guardrail validator has a rule about it: a
+     * sign-in step must name a role when the application declares the roles a scenario may request. The
+     * other {@code ui.*} types stay the adapter's business; spelling this one in both places instead
+     * would let the validator's rule and the adapter's step type drift silently apart.
+     */
+    public static final String UI_LOGIN_TYPE = "ui.login";
 
     /** Parameter key: HTTP method name. */
     public static final String METHOD = "method";
@@ -86,6 +93,31 @@ public final class StepParameterKeys {
 
     /** Parameter key: logical UI application alias resolved via the environment registry. */
     public static final String APPLICATION = "application";
+    /** Parameter key (UI): the element address of the step, as a nested locator map. */
+    public static final String LOCATOR = "locator";
+    /** Nested key (UI locator): the addressing strategy ({@code ru.alfa.stand.test.ui.LocatorStrategy}). */
+    public static final String STRATEGY = "strategy";
+    /** Nested key (UI locator): the accessible name, only for a ROLE locator. */
+    public static final String ACCESSIBLE_NAME = "accessibleName";
+    /** Nested key (UI locator): whether the element holds a secret or personal data, so its values are masked. */
+    public static final String SENSITIVE = "sensitive";
+    /** Parameter key (UI): the value typed by a fill step; also the operand of a nested locator map. */
+    public static final String VALUE = "value";
+    /** Nested key (UI assertion): the element property under test ({@code ru.alfa.stand.test.ui.UiProperty}). */
+    public static final String PROPERTY = "property";
+    /** Nested key (UI assertion / capture): the element attribute name. */
+    public static final String ATTRIBUTE = "attribute";
+    /** Nested key (UI capture): where the captured value is read from ({@code ru.alfa.stand.test.ui.UiCaptureSource}). */
+    public static final String SOURCE = "source";
+    /** Parameter key (UI sign-in): the role whose test account the step leases from the application's pool. */
+    public static final String ROLE = "role";
+    /**
+     * Parameter key (UI sign-in): the bound on waiting for a free test account, in milliseconds. It is a
+     * timeout key like any other, so the guardrail validator bounds it by
+     * {@code DefaultScenarioValidator.MAX_TIMEOUT_MILLIS} — waiting for an exhausted account pool is a
+     * wait, and every wait in this SDK is bounded.
+     */
+    public static final String ACCOUNT_TIMEOUT_MILLIS = "accountTimeoutMillis";
 
     /** Parameter key: logical gRPC target alias resolved via the environment registry. */
     public static final String TARGET = "target";

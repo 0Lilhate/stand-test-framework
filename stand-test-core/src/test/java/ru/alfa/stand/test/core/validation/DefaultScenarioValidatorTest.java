@@ -2,6 +2,7 @@ package ru.alfa.stand.test.core.validation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
@@ -13,6 +14,11 @@ import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.ServiceEndpointDefinition;
 import ru.alfa.stand.test.core.environment.TopicDefinition;
 import ru.alfa.stand.test.core.environment.UiApplicationDefinition;
+import ru.alfa.stand.test.core.environment.UiAuthConfig;
+import ru.alfa.stand.test.core.environment.UiAuthScheme;
+import ru.alfa.stand.test.core.environment.UiLoginChallenge;
+import ru.alfa.stand.test.core.environment.UiLoginFormConfig;
+import ru.alfa.stand.test.core.environment.UiTraceMode;
 import ru.alfa.stand.test.core.identifier.ScenarioId;
 import ru.alfa.stand.test.core.scenario.GenericStep;
 import ru.alfa.stand.test.core.scenario.Scenario;
@@ -346,6 +352,108 @@ class DefaultScenarioValidatorTest {
     }
 
     @Test
+    @DisplayName("guardrail: a ui.login step must name a role once the application declares them — 'any account' is not expressible, and it is caught pre-flight")
+    void guardrail_uiLoginWithoutRole_isRejected() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(loginStep("s1", "client-portal", null))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, roleAwarePortalRegistry());
+
+        assertThat(result.errors()).extracting(ValidationIssue::code).contains("UI_LOGIN_ROLE_REQUIRED");
+        assertThat(result.errors()).extracting(ValidationIssue::message)
+                .anySatisfy(message -> assertThat(message).contains("client-portal").contains("client", "manager"));
+    }
+
+    @Test
+    @DisplayName("guardrail: a ui.login step naming a role the application does not declare is rejected pre-flight, listing the roles that exist")
+    void guardrail_uiLoginWithUnknownRole_isRejected() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(loginStep("s1", "client-portal", "auditor"))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, roleAwarePortalRegistry());
+
+        assertThat(result.errors()).extracting(ValidationIssue::code).contains("UI_LOGIN_ROLE_UNKNOWN");
+    }
+
+    @Test
+    @DisplayName("guardrail: a declared role passes, and an application declaring no roles needs none — the rule follows the registry, not the step")
+    void guardrail_uiLoginRoleRules_areDrivenByTheRegistry() {
+        Scenario declared = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(loginStep("s1", "client-portal", "manager"))
+                .build();
+        Scenario noRolesDeclared = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(loginStep("s1", "client-portal", null))
+                .build();
+
+        assertThat(validator.validate(declared, roleAwarePortalRegistry()).isValid()).isTrue();
+        // The registry of mainDbRegistry() declares the same alias with no auth at all: no role is required.
+        assertThat(validator.validate(noRolesDeclared, mainDbRegistry()).isValid()).isTrue();
+    }
+
+    @Test
+    @DisplayName("guardrail: the account wait is a timeout like any other — beyond the SDK bound it is UNBOUNDED_TIMEOUT")
+    void guardrail_accountTimeout_isBounded() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(new GenericStep("s1", StepParameterKeys.UI_LOGIN_TYPE, "", Map.of(
+                        StepParameterKeys.APPLICATION, "client-portal",
+                        StepParameterKeys.ROLE, "manager",
+                        StepParameterKeys.ACCOUNT_TIMEOUT_MILLIS, DefaultScenarioValidator.MAX_TIMEOUT_MILLIS + 1)))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, roleAwarePortalRegistry());
+
+        assertThat(result.errors()).extracting(ValidationIssue::code).contains(ForbiddenOperation.UNBOUNDED_TIMEOUT.code());
+        assertThat(result.errors()).extracting(ValidationIssue::message)
+                .anySatisfy(message -> assertThat(message).contains(StepParameterKeys.ACCOUNT_TIMEOUT_MILLIS));
+    }
+
+    @Test
+    @DisplayName("guardrail: a poll interval larger than the wait it belongs to is UNBOUNDED_TIMEOUT — each bound is legal alone, the pair is not")
+    void guardrail_pollIntervalLargerThanTimeout_isRejected() {
+        Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(new GenericStep("s1", "kafka.expect", "", Map.of(
+                        StepParameterKeys.TOPIC, "response-topic",
+                        StepParameterKeys.TIMEOUT_MILLIS, 500L,
+                        StepParameterKeys.POLL_INTERVAL_MILLIS, 60_000L)))
+                .build();
+
+        ValidationResult result = validator.validate(scenario, mainDbRegistry());
+
+        assertThat(result.errors()).extracting(ValidationIssue::code).contains(ForbiddenOperation.UNBOUNDED_TIMEOUT.code());
+        assertThat(result.errors()).extracting(ValidationIssue::message)
+                .anySatisfy(message -> assertThat(message).contains("polls every 60000 ms inside a wait of 500 ms"));
+    }
+
+    @Test
+    @DisplayName("guardrail: an interval equal to or below the wait passes, and a step declaring only one of the two is not the pair rule's business")
+    void guardrail_pollIntervalWithinTimeout_passes() {
+        Scenario within = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(new GenericStep("s1", "kafka.expect", "", Map.of(
+                        StepParameterKeys.TOPIC, "response-topic",
+                        StepParameterKeys.TIMEOUT_MILLIS, 30_000L,
+                        StepParameterKeys.POLL_INTERVAL_MILLIS, 30_000L)))
+                .build();
+        Scenario intervalOnly = Scenario.builder(ScenarioId.of("flow"))
+                .environment("ift")
+                .step(new GenericStep("s1", "kafka.expect", "", Map.of(
+                        StepParameterKeys.TOPIC, "response-topic",
+                        StepParameterKeys.POLL_INTERVAL_MILLIS, 60_000L)))
+                .build();
+
+        assertThat(validator.validate(within, mainDbRegistry()).isValid()).isTrue();
+        assertThat(validator.validate(intervalOnly, mainDbRegistry()).isValid()).isTrue();
+    }
+
+    @Test
     @DisplayName("guardrail: a whitelisted application alias passes, for every ui.* step type")
     void guardrail_whitelistedUiApplication_passes() {
         Scenario scenario = Scenario.builder(ScenarioId.of("flow"))
@@ -440,6 +548,34 @@ class DefaultScenarioValidatorTest {
 
     private static GenericStep uiStep(String id, String type, String application) {
         return new GenericStep(id, type, "", Map.of(StepParameterKeys.APPLICATION, application));
+    }
+
+    /**
+     * A registry whose one UI application declares the roles a scenario may request — the shape that makes
+     * naming a role mandatory.
+     */
+    private static EnvironmentRegistry roleAwarePortalRegistry() {
+        UiAuthConfig auth = new UiAuthConfig(
+                UiAuthScheme.FORM,
+                "CLIENT_PORTAL_ACCOUNTS",
+                List.of("client", "manager"),
+                null,
+                new UiLoginFormConfig("/login", "testId=login-username", "testId=login-password", "role=button:Sign in", "testId=user-menu"),
+                UiLoginChallenge.NONE);
+        UiApplicationDefinition application = new UiApplicationDefinition(
+                "client-portal", "CLIENT_PORTAL_URL", null, Map.of(), UiTraceMode.OFF, auth);
+        EnvironmentDefinition environment = new EnvironmentDefinition(
+                "ift", Map.of(), Map.of(), Map.of(), Map.of(), null, Map.of(), Map.of("client-portal", application));
+        return new InMemoryEnvironmentRegistry(Map.of("ift", environment));
+    }
+
+    private static GenericStep loginStep(String id, String application, String role) {
+        Map<String, Object> parameters = new java.util.LinkedHashMap<>();
+        parameters.put(StepParameterKeys.APPLICATION, application);
+        if (role != null) {
+            parameters.put(StepParameterKeys.ROLE, role);
+        }
+        return new GenericStep(id, StepParameterKeys.UI_LOGIN_TYPE, "", parameters);
     }
 
     private static GenericStep dbStep(String id, String datasource, String sql) {
