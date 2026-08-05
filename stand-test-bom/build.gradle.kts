@@ -30,6 +30,7 @@ dependencies {
     api(project(":stand-test-kafka"))
     api(project(":stand-test-db"))
     api(project(":stand-test-grpc"))
+    api(project(":stand-test-ui"))
     api(project(":stand-test-allure"))
     api(project(":stand-test-scenario-yaml"))
     api(project(":stand-test-ai-schema"))

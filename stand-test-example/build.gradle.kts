@@ -21,6 +21,10 @@ dependencies {
     // composition proof covers Kafka too. The published SDK never exposes kafka-clients transitively.
     testImplementation(libs.kafka.clients)
     testImplementation(project(":stand-test-grpc"))
+    // The UI adapter is on the classpath for ONE reason: ModuleDependencyArchTest is the only place the
+    // whole module graph can be analysed at once, and the rules that keep Playwright out of core and out
+    // of every other module are vacuous unless the ui module's bytecode is actually imported.
+    testImplementation(project(":stand-test-ui"))
     testImplementation(project(":stand-test-allure"))
     // The @StandTest path resolves its EnvironmentRegistry from the stand.test.environments section of
     // src/test/resources/application.yml through stand-test-config's FileEnvironmentRegistry SPI
