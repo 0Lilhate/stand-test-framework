@@ -199,14 +199,42 @@ class KitBatchTest {
     }
 
     @Test
-    @DisplayName("the real evaluation dataset is discovered whole — fifteen cases, each with its expectations")
+    @DisplayName("the real evaluation dataset is discovered whole — every case, each with its expectations")
     void discovery_findsTheShippedDataset() throws IOException {
         Path root = repositoryRoot();
         Answer answer = run(root, List.of("node", root.resolve(BATCH).toString(),
                 "docs/agent-evaluation/dataset/cases", "--dry-run"));
 
         assertThat(answer.exitCode()).isZero();
-        assertThat(answer.output()).contains("15 кейсов", "pos-showcase-format-200 (+ case.yml)", "nocontext-unknown-service (+ case.yml)");
+        assertThat(answer.output()).contains("27 кейсов", "pos-showcase-format-200 (+ case.yml)", "nocontext-unknown-service (+ case.yml)",
+                "ui-pos-support-request-registered (+ case.yml)");
+    }
+
+    /**
+     * The branch a case belongs to decides which command drives it, and getting it wrong is not cosmetic.
+     *
+     * <p>Before this, the batch had one prompt: {@code /stand-test-generate-java-test}. Handed a UI case it
+     * would run the protocol stages — no discovery — and the locators would come from nothing but
+     * plausibility. That is the single artifact the UI guardrails call the worst this branch can produce:
+     * it compiles, it survives review by eye, and it fails at run time exactly like markup drift.
+     *
+     * <p>The routing is read from {@code case.yml} and never sniffed out of the case text, so this asserts
+     * both directions on the real corpus: a `ui-…` category gets the UI command, everything else keeps the
+     * command it always had.
+     */
+    @Test
+    @DisplayName("a UI case is routed to the UI command and a protocol case is not")
+    void discovery_routesEachCaseToItsBranch() throws IOException {
+        Path root = repositoryRoot();
+        Answer answer = run(root, List.of("node", root.resolve(BATCH).toString(),
+                "docs/agent-evaluation/dataset/cases", "--dry-run"));
+
+        assertThat(answer.output())
+                .as("a UI case taken through the protocol pipeline skips discovery, and every locator it then writes is invented")
+                .contains("ui-pos-support-request-registered (+ case.yml) ← docs/agent-evaluation/dataset/cases/ui-pos-support-request-registered/input.md  [/stand-test-generate-ui-test]");
+        assertThat(answer.output())
+                .as("the protocol half must keep the command it always had")
+                .contains("pos-showcase-format-200 (+ case.yml) ← docs/agent-evaluation/dataset/cases/pos-showcase-format-200/input.md  [/stand-test-generate-java-test]");
     }
 
     @Test
@@ -220,7 +248,7 @@ class KitBatchTest {
 
         assertThat(answer.exitCode()).isZero();
         assertThat(answer.output()).contains("GENERATED", "order");
-        assertThat(reportOf(project)).contains("| order | GENERATED |");
+        assertThat(reportOf(project)).contains("| order | protocol | GENERATED |");
         assertThat(Files.exists(project.resolve("batch/order.log"))).as("the model's own words are kept for a person, and used for nothing else").isTrue();
     }
 

@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Stream;
@@ -134,6 +135,104 @@ class EvaluationDatasetPatternsTest {
         assertThat(blind)
                 .as("a plain YAML scalar processes no escapes, so `Thread\\\\.sleep` reaches the engine demanding a literal backslash — present, green, and unable to fail")
                 .isEmpty();
+    }
+
+    /**
+     * A named forbidden construct that has a canonical spelling is backed by a pattern that finds it.
+     *
+     * <p>`expected.forbiddenConstructs` is the readable half of the rule and `forbiddenArtifactPatterns`
+     * is the half a machine runs. Naming `thread-sleep` and shipping no regex for it reads, in a report,
+     * exactly like a case that checks for sleeps — and checks for nothing. That is the same shape as the
+     * double-escaped patterns this file was written for: present, green, and blind.
+     *
+     * <p>Only constructs whose violation has ONE canonical spelling are in the table. `invented-locator`
+     * and `irreversible-action` deliberately are not: no regex distinguishes a fabricated locator from a
+     * real one, and a pattern forbidding the word «Удалить» would flag the report that correctly explains
+     * what it refused to click. Those invariants are held by the review gates, and the cases say so in
+     * `notes` rather than pretending otherwise.
+     */
+    @Test
+    @DisplayName("every named construct with a canonical spelling has a pattern that finds it")
+    void forbiddenConstructs_areBackedByAPattern() {
+        // The spellings are the VIOLATION as it appears in code, not the word as it appears in a review.
+        // That distinction is the fix for a real defect: the mandated safety-review template carries the
+        // row "No Thread.sleep / manual polling", the completeness checklist carries "No … or XPath appears
+        // in the case", and the protocol sweep carries a bare `Awaitility|…|Authorization`. Patterns written
+        // as bare words therefore fired on the reports the same cases REQUIRE — every correct run would have
+        // failed on the artifact proving it was correct.
+        Map<String, List<String>> canonical = Map.of(
+                "thread-sleep", List.of("Thread.sleep("),
+                "awaitility", List.of("Awaitility."),
+                "driver-wait", List.of("waitForTimeout", "waitForSelector"),
+                "literal-url", List.of("http://", "https://"),
+                "xpath", List.of("By.xpath", "//*[@", "xpath="));
+
+        List<String> unbacked = new ArrayList<>();
+        int checked = 0;
+        for (Path file : caseFiles()) {
+            List<String> declared = declaredConstructs(file);
+            List<String> patterns = declaredPatterns(file);
+            for (String construct : declared) {
+                List<String> spellings = canonical.get(construct);
+                if (spellings == null) {
+                    continue;
+                }
+                checked++;
+                boolean found = spellings.stream().anyMatch(spelling ->
+                        patterns.stream().anyMatch(pattern -> Pattern.compile(pattern).matcher(spelling).find()));
+                if (!found) {
+                    unbacked.add(file.getParent().getFileName() + ": " + construct + " назван, но ни один шаблон не находит " + spellings);
+                }
+            }
+        }
+
+        assertThat(checked).as("if nothing is paired here the reader is wrong and this checks the empty set").isGreaterThanOrEqualTo(10);
+        assertThat(unbacked).as("правило, названное человеку и не запущенное машиной, читается в отчёте как проверенное").isEmpty();
+    }
+
+    private static List<Path> caseFiles() {
+        Path root = repositoryRoot().resolve(DATASET);
+        try (Stream<Path> walk = Files.walk(root, 2)) {
+            return walk.filter(path -> path.getFileName().toString().equals("case.yml")).sorted().toList();
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to walk " + root, e);
+        }
+    }
+
+    /** The items directly under a key, by line — the same reading the hooks do, and for the same reason. */
+    private static List<String> itemsUnder(Path file, String key) {
+        List<String> items = new ArrayList<>();
+        boolean inside = false;
+        int indent = 0;
+        for (String line : read(file).split("\n")) {
+            if (line.strip().equals(key + ":")) {
+                inside = true;
+                indent = line.length() - line.stripLeading().length();
+                continue;
+            }
+            if (!inside) {
+                continue;
+            }
+            String trimmed = line.stripLeading();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            int own = line.length() - trimmed.length();
+            if (own < indent || !trimmed.startsWith("- ")) {
+                inside = false;
+                continue;
+            }
+            items.add(trimmed.substring(2).strip().replaceAll("^[\"']|[\"']$", ""));
+        }
+        return items;
+    }
+
+    private static List<String> declaredConstructs(Path file) {
+        return itemsUnder(file, "forbiddenConstructs");
+    }
+
+    private static List<String> declaredPatterns(Path file) {
+        return itemsUnder(file, "forbiddenArtifactPatterns");
     }
 
     @Test

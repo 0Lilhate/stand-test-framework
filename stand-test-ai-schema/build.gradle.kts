@@ -85,4 +85,25 @@ tasks.test {
     // README's "все 15 файлов проходят валидацию" would stay UP-TO-DATE and green while the rule it
     // checks had changed underneath it.
     inputs.dir(rootDir.resolve("docs/agent-evaluation")).withPropertyName("standTestEvaluationDataset")
+
+    // TrainingMaterialLinksTest reads the kit's ROOT documents — the training materials. The bundle
+    // tree above covers only `.claude/**` and `.opencode/**`, so without this a renamed skill file
+    // would leave the test that checks the links UP-TO-DATE and the walkthrough pointing at nothing.
+    inputs.files(
+        rootDir.resolve("docs/ai-agent/example-ui-test-case-walkthrough.md"),
+        rootDir.resolve("docs/ai-agent/usage-guide.md"),
+    ).withPropertyName("standTestTrainingMaterials")
+
+    // CiPipelineConfigTest reads the pipeline at the repository root. Undeclared, an edit that added
+    // `|| true` to the Gradle invocation would leave the test that forbids it UP-TO-DATE and green —
+    // and a pipeline is the one artefact whose failure mode is silence.
+    inputs.file(rootDir.resolve(".gitlab-ci.yml")).withPropertyName("standTestCiPipeline")
+
+    // UiLineDocumentHygieneTest reads every document of the UI line plus the BRD whose appendices the
+    // conflict is about (UITG-F002). These documents are snapshots by nature: they are written once,
+    // quoted for months and go stale silently when a module lands. That is exactly the case where an
+    // undeclared input hurts most — the correction removed today would not turn the test red until
+    // something unrelated invalidated the cache.
+    inputs.dir(rootDir.resolve("docs/ui-test-generation")).withPropertyName("standTestUiLineDocuments")
+    inputs.file(rootDir.resolve("docs/brd/ui-test-generation-brd.md")).withPropertyName("standTestUiLineBrd")
 }

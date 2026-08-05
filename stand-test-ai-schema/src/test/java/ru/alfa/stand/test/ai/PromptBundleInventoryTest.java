@@ -29,7 +29,10 @@ import org.junit.jupiter.api.Test;
  * Updating the snapshot is a one-line, deliberate act — which is the point: the migration that edits
  * 32 prompts must be provably additive.
  *
- * <p>Covered are the four asset directories of each copy plus the opencode-only loader manual. That
+ * <p>Covered are the seven asset directories of each copy ({@code commands}, {@code rules},
+ * {@code skills}, {@code workflows}, {@code hooks}, {@code agents}, {@code plugin} — {@code agents}
+ * exists only in the Claude Code copy, {@code plugin} only in the opencode one) plus the bundle-root
+ * assets and the opencode-only loader manual. That
  * is exactly the file set {@code stand-test-ai-schema/build.gradle.kts} declares as a test input, so
  * a change to any pinned file re-runs this test instead of returning a stale {@code FROM-CACHE}
  * result. The machine-local residue that also lives in those bundle directories ({@code .env*},
@@ -42,7 +45,7 @@ class PromptBundleInventoryTest {
     private static final List<String> BUNDLES = List.of(".claude", ".opencode");
 
     /** Asset directories that carry the prompts themselves plus their templates, examples and checklists. */
-    private static final List<String> ASSET_DIRECTORIES = List.of("commands", "rules", "skills", "workflows", "hooks", "agents");
+    private static final List<String> ASSET_DIRECTORIES = List.of("commands", "rules", "skills", "workflows", "hooks", "agents", "plugin");
 
     /**
      * Single files that are assets in their own right, in whichever copy carries them.
@@ -55,11 +58,18 @@ class PromptBundleInventoryTest {
     private static final List<String> ASSET_FILES = List.of("settings.json", ".gitignore");
 
     /**
-     * Bundle-root files that legitimately exist only in the opencode copy. Its loader config
+     * Files that legitimately exist only in the opencode copy.
+     *
+     * <p>{@code plugin/stand-guard.js} is the opencode half of the ENFORCEMENT layer: the same guard,
+     * bound to this host's tool events because opencode has no {@code settings.json} to bind it with.
+     * It is listed here rather than copied across — Claude Code binds the guard through
+     * {@code settings.json} and has no use for a plugin file.
+     *
+     * <p>The rest are bundle-root loader files. Its loader config
      * ({@code opencode.json}) and credential template ({@code env.template}) are deliberately absent:
      * {@code opencode.json} gets its own safety test, and neither is a prompt.
      */
-    private static final Set<String> OPENCODE_ONLY = new TreeSet<>(Set.of("AGENTS.md"));
+    private static final Set<String> OPENCODE_ONLY = new TreeSet<>(Set.of("AGENTS.md", "plugin/stand-guard.js"));
 
     /**
      * Paths that legitimately exist only in the Claude copy: the enforcement layer.

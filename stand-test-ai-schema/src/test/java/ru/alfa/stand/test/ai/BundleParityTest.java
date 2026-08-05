@@ -32,7 +32,7 @@ import org.junit.jupiter.api.Test;
 class BundleParityTest {
 
     /** Files that legitimately exist only in the opencode bundle (its loader config and manual). */
-    private static final Set<String> OPENCODE_ONLY = new TreeSet<>(Set.of("AGENTS.md", "opencode.json", "env.template"));
+    private static final Set<String> OPENCODE_ONLY = new TreeSet<>(Set.of("AGENTS.md", "opencode.json", "env.template", "plugin/stand-guard.js"));
 
     /**
      * Files whose content legitimately differs, because they spell the bundle directory in their own
