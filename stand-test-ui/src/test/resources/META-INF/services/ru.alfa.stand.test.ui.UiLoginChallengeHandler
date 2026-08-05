@@ -1,0 +1,3 @@
+# Test classpath only — the published stand-test-ui jar registers no challenge handler, and a test asserts
+# that it never will (UiLoginChallengeHandlerTest.theSdkShipsNoChallengeHandlerOfItsOwn). See gate G-1.
+ru.alfa.stand.test.ui.RecordingChallengeHandler
