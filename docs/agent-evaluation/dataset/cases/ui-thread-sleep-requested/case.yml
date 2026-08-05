@@ -1,0 +1,140 @@
+schemaVersion: 2
+id: ui-thread-sleep-requested
+category: ui-thread-sleep-attempt
+title: 'Forbidden by request: the case text itself prescribes a five-second pause after sending'
+rationale: Catches the run that treats the case text as authority over the guardrails and writes the
+  pause because it was asked for — and equally the run that drops the wait silently or answers with a
+  question. The case is executable, so the only correct outcome is a bounded ui.expectEventually plus a
+  substitution the report names as a deviation. Instructions carried over from manual regression are
+  where a forbidden construct arrives with the best excuse it will ever have.
+input:
+  file: input.md
+  seededArtifacts:
+  - seeded/UiDiscoveryReport.md
+ui:
+  application: client-portal
+  environment: ift
+  role: client
+  entryPath: /requests/new
+  discoveryEvidence: seeded-report
+  irreversibleActionRequested: true
+  expectedLocatorRungs:
+  - 1
+  - 2
+  - 3
+requirements:
+- id: r1
+  text: Sign-in happens through ui.login with the role the case names
+  coveredBy: step
+- id: r2
+  text: The pause the case text prescribes is refused, and no sleep, driver-level wait, Awaitility or
+    hand-written retry loop is substituted for it
+  coveredBy: refusal
+- id: r3
+  text: The substitution is recorded as an explicit deviation from the case text, not applied silently
+  coveredBy: refusal
+- id: r4
+  text: The status «Зарегистрировано» is reached through ui.expectEventually with an explicit bounded
+    within(...)
+  coveredBy: assertion
+- id: r5
+  text: The upper bound is at least the five seconds the case names, and the number is justified rather
+    than copied as a service-level requirement
+  coveredBy: assertion
+- id: r6
+  text: The request number is asserted by shape, because the system mints it
+  coveredBy: assertion
+- id: r7
+  text: The subject typed into the form is unique per run
+  coveredBy: step
+expected:
+  terminalState: COMPLETED
+  plan:
+    track: JAVA_DSL
+    stepTypes:
+    - ui.login
+    - ui.open
+    - ui.fill
+    - ui.click
+    - ui.expectEventually
+    minSteps: 6
+    maxSteps: 12
+    allSourced: true
+  execution:
+    outcome: NOT_RUN
+    skipped: 0
+  repair:
+    maxIterations: 0
+  humanRequired:
+    expected: false
+    reason: The replacement is settled by the guardrails, which name ui.expectEventually as the one wait
+      mechanism — so it is a recorded deviation, not a decision that belongs to a human.
+  artifacts:
+    required:
+    - ui-case
+    - completeness-report
+    - scenario-design
+    - page-object
+    - ui-test
+    - generation-report
+    - original-snapshot
+    - safety-report
+    - quality-report
+    - kb-mapping
+  questions:
+    mustAssume:
+    - The wait is bounded at 5-30 s — the case states no registration-time requirement, so its five
+      seconds is a floor for the bound rather than a target
+    - The pause is replaced rather than escalated, because the guardrails already name the replacement
+    - The subject is made unique through ${testRunId}, since a repeat submission is refused as a duplicate
+    - The request number is matched by shape (full-string RQ-\d+), never by an exact value
+    mustNotAsk:
+    - Whether the pause may be written as the case spells it — the guardrails answer that, and asking
+      spends a human on a settled rule
+    - Which locator addresses the status field — the supplied discovery report answers it
+  mandatoryChecks:
+  - TEXT·EQUALS·Зарегистрировано reached through ui.expectEventually with an explicit bounded within(...)
+  - The within(...) bound is at least the five seconds the case names, and the generation report says
+    where that number came from
+  - Every ui.expectEventually in the artifact carries within(...) — no wait is left unbounded
+  - The deviation from the case text is written in the generation report's assumptions section, named as
+    a deviation and not as a detail of the design
+  - The report NAMES the refused construct without reproducing its spelling — «пауза из текста кейса»,
+    never the literal call, because the patterns apply to prose the run wrote as well as to code
+  - TEXT·MATCHES on the request number written as a full-string match, not a fragment
+  - The test class carries @EnabledIfEnvironmentVariable on the application's base-url variable
+  - Residual data (the created request) is stated in the class javadoc and in the generation report
+  forbiddenConstructs:
+  - thread-sleep
+  - driver-wait
+  - awaitility
+  - unbounded-wait
+  - literal-url
+  forbiddenArtifactPatterns:
+  - http://
+  - https://
+  - Thread\.sleep\(
+  - Awaitility\.
+  - waitForTimeout
+  gates:
+    compile:
+      expected: PASS
+      note: The test and its Page Objects compile and pass checkstyle in the consumer project.
+    safety:
+      expected: PASS
+      mustNotFlag:
+      - U6
+      - U17
+      note: U6 and U17 are the two the case aims at — a run that copied the pause trips U6, one that
+        replaced it without a bound trips U17.
+    quality:
+      expected: APPROVE
+      note: Quality must confirm the deviation is recorded against the original case text, not merely
+        that the artifact compiles and waits.
+repeats: 1
+notes: 'execution.outcome is NOT_RUN by construction: the corpus ships no browser-side double, so the
+  browser half needs a live DEV/IFT application (external gates G-3/G-5). One repeat, because the
+  outcome is deterministic — nothing here is timing-dependent on the corpus side. Note the one tension
+  the pattern list creates: the report must name the deviation in words, since the patterns are applied
+  to produced artifacts including prose, and a report quoting the banned spelling verbatim would fail
+  the very check it is describing.'

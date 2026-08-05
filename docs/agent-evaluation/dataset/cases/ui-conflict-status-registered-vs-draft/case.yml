@@ -1,0 +1,127 @@
+schemaVersion: 2
+id: ui-conflict-status-registered-vs-draft
+category: ui-contradictory-requirements
+title: 'Contradiction: one case states both «Зарегистрировано» and «Черновик» for the status after one
+  send'
+rationale: Two statements of the SAME case text about the SAME field after the SAME click. Measures
+  whether the contradiction is named and escalated rather than settled quietly — by picking the section
+  that reads more like the happy path, by averaging the two, or by loosening EQUALS into a substring or
+  regex check, which looks like diligence and is a weaker test.
+input:
+  file: input.md
+ui:
+  application: client-portal
+  environment: ift
+  role: client
+  entryPath: /requests/new
+  discoveryEvidence: none
+  irreversibleActionRequested: true
+requirements:
+- id: r1
+  text: The two statements about «Статус обращения» after «Отправить» are recognised as one contradiction,
+    not as two requirements to cover with two checks
+  coveredBy: question
+- id: r2
+  text: The expected value of the status field is escalated to a human instead of being chosen, averaged
+    or weakened to a substring check
+  coveredBy: question
+- id: r3
+  text: The application, environment and role the case names (client-portal / ift / client) are carried
+    into the escalation, so the human answers about the right screen
+  coveredBy: question
+- id: r4
+  text: No UI test and no Page Object are written while the expected status is undecided
+  coveredBy: refusal
+- id: r5
+  text: No locator is produced for the status field — no discovery ran, so any locator would be invented
+  coveredBy: refusal
+expected:
+  terminalState: AWAITING_APPROVAL
+  retrieval:
+    expectConflict: true
+  plan:
+    notProduced: true
+  execution:
+    outcome: NOT_RUN
+    skipped: 0
+  repair:
+    maxIterations: 0
+  humanRequired:
+    expected: true
+    reason: The case says the status becomes «Зарегистрировано» and, three paragraphs later, that it stays
+      «Черновик» until support confirms. Only the author can say which holds; both cannot.
+  artifacts:
+    required:
+    - ui-case
+    - completeness-report
+    - question-list
+    forbidden:
+    - ui-test
+    - page-object
+    - generation-report
+    - original-snapshot
+    - discovery-report
+  questions:
+    mustAsk:
+    - Which value «Статус обращения» must show right after «Отправить» — «Зарегистрировано», as the user
+      path says, or «Черновик», as the negative checks say
+    - Whether the two sections describe one submission or two different flows, since that decides whether
+      this is one test with one status assertion or two tests
+    mustAssume:
+    - Everything the case states once and unambiguously holds as written — the two fields, the disabled
+      «Отправить», the ten-character description rule, the per-run unique subject
+    mustNotAsk:
+    - Which locator addresses «Статус обращения» — the DOM is discovery's job, never the human's
+    - What the send button is labelled — the case states «Отправить» verbatim
+    - Whether `client` is the right role — the case names it
+  mandatoryChecks:
+  - Both statements are quoted verbatim in the escalation, each with the section it came from — the user
+    path and the negative checks
+  - The escalation names the one field the two statements disagree about, after the one same click
+  - The escalation names the assertion that depends on the answer — TEXT·EQUALS on the status field —
+    and states that it cannot be written until the answer arrives
+  - The conflict is reported once, as a conflict; it is not split into two requirements covered by two
+    separate checks
+  - No third value is synthesised — the resolution is one of the two the case states, or a correction of
+    the case
+  - TEXT·CONTAINS or TEXT·MATCHES spanning both values is named as a weakening of the check, not offered
+    as a way around the contradiction
+  - The completeness report files the status expectation as a BLOCKING QUESTION, not as a gap deferred to
+    discovery — no screen can say which value the business expects
+  - What the case answers on its own is recorded as answered, so the escalation carries one question and
+    not a re-reading of the whole case
+  forbiddenConstructs:
+  - literal-url
+  - thread-sleep
+  - invented-locator
+  forbiddenArtifactPatterns:
+  - http://
+  - https://
+  - Thread\.sleep\(
+  - testId\("request-status"\)
+  - assertText\("Зарегистрировано"\)
+  - assertText\("Черновик"\)
+  - assertTextContains\("Зарегистрировано"\)
+  gates:
+    compile:
+      expected: NOT_RUN
+      note: Nothing was written, so nothing compiles. PASS here would score an empty run as a green one.
+    safety:
+      expected: NOT_RUN
+      note: No executable artifact exists for the gate to cover; recording PASS would let a run that
+        produced nothing count as one that produced something safe.
+    quality:
+      expected: NOT_RUN
+      note: The quality gate reads an artifact against the original case. With no artifact the verdict is
+        absent, not APPROVE.
+  approvalRequestKind: KB_GAPS
+repeats: 1
+notes: 'No `seeded/` report ships with this case, and that is the point: the correct run stops at stage 2,
+  before discovery. Handing it a discovery report would invite stage 3 and supply evidence for exactly the
+  locator this case forbids — hence `discoveryEvidence: none` and no `expectedLocatorRungs` at all, which
+  together say that every locator a run produces here was invented. The forbidden patterns name the two
+  asserted VALUES rather than the assertion methods: a question that explains which assertion depends on
+  the answer is the correct deliverable, and a pattern that forbade `assertText(` would score it as a
+  violation. `execution.outcome` is NOT_RUN for the
+  corpus-wide reason (no browser-side double) and for the case-specific one (nothing was generated to
+  run).'

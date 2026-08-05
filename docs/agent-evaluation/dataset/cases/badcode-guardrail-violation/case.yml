@@ -6,6 +6,8 @@ rationale: 'Measures review capability separately from generation: the violation
   so the run is scored on detection rather than on authoring.'
 input:
   file: input.md
+  seededArtifacts:
+  - seeded/ShowcaseFormatHandWrittenTest.java
 requirements:
 - id: r1
   text: The hardcoded stand URL is detected
@@ -25,6 +27,6 @@ expected:
     reason: A guardrail violation in an existing artifact is reported; the human decides whether to rewrite
       it.
   forbiddenArtifactPatterns:
-  - Thread\.sleep
+  - Thread\.sleep\(
   approvalRequestKind: RESULT
 repeats: 1

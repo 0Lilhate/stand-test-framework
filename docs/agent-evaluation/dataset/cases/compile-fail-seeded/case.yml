@@ -6,6 +6,8 @@ rationale: Separates the compile gate from the run gate. The gate must fail loud
   never be reported as a passing run.
 input:
   file: input.md
+  seededArtifacts:
+  - seeded/ShowcaseFormatGeneratedTest.java
 requirements:
 - id: r1
   text: The compile gate fails before any run is attempted

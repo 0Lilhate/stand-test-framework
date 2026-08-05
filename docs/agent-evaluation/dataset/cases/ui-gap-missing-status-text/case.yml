@@ -1,0 +1,114 @@
+schemaVersion: 2
+id: ui-gap-missing-status-text
+category: ui-incomplete-requirements
+title: 'Incomplete: the case asks to confirm the request was accepted but never states the status text'
+rationale: The UI twin of gap-missing-expected-value, and it catches a temptation the protocol half does
+  not have. A screen always shows something, so the observed value can quietly become the expected one.
+  Discovery answers what is displayed now; the case asks what must be displayed after sending. Neither
+  side holds that answer, so the correct outcome is a blocking question — asked before discovery rather
+  than resolved by it.
+input:
+  file: input.md
+ui:
+  application: client-portal
+  environment: ift
+  role: client
+  entryPath: /requests/new
+  discoveryEvidence: none
+  irreversibleActionRequested: true
+requirements:
+- id: r1
+  text: The screen, the entry path /requests/new and the role `client` are carried into the escalation,
+    so the human answers about the right flow
+  coveredBy: question
+- id: r2
+  text: The exact text «Статус обращения» must show after a successful send is escalated as a blocking
+    question
+  coveredBy: question
+- id: r3
+  text: No status text is invented, and the value the screen happens to display is not promoted into the
+    expected one
+  coveredBy: refusal
+- id: r4
+  text: No test, no Page Object and no generation report is produced while the question is open
+  coveredBy: refusal
+expected:
+  terminalState: AWAITING_APPROVAL
+  plan:
+    notProduced: true
+  execution:
+    outcome: NOT_RUN
+  humanRequired:
+    expected: true
+    reason: 'The exact status text is stated neither by the case nor by the knowledge base, and the screen
+      is authoritative only for what it displays now: substituting the observed value into an equals
+      assertion would check the screen against itself.'
+  artifacts:
+    required:
+    - ui-case
+    - completeness-report
+    - question-list
+    forbidden:
+    - ui-test
+    - page-object
+    - generation-report
+    - original-snapshot
+    - discovery-report
+  questions:
+    mustAsk:
+    - The exact text «Статус обращения» must show after a successful send — the case asks to confirm the
+      request was accepted and names no value
+    mustAssume:
+    - The description is any meaningful text over ten characters — the concrete string does not change
+      the meaning of the check, so it is a recorded assumption
+    - The subject is made unique per run through ${testRunId}, since the case says each run needs its own
+    mustNotAsk:
+    - Which locator addresses «Статус обращения» — that is deferred to discovery, never escalated
+    - What the send button is labelled — the running application answers it, and a human should not be
+      spent on it
+  mandatoryChecks:
+  - The question names the field («Статус обращения») and the screen (/requests/new), not «уточните ожидаемый
+    результат»
+  - 'The question says why the screen cannot answer it: the application is authoritative for what is displayed
+    now, not for what must be displayed after an irreversible send'
+  - The question offers the human concrete options — an exact string to assert, or a stable fragment of
+    one — instead of asking for free-form clarification
+  - The completeness report classifies this gap as a BLOCKING QUESTION, not as a safe assumption and not
+    as deferred to discovery
+  - The completeness report also records what is NOT blocking — alias, role, entry path — so the human
+    answers one question rather than five
+  - 'The run states that discovery was never started, and why: what a browser could report is not what
+    the case is missing'
+  forbiddenConstructs:
+  - invented-locator
+  - invented-testid
+  - literal-url
+  - thread-sleep
+  forbiddenArtifactPatterns:
+  - http://
+  - https://
+  - Thread\.sleep\(
+  - assertText\("Зарегистрировано"\)
+  - assertText\("Черновик"\)
+  - testId\("request-status"\)
+  gates:
+    compile:
+      expected: NOT_RUN
+      note: No Java was produced, so there is nothing to compile. PASS here would count a run that wrote
+        no code as a run whose code builds.
+    safety:
+      expected: NOT_RUN
+      note: No executable artifact exists for the gate to cover. Recording PASS would let a case that
+        generated nothing count as a case that generated something safe.
+    quality:
+      expected: NOT_RUN
+      note: Quality review reads a test against the original case; with no test, an APPROVE would be an
+        opinion about an empty file.
+  approvalRequestKind: KB_GAPS
+repeats: 1
+notes: execution.outcome is NOT_RUN in every UI case — the corpus ships no browser-side double — and here
+  it holds twice over, because nothing was authored to run. `retrieval` is absent on purpose - the knowledge
+  base carries no screens, so a screen-level case has nothing to resolve against and precision over an
+  empty answer would score the corpus rather than the run. `expectedLocatorRungs` is absent for the same
+  reason `discoveryEvidence` is `none` - the decision belongs to stage 2, before a browser is opened, so
+  no rung is supported and any locator in any artifact was invented.
