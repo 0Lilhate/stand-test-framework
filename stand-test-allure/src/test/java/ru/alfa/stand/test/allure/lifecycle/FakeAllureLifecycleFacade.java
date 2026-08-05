@@ -1,5 +1,6 @@
 package ru.alfa.stand.test.allure.lifecycle;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,6 +15,7 @@ public final class FakeAllureLifecycleFacade implements AllureLifecycleFacade {
     private final List<StartedStep> startedSteps = new ArrayList<>();
     private final List<UpdatedStep> updatedSteps = new ArrayList<>();
     private final List<RecordedAttachment> attachments = new ArrayList<>();
+    private final List<RecordedFileAttachment> fileAttachments = new ArrayList<>();
     private final List<String> stoppedSteps = new ArrayList<>();
     private final List<TestCaseUpdate> testCaseUpdates = new ArrayList<>();
     private boolean throwOnAddAttachment;
@@ -38,6 +40,14 @@ public final class FakeAllureLifecycleFacade implements AllureLifecycleFacade {
             throw new IllegalStateException("attachment boom");
         }
         attachments.add(new RecordedAttachment(name, type, fileExtension, content));
+    }
+
+    @Override
+    public void addAttachment(String name, String type, String fileExtension, Path file) {
+        if (throwOnAddAttachment) {
+            throw new IllegalStateException("attachment boom");
+        }
+        fileAttachments.add(new RecordedFileAttachment(name, type, fileExtension, file));
     }
 
     @Override
@@ -70,6 +80,10 @@ public final class FakeAllureLifecycleFacade implements AllureLifecycleFacade {
         return attachments;
     }
 
+    public List<RecordedFileAttachment> fileAttachments() {
+        return fileAttachments;
+    }
+
     public List<String> stoppedSteps() {
         return stoppedSteps;
     }
@@ -88,6 +102,10 @@ public final class FakeAllureLifecycleFacade implements AllureLifecycleFacade {
 
     /** A recorded {@code addAttachment} call. */
     public record RecordedAttachment(String name, String type, String fileExtension, String content) {
+    }
+
+    /** A recorded file-backed {@code addAttachment} call. */
+    public record RecordedFileAttachment(String name, String type, String fileExtension, Path file) {
     }
 
     /** A recorded {@code updateTestCase} call. */

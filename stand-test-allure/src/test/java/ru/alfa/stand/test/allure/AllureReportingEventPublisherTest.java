@@ -383,6 +383,10 @@ class AllureReportingEventPublisherTest {
         }
 
         @Override
+        public void addAttachment(String name, String type, String fileExtension, java.nio.file.Path file) {
+        }
+
+        @Override
         public void stopStep(String uuid) {
             this.events.add("stop:" + Thread.currentThread().getName() + ":" + uuid);
         }

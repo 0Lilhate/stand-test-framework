@@ -7,7 +7,11 @@ import io.qameta.allure.model.Parameter;
 import io.qameta.allure.model.Status;
 import io.qameta.allure.model.StatusDetails;
 import io.qameta.allure.model.StepResult;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -61,10 +65,28 @@ public final class DefaultAllureLifecycleFacade implements AllureLifecycleFacade
 
     @Override
     public void addAttachment(String name, String type, String fileExtension, String content) {
-        String extension = (fileExtension == null || fileExtension.isBlank())
-                ? ".txt"
-                : (fileExtension.startsWith(".") ? fileExtension : "." + fileExtension);
-        lifecycle.addAttachment(name, type, extension, content.getBytes(StandardCharsets.UTF_8));
+        lifecycle.addAttachment(name, type, normaliseExtension(fileExtension), content.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String normaliseExtension(String fileExtension) {
+        if (fileExtension == null || fileExtension.isBlank()) {
+            return ".txt";
+        }
+        return fileExtension.startsWith(".") ? fileExtension : "." + fileExtension;
+    }
+
+    @Override
+    public void addAttachment(String name, String type, String fileExtension, Path file) {
+        byte[] body;
+        try {
+            body = Files.readAllBytes(file);
+        } catch (IOException e) {
+            // Reporting is a side-channel and must never change a test outcome (plan §17). The publisher
+            // already skips a missing file with a WARN; reaching here means the file vanished or became
+            // unreadable between that check and this read, which is a reporting problem, not a test one.
+            throw new UncheckedIOException("cannot read attachment file " + file, e);
+        }
+        lifecycle.addAttachment(name, type, normaliseExtension(fileExtension), body);
     }
 
     @Override

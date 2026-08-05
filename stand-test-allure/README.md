@@ -97,6 +97,38 @@ Attachments are **generic** — there are no REST/Kafka/DB-specific attachment t
 - renders a step's `diagnostics` map (including await/timeout diagnostics) as a masked `KEY_VALUE`
   attachment named `diagnostics`.
 
+### Файловые вложения (ADR-UI-005)
+
+Ядро `Attachment` несёт **ровно одно** из двух тел: текстовое `content` **или** путь `file`. Файловая
+форма появилась потому, что тракт был текстовым насквозь (`content.getBytes(UTF_8)` в стоке), и PNG,
+WebM или ZIP через него не проходили; base64 в текстовое поле не помогает — расширение выводится из
+media type, и отчёт предлагал бы `.bin`-простыню вместо картинки.
+
+```java
+Attachment.of("response", "application/json", body);        // текст — как было
+Attachment.ofFile("screenshot", "image/png", pathToPng);    // файл — новое
+```
+
+Сток ветвится по `isBinary()`. Три свойства файловой ветки, о которых нужно знать:
+
+1. **Маскирование к ней неприменимо.** Байты скриншота нечем замаскировать постфактум, поэтому
+   `SecretMasker` файловую ветку не трогает — и именно отсюда требование маскировать чувствительные
+   зоны **в DOM до снятия** артефакта (SEC-05). Текстовая ветка маскируется как раньше.
+2. **Путь проверяется до открытия файла.** `AllureAttachmentPublisher` принимает каталог артефактов
+   прогона и публикует только файлы внутри него: путь резолвится до реального (`toRealPath()`, то есть
+   по символическим ссылкам) и обязан лежать под каталогом. Без этого канал отчётности стал бы каналом
+   раскрытия файлов: путь с `../` или ссылка наружу положили бы произвольный файл в отчёт, который потом
+   прикладывают к тикету.
+3. **Fail-closed дважды.** Публикатор, созданный **без** каталога артефактов, отвергает *любое* файловое
+   вложение: сток, не знающий каталога прогона, не отличит артефакт от `/etc/passwd`. И любой отказ —
+   это WARN и пропущенное вложение, никогда не исключение: отчётность side-channel и не меняет исход
+   теста. Пропавший файл ведёт себя так же — прогон идёт дальше без картинки.
+
+Расширение для файла выводит `AttachmentType.extensionForBinaryMediaType`, а не текстовый маппер: у них
+**противоположный** fallback. Неизвестный media type у текста разумнее всего `txt`, у файла — `bin`;
+перепутать их значит предложить скриншот как текст. Известны `png`, `jpg`, `webm`, `zip`, `json`, `xml`
+и `text/*`; остальное — `bin` с WARN.
+
 ## Secret masking
 
 Masking is two-echelon: adapters redact at the source (the core `Attachment` pre-redaction contract),
@@ -137,5 +169,9 @@ failed step green. The runner additionally swallows publisher exceptions — two
 - Rich diagnostics/attachments on **thrown** failures depend on adapters populating them on the failure
   path (a later phase); today the runner attaches the exception class on that path, and diagnostics/
   attachments flow fully on the success and returned-`TIMEOUT` paths.
-- `BINARY` content travels as text because the core `Attachment` contract is textual.
+- Каталог артефактов прогона передаётся публикатору снаружи. Проводка его из
+  `UiRunSettings.artifactsDirectory()` — задача `UITG-T003`, и у неё пока нет вызывающего: артефакты
+  начинает снимать `UITG-S013`. До тех пор действует fail-closed: файловые вложения отвергаются.
+- Само **снятие** артефактов (скриншот, консоль, сеть, трейс) в этот срез не входит — `UITG-S013`…`S016`.
+  Здесь только канал.
 ```

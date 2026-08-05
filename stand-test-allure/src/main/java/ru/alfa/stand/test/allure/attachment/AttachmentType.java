@@ -83,4 +83,47 @@ public enum AttachmentType {
         }
         return TEXT.fileExtension;
     }
+
+    /**
+     * Derives the file extension for a FILE-backed attachment (ADR-UI-005).
+     *
+     * <p>Separate from {@link #extensionForMediaType(String)} because the two fall back in opposite
+     * directions, and getting that backwards is exactly the defect this method exists to avoid: an
+     * unknown media type on a text body is most usefully {@code txt}, while an unknown media type on a
+     * binary body must be {@code bin} — naming a screenshot {@code .txt} makes the report offer it as
+     * text. The known types are the ones wave 1 actually produces (UITG-S013…S016): a PNG screenshot, a
+     * WebM video, a trace ZIP, plus the text-shaped artefacts (console log, network log) that travel as
+     * files when they are large.
+     *
+     * @param mediaType the media type (may be null)
+     * @return the file extension without a leading dot; {@code bin} when the type is unknown
+     */
+    public static String extensionForBinaryMediaType(String mediaType) {
+        if (mediaType == null) {
+            return BINARY.fileExtension;
+        }
+        String lower = mediaType.toLowerCase(Locale.ROOT);
+        if (lower.contains("png")) {
+            return "png";
+        }
+        if (lower.contains("jpeg") || lower.contains("jpg")) {
+            return "jpg";
+        }
+        if (lower.contains("webm")) {
+            return "webm";
+        }
+        if (lower.contains("zip")) {
+            return "zip";
+        }
+        if (lower.contains("json")) {
+            return JSON.fileExtension;
+        }
+        if (lower.contains("xml")) {
+            return XML.fileExtension;
+        }
+        if (lower.startsWith("text/")) {
+            return TEXT.fileExtension;
+        }
+        return BINARY.fileExtension;
+    }
 }

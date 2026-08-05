@@ -1,5 +1,6 @@
 package ru.alfa.stand.test.allure.lifecycle;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
@@ -44,6 +45,20 @@ public interface AllureLifecycleFacade {
      * @param content the textual content
      */
     void addAttachment(String name, String type, String fileExtension, String content);
+
+    /**
+     * Attaches file-backed evidence — a screenshot, a video, a trace — to the current step (ADR-UI-005).
+     *
+     * <p>Added ALONGSIDE the textual method, never replacing it: the textual path is the one every
+     * existing adapter uses and the only one a secret mask can act on. Implementations read the file
+     * here; the caller has already checked that the path lies inside the run's artefacts directory.
+     *
+     * @param name the attachment name
+     * @param type the media type (for example {@code image/png})
+     * @param fileExtension the file extension without a leading dot (for example {@code png})
+     * @param file the path to the body, already validated by the caller
+     */
+    void addAttachment(String name, String type, String fileExtension, Path file);
 
     /**
      * Stops a previously started step.
