@@ -18,6 +18,8 @@ import ru.alfa.stand.test.core.environment.ServiceEndpointDefinition;
 import ru.alfa.stand.test.core.environment.TopicDefinition;
 import ru.alfa.stand.test.core.environment.UiApplicationDefinition;
 import ru.alfa.stand.test.core.environment.UiAuthConfig;
+import ru.alfa.stand.test.core.environment.UiLoginChallenge;
+import ru.alfa.stand.test.core.environment.UiLoginFormConfig;
 import ru.alfa.stand.test.core.environment.UiTraceMode;
 import ru.alfa.stand.test.core.environment.ViewportProfile;
 
@@ -114,7 +116,7 @@ public final class EnvironmentRegistryFactory {
                     application.getDefaultViewport(),
                     viewportProfiles(application, alias),
                     UiTraceMode.fromConfig(application.getTrace()),
-                    uiAuth(application.getAuth(), alias)));
+                    uiAuth(application.getAuth(), alias, environment, version)));
         }
         return result;
     }
@@ -137,18 +139,39 @@ public final class EnvironmentRegistryFactory {
      * no value twin, so a UI credential cannot be routed through the Spring Environment the way an endpoint
      * value can.
      */
-    private static UiAuthConfig uiAuth(StandTestProperties.UiAuth auth, String alias) {
+    private static UiAuthConfig uiAuth(StandTestProperties.UiAuth auth, String alias, String environment, int version) {
         if (auth == null) {
             return null;
         }
         if (auth.getScheme() == null) {
             throw new IllegalArgumentException("ui application '" + alias + "' auth.scheme must not be null");
         }
+        String location = "stand.test.environments." + environment + ".ui-applications." + alias + ".auth";
+        if (auth.getLogin() != null) {
+            EnvironmentConfigFormat.requireSectionSupported(version, "auth.login", EnvironmentConfigFormat.UI_LOGIN_SINCE_VERSION, location + ".login");
+        }
+        if (auth.getChallenge() != null) {
+            EnvironmentConfigFormat.requireSectionSupported(version, "auth.challenge", EnvironmentConfigFormat.UI_LOGIN_SINCE_VERSION, location + ".challenge");
+        }
         return new UiAuthConfig(
                 auth.getScheme(),
                 ref(auth.getCredentialsPoolRef(), "credentials-pool-ref", alias),
                 List.copyOf(auth.getRoles()),
-                ref(auth.getDiscoveryAccountRef(), "discovery-account-ref", alias));
+                ref(auth.getDiscoveryAccountRef(), "discovery-account-ref", alias),
+                uiLogin(auth.getLogin()),
+                (auth.getChallenge() == null) ? UiLoginChallenge.NONE : auth.getChallenge());
+    }
+
+    /**
+     * Maps the sign-in form. Its fields are locator expressions, not references: a locator is not a secret,
+     * and it legitimately carries spaces and punctuation that {@code ref(...)} rejects. The one thing that
+     * must not appear here is a credential, and there is nowhere to put one.
+     */
+    private static UiLoginFormConfig uiLogin(StandTestProperties.UiLogin login) {
+        if (login == null) {
+            return null;
+        }
+        return new UiLoginFormConfig(login.getPath(), login.getUsernameLocator(), login.getPasswordLocator(), login.getSubmitLocator(), login.getSignedInLocator());
     }
 
     private static Map<String, ServiceEndpointDefinition> services(StandTestProperties.Environment env) {

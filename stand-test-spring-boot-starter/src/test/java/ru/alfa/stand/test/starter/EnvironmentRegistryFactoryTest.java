@@ -12,6 +12,8 @@ import ru.alfa.stand.test.core.environment.SecretReferences;
 import ru.alfa.stand.test.core.environment.UiApplicationDefinition;
 import ru.alfa.stand.test.core.environment.UiAuthConfig;
 import ru.alfa.stand.test.core.environment.UiAuthScheme;
+import ru.alfa.stand.test.core.environment.UiLoginChallenge;
+import ru.alfa.stand.test.core.environment.UiLoginFormConfig;
 import ru.alfa.stand.test.core.environment.UiTraceMode;
 import ru.alfa.stand.test.core.environment.ViewportProfile;
 import ru.alfa.stand.test.core.exception.StandTestException;
@@ -204,8 +206,13 @@ class EnvironmentRegistryFactoryTest {
         assertThat(portal.defaultViewport()).isEqualTo("desktop");
         assertThat(portal.viewportProfile("desktop")).contains(new ViewportProfile(1440, 900));
         assertThat(portal.trace()).isEqualTo(UiTraceMode.ON_FAILURE);
-        assertThat(portal.auth()).isEqualTo(
-                new UiAuthConfig(UiAuthScheme.FORM, "CLIENT_PORTAL_TEST_USERS", List.of("client", "operator"), "CLIENT_PORTAL_DISCOVERY"));
+        assertThat(portal.auth()).isEqualTo(new UiAuthConfig(
+                UiAuthScheme.FORM,
+                "CLIENT_PORTAL_TEST_USERS",
+                List.of("client", "operator"),
+                "CLIENT_PORTAL_DISCOVERY",
+                new UiLoginFormConfig("/login", "testId=login-username", "testId=login-password", "role=button:Sign in", "testId=user-menu"),
+                UiLoginChallenge.NONE));
     }
 
     @Test
@@ -283,7 +290,7 @@ class EnvironmentRegistryFactoryTest {
 
     private static StandTestProperties uiProperties(java.util.function.Consumer<StandTestProperties.UiApplication> customiser) {
         StandTestProperties properties = new StandTestProperties();
-        properties.setVersion(2);
+        properties.setVersion(3);
         final StandTestProperties.Environment ift = new StandTestProperties.Environment();
 
         StandTestProperties.UiApplication application = new StandTestProperties.UiApplication();
@@ -299,6 +306,13 @@ class EnvironmentRegistryFactoryTest {
         auth.setCredentialsPoolRef("CLIENT_PORTAL_TEST_USERS");
         auth.getRoles().addAll(List.of("client", "operator"));
         auth.setDiscoveryAccountRef("CLIENT_PORTAL_DISCOVERY");
+        StandTestProperties.UiLogin login = new StandTestProperties.UiLogin();
+        login.setPath("/login");
+        login.setUsernameLocator("testId=login-username");
+        login.setPasswordLocator("testId=login-password");
+        login.setSubmitLocator("role=button:Sign in");
+        login.setSignedInLocator("testId=user-menu");
+        auth.setLogin(login);
         application.setAuth(auth);
         customiser.accept(application);
 

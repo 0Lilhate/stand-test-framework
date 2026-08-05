@@ -9,6 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import ru.alfa.stand.test.core.environment.AuthScheme;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
 import ru.alfa.stand.test.core.environment.UiAuthScheme;
+import ru.alfa.stand.test.core.environment.UiLoginChallenge;
 
 /**
  * Bindable configuration for the stand-test SDK, rooted at {@code stand.test}.
@@ -309,6 +310,10 @@ public class StandTestProperties {
 
         private String discoveryAccountRef;
 
+        private UiLogin login;
+
+        private UiLoginChallenge challenge;
+
         public UiAuthScheme getScheme() {
             return scheme;
         }
@@ -335,6 +340,83 @@ public class StandTestProperties {
 
         public void setDiscoveryAccountRef(String discoveryAccountRef) {
             this.discoveryAccountRef = discoveryAccountRef;
+        }
+
+        public UiLogin getLogin() {
+            return login;
+        }
+
+        public void setLogin(UiLogin login) {
+            this.login = login;
+        }
+
+        public UiLoginChallenge getChallenge() {
+            return challenge;
+        }
+
+        public void setChallenge(UiLoginChallenge challenge) {
+            this.challenge = challenge;
+        }
+    }
+
+    /**
+     * The sign-in form of a {@link UiApplication}: where it is and which elements it consists of.
+     *
+     * <p>Every value is a locator <em>expression</em> in the UI adapter's grammar ({@code testId=…},
+     * {@code role=button:Sign in}, {@code label=…}, {@code text=…}, {@code css=…}) — not a reference and not
+     * a credential. {@code signedIn} is the element present only once signed in; it is what tells a
+     * completed sign-in from rejected credentials, and a live reused session from an expired one.
+     */
+    public static class UiLogin {
+
+        private String path;
+
+        private String usernameLocator;
+
+        private String passwordLocator;
+
+        private String submitLocator;
+
+        private String signedInLocator;
+
+        public String getPath() {
+            return path;
+        }
+
+        public void setPath(String path) {
+            this.path = path;
+        }
+
+        public String getUsernameLocator() {
+            return usernameLocator;
+        }
+
+        public void setUsernameLocator(String usernameLocator) {
+            this.usernameLocator = usernameLocator;
+        }
+
+        public String getPasswordLocator() {
+            return passwordLocator;
+        }
+
+        public void setPasswordLocator(String passwordLocator) {
+            this.passwordLocator = passwordLocator;
+        }
+
+        public String getSubmitLocator() {
+            return submitLocator;
+        }
+
+        public void setSubmitLocator(String submitLocator) {
+            this.submitLocator = submitLocator;
+        }
+
+        public String getSignedInLocator() {
+            return signedInLocator;
+        }
+
+        public void setSignedInLocator(String signedInLocator) {
+            this.signedInLocator = signedInLocator;
         }
     }
 

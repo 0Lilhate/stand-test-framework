@@ -41,10 +41,23 @@ public final class EnvironmentConfigFormat {
     public static final int INITIAL_VERSION = 1;
 
     /** The highest registry format version this SDK build can read. */
-    public static final int SUPPORTED_VERSION = 2;
+    public static final int SUPPORTED_VERSION = 3;
 
     /** Format version in which the per-environment {@code ui-applications} section was introduced. */
     public static final int UI_APPLICATIONS_SINCE_VERSION = 2;
+
+    /**
+     * Format version in which a UI application's sign-in gained {@code auth.login} and {@code auth.challenge}.
+     *
+     * <p>A field added to an existing section counts as a new section for this purpose, and the rule is
+     * applied here rather than argued away. It was tempting not to: version 2 has never been published, so
+     * no reader of it exists and the bump names a contract nobody ever held. But the rule as written has no
+     * "unreleased" exception, and an SDK built from an earlier commit — {@code publishToMavenLocal} makes
+     * that a real object on a colleague's machine — meets {@code auth.login} as the bare
+     * {@code Unknown field 'login'} this whole mechanism exists to replace. The cost of applying the rule is
+     * a version number; the cost of reasoning around it is the promise itself.
+     */
+    public static final int UI_LOGIN_SINCE_VERSION = 3;
 
     private EnvironmentConfigFormat() {
     }

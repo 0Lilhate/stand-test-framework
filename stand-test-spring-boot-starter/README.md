@@ -75,7 +75,7 @@ stand:
         enabled: true
     environments:
       ift:
-        ui-applications:      # requires version: 2
+        ui-applications:      # requires version: 2 (auth.login: version: 3)
           client-portal:
             base-url-ref: CLIENT_PORTAL_IFT_URL
             default-viewport: desktop
@@ -85,9 +85,16 @@ stand:
             trace: "off"      # quote it: unquoted `off` is the YAML boolean false (accepted, but quoting says what you mean)
             auth:             # key `scheme`, as for services; credentials are refs only — no value twin
               scheme: FORM
-              credentials-pool-ref: CLIENT_PORTAL_TEST_USERS
-              roles: [client, operator]
+              credentials-pool-ref: CLIENT_PORTAL_TEST_USERS   # env var holding the account ROSTER
+              roles: [client, operator]                        # declared roles ⇒ ui.login must name one
               discovery-account-ref: CLIENT_PORTAL_DISCOVERY
+              challenge: none                                  # none | mfa | otp | captcha
+              login:                                           # required by FORM and STORAGE_STATE
+                path: /login
+                username-locator: testId=login-username
+                password-locator: testId=login-password        # a LOCATOR, not a credential
+                submit-locator: "role=button:Sign in"
+                signed-in-locator: testId=user-menu
         services:
           client-service:
             base-url-ref: CLIENT_SERVICE_URL
@@ -128,7 +135,7 @@ The version of the environment-registry **format**, not of the SDK — the exact
 | > supported | context startup fails with a message naming the declared version, the supported one and the action (upgrade `stand-test-*`) — never `Unknown field` |
 
 Sections introduced after version 1 must declare the version they arrived in: `ui-applications`
-requires `stand.test.version: 2`. Without that rule a configuration could carry a version-2 section
+requires `stand.test.version: 2`, and `auth.login`/`auth.challenge` inside it require `stand.test.version: 3`. Without that rule a configuration could carry a version-2 section
 while claiming version 1 — the very case the version key exists to diagnose.
 
 **UI applications** are addressed by alias exactly like services and topics; a scenario names
@@ -160,7 +167,10 @@ it has no twin, and writing the value spelling for it binds nothing (see the not
 > **UI credentials are the deliberate exception.** `ui-applications.<alias>.auth.credentials-pool-ref`
 > and `discovery-account-ref` have **no** value twin: a UI account has no non-secret reading, and a twin
 > would materialise it in the Spring `Environment`. There is no `credentials-pool` / `discovery-account`
-> setter, so writing one binds nothing silently — use the `*-ref` spelling.
+> setter, so writing one binds nothing silently — use the `*-ref` spelling. The `auth.login.*-locator`
+> fields are not references either: they address elements on the page, are required whenever the scheme
+> signs in, and are rejected unless spelled `<strategy>=<value>` — which is also what stops a credential
+> from being typed into `password-locator`.
 
 ```yaml
 stand:

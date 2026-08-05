@@ -10,11 +10,14 @@ import org.junit.jupiter.api.Test;
 
 class UiAuthConfigTest {
 
+    private static final UiLoginFormConfig LOGIN_FORM = new UiLoginFormConfig(
+            "/login", "testId=login-username", "testId=login-password", "role=button:Sign in", "testId=user-menu");
+
     @Test
     @DisplayName("credentials are references and roles are copied immutably")
     void referencesAndRoles() {
         List<String> roles = new ArrayList<>(List.of("client", "operator"));
-        UiAuthConfig auth = new UiAuthConfig(UiAuthScheme.FORM, "PORTAL_TEST_USERS", roles, "PORTAL_DISCOVERY");
+        UiAuthConfig auth = new UiAuthConfig(UiAuthScheme.FORM, "PORTAL_TEST_USERS", roles, "PORTAL_DISCOVERY", LOGIN_FORM, UiLoginChallenge.NONE);
 
         roles.add("admin");
 
@@ -68,6 +71,54 @@ class UiAuthConfigTest {
         assertThatThrownBy(() -> new UiAuthConfig(UiAuthScheme.FORM, "POOL", List.of(), " "))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("discoveryAccountRef");
+    }
+
+    @Test
+    @DisplayName("a scheme that signs in through the browser must be given a pool and a login section — a half-written auth section fails when the registry is read, not when the browser is already open")
+    void signingInRequiresPoolAndLoginSection() {
+        assertThatThrownBy(() -> new UiAuthConfig(UiAuthScheme.FORM, null, List.of(), null, LOGIN_FORM, UiLoginChallenge.NONE))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("credentialsPoolRef");
+        assertThatThrownBy(() -> new UiAuthConfig(UiAuthScheme.FORM, "POOL", List.of(), null, null, UiLoginChallenge.NONE))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("signed-in-locator");
+        assertThatThrownBy(() -> new UiAuthConfig(UiAuthScheme.STORAGE_STATE, "POOL", List.of(), null, new UiLoginFormConfig("/login", null, null, null, null), UiLoginChallenge.NONE))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("login.signed-in-locator");
+        assertThatThrownBy(() -> new UiAuthConfig(
+                UiAuthScheme.FORM, "POOL", List.of(), null, new UiLoginFormConfig(null, null, null, null, "testId=user-menu"), UiLoginChallenge.NONE))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("login.username-locator, login.password-locator and login.submit-locator");
+    }
+
+    @Test
+    @DisplayName("STORAGE_STATE needs only the signed-in marker: the form elements are optional, and declaring them is what enables the fallback after a session expires")
+    void storageStateNeedsOnlyTheSignedInMarker() {
+        UiAuthConfig reuseOnly = new UiAuthConfig(
+                UiAuthScheme.STORAGE_STATE, "POOL", List.of(), null, new UiLoginFormConfig(null, null, null, null, "testId=user-menu"), UiLoginChallenge.NONE);
+
+        assertThat(reuseOnly.login().fillable()).isFalse();
+        assertThat(reuseOnly.challenge()).isEqualTo(UiLoginChallenge.NONE);
+        assertThat(new UiAuthConfig(UiAuthScheme.STORAGE_STATE, "POOL", List.of(), null, LOGIN_FORM, null).login().fillable()).isTrue();
+    }
+
+    @Test
+    @DisplayName("scheme NONE cannot meet a challenge or declare a login form — both are credentials of a kind")
+    void noneCarriesNoLoginFormOrChallenge() {
+        assertThatThrownBy(() -> new UiAuthConfig(UiAuthScheme.NONE, null, List.of(), null, LOGIN_FORM, UiLoginChallenge.NONE))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("login form");
+        assertThatThrownBy(() -> new UiAuthConfig(UiAuthScheme.NONE, null, List.of(), null, null, UiLoginChallenge.MFA))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("challenge");
+    }
+
+    @Test
+    @DisplayName("roles declared means a scenario must name one; no roles declared means it need not")
+    void rolesDeclared() {
+        assertThat(new UiAuthConfig(UiAuthScheme.FORM, "POOL", List.of("client"), null, LOGIN_FORM, null).rolesDeclared()).isTrue();
+        assertThat(new UiAuthConfig(UiAuthScheme.FORM, "POOL", List.of(), null, LOGIN_FORM, null).rolesDeclared()).isFalse();
+        assertThat(UiAuthConfig.none().rolesDeclared()).isFalse();
     }
 
     @Test

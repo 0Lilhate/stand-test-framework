@@ -62,7 +62,7 @@ environments:
     kafka-clusters:                                 # additional NAMED clusters
       audit:
         bootstrap-servers-ref: AUDIT_KAFKA_BOOTSTRAP
-    ui-applications:                                # requires version: 2
+    ui-applications:                                # requires version: 2 (auth.login: version: 3)
       client-portal:
         base-url-ref: CLIENT_PORTAL_IFT_URL         # env-var NAME, never the URL
         default-viewport: desktop                   # must name a declared profile
@@ -72,10 +72,21 @@ environments:
         trace: off                                  # off (default) | on-failure
         auth:                                       # key `scheme`, as for services — never `type`
           scheme: FORM                              # NONE | FORM | STORAGE_STATE | SSO
-          credentials-pool-ref: CLIENT_PORTAL_TEST_USERS
-          roles: [client, operator]
+          credentials-pool-ref: CLIENT_PORTAL_TEST_USERS   # env var holding the account ROSTER, not an account
+          roles: [client, operator]                 # declared roles ⇒ ui.login must name one
           discovery-account-ref: CLIENT_PORTAL_DISCOVERY
+          challenge: none                           # none | mfa | otp | captcha — declared, never bypassed
+          login:                                    # required by FORM and STORAGE_STATE
+            path: /login
+            username-locator: testId=login-username
+            password-locator: testId=login-password # a LOCATOR: a value without `<strategy>=` is refused
+            submit-locator: "role=button:Sign in"
+            signed-in-locator: testId=user-menu     # present only once signed in
 ```
+
+`CLIENT_PORTAL_TEST_USERS` holds `portal-client-1:client;portal-operator-1:operator` — account ids,
+roles and (optionally, as two further `:`-separated fields) the NAMES of the variables holding the
+credentials. No login and no password exists at any level of this configuration.
 
 ## Format version (root key `version`)
 
@@ -92,16 +103,18 @@ with the unhelpful `Unknown field '<section>'`. The rules (shared with the Sprin
 | not a whole number, or ≤ 0 | configuration error (fail-closed) |
 
 A section introduced after version 1 requires the document to declare at least the version it arrived
-in — `ui-applications` requires `version: 2`. That rule is what makes the promise real: it stops a file
-from carrying a version-2 section while claiming version 1, which is exactly the case an older SDK
-would greet with `Unknown field`.
+in — `ui-applications` requires `version: 2`, and the `auth.login` / `auth.challenge` keys inside it
+require `version: 3`. A field added to an existing section counts as a section for this purpose: an SDK
+built before those keys existed greets them with `Unknown field 'login'`, which is exactly the case the
+version key exists to replace.
 
 **UI applications.** `ui-applications` whitelists the aliases a UI scenario may address; a scenario
 names `client-portal`, and there is nowhere in a step to write a URL instead. Viewport, trace and
 sign-in are configuration, so switching a run to the mobile viewport changes this file, not a test.
 Note the YAML detail: unquoted `off` is the boolean `false` in YAML 1.1, which is accepted as the
-`off` mode; `on` is refused — the modes are `off` and `on-failure`. The `ui.*` step types themselves
-are not part of the SDK yet; the registry section and the pre-flight alias guardrail are.
+`off` mode; `on` is refused — the modes are `off` and `on-failure`. The `ui.*` step types are shipped by
+[stand-test-ui](../stand-test-ui/README.md), including `ui.login`, which is what reads the `auth`
+section here.
 
 **Multiple Kafka clusters:** the single `kafka-cluster` is the environment's default; `kafka-clusters`
 whitelists named clusters, and a topic selects one via `cluster: <alias>` (e.g.

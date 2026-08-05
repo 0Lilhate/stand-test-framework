@@ -25,6 +25,8 @@ import ru.alfa.stand.test.core.environment.TopicDefinition;
 import ru.alfa.stand.test.core.environment.UiApplicationDefinition;
 import ru.alfa.stand.test.core.environment.UiAuthConfig;
 import ru.alfa.stand.test.core.environment.UiAuthScheme;
+import ru.alfa.stand.test.core.environment.UiLoginChallenge;
+import ru.alfa.stand.test.core.environment.UiLoginFormConfig;
 import ru.alfa.stand.test.core.environment.UiTraceMode;
 import ru.alfa.stand.test.core.environment.ViewportProfile;
 import ru.alfa.stand.test.core.exception.StandTestException;
@@ -53,7 +55,13 @@ public final class EnvironmentConfig {
 
     private static final Set<String> AUTH_KEYS = Set.of("scheme", "username-ref", "usernameRef", "password-ref", "passwordRef", "token-ref", "tokenRef");
     private static final Set<String> UI_APPLICATION_KEYS = Set.of("base-url-ref", "baseUrlRef", "default-viewport", "defaultViewport", "viewport-profiles", "viewportProfiles", "trace", "auth");
-    private static final Set<String> UI_AUTH_KEYS = Set.of("scheme", "credentials-pool-ref", "credentialsPoolRef", "roles", "discovery-account-ref", "discoveryAccountRef");
+    private static final Set<String> UI_AUTH_KEYS = Set.of("scheme", "credentials-pool-ref", "credentialsPoolRef", "roles", "discovery-account-ref", "discoveryAccountRef", "login", "challenge");
+    private static final Set<String> UI_LOGIN_KEYS = Set.of(
+            "path",
+            "username-locator", "usernameLocator",
+            "password-locator", "passwordLocator",
+            "submit-locator", "submitLocator",
+            "signed-in-locator", "signedInLocator");
     private static final Set<String> VIEWPORT_KEYS = Set.of("width", "height");
     private static final Set<String> TOPIC_KEYS = Set.of("name", "correlation", "cluster");
     private static final Set<String> DATASOURCE_KEYS = Set.of("url-ref", "urlRef", "user-ref", "userRef", "password-ref", "passwordRef", "allowed-schemas", "allowedSchemas", "write-allowed", "writeAllowed");
@@ -129,12 +137,12 @@ public final class EnvironmentConfig {
         EnvironmentConfigFormat.requireSectionSupported(version, "ui-applications", EnvironmentConfigFormat.UI_APPLICATIONS_SINCE_VERSION, location);
         Map<String, UiApplicationDefinition> result = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : namedMap(value, location).entrySet()) {
-            result.put(entry.getKey(), uiApplication(entry.getKey(), entry.getValue(), location + "." + entry.getKey()));
+            result.put(entry.getKey(), uiApplication(entry.getKey(), entry.getValue(), location + "." + entry.getKey(), version));
         }
         return result;
     }
 
-    private static UiApplicationDefinition uiApplication(String alias, Object value, String location) {
+    private static UiApplicationDefinition uiApplication(String alias, Object value, String location, int version) {
         Map<String, Object> fields = asMap(value, location);
         checkKnownKeys(fields, UI_APPLICATION_KEYS, location);
         String baseUrlRef = requireReference(fields, "base-url-ref", "baseUrlRef", location);
@@ -144,7 +152,7 @@ public final class EnvironmentConfig {
             viewportProfiles.put(entry.getKey(), viewportProfile(entry.getValue(), location + ".viewport-profiles." + entry.getKey()));
         }
         UiTraceMode trace = traceMode(fields.get("trace"), location + ".trace");
-        UiAuthConfig auth = uiAuth(fields.get("auth"), location + ".auth");
+        UiAuthConfig auth = uiAuth(fields.get("auth"), location + ".auth", version);
         return build(location, () -> new UiApplicationDefinition(alias, baseUrlRef, defaultViewport, viewportProfiles, trace, auth));
     }
 
@@ -169,7 +177,7 @@ public final class EnvironmentConfig {
         }
     }
 
-    private static UiAuthConfig uiAuth(Object value, String location) {
+    private static UiAuthConfig uiAuth(Object value, String location, int version) {
         if (value == null) {
             return null;
         }
@@ -179,7 +187,60 @@ public final class EnvironmentConfig {
         String credentialsPoolRef = optionalReference(fields, "credentials-pool-ref", "credentialsPoolRef", location);
         String discoveryAccountRef = optionalReference(fields, "discovery-account-ref", "discoveryAccountRef", location);
         List<String> roles = stringList(fields.get("roles"), location + ".roles");
-        return build(location, () -> new UiAuthConfig(scheme, credentialsPoolRef, roles, discoveryAccountRef));
+        if (fields.containsKey("login")) {
+            EnvironmentConfigFormat.requireSectionSupported(version, "auth.login", EnvironmentConfigFormat.UI_LOGIN_SINCE_VERSION, location + ".login");
+        }
+        if (fields.containsKey("challenge")) {
+            EnvironmentConfigFormat.requireSectionSupported(version, "auth.challenge", EnvironmentConfigFormat.UI_LOGIN_SINCE_VERSION, location + ".challenge");
+        }
+        UiLoginFormConfig login = uiLogin(fields.get("login"), location + ".login");
+        UiLoginChallenge challenge = uiLoginChallenge(fields.get("challenge"), location + ".challenge");
+        return build(location, () -> new UiAuthConfig(scheme, credentialsPoolRef, roles, discoveryAccountRef, login, challenge));
+    }
+
+    /**
+     * Reads the {@code login} section: where the sign-in form is and which elements it consists of. The
+     * values are locator <em>expressions</em> in the UI adapter's grammar ({@code testId=…},
+     * {@code role=button:Sign in}, {@code label=…}, {@code text=…}, {@code css=…}); this loader keeps them
+     * opaque, because the grammar belongs to the module that owns locators and core has none.
+     *
+     * <p>They are read as plain strings rather than through the {@code *-ref} shape check on purpose: a
+     * locator is not a secret and legitimately carries spaces and punctuation that the reference check
+     * rejects. What must never appear here is a credential, and there is nowhere to put one — the login
+     * and the password come from the account roster behind {@code credentials-pool-ref}.
+     */
+    private static UiLoginFormConfig uiLogin(Object value, String location) {
+        if (value == null) {
+            return null;
+        }
+        Map<String, Object> fields = asMap(value, location);
+        checkKnownKeys(fields, UI_LOGIN_KEYS, location);
+        String path = optionalString(fields.get("path"), location + ".path");
+        String username = optionalString(pick(fields, "username-locator", "usernameLocator"), location + ".username-locator");
+        String password = optionalString(pick(fields, "password-locator", "passwordLocator"), location + ".password-locator");
+        String submit = optionalString(pick(fields, "submit-locator", "submitLocator"), location + ".submit-locator");
+        String signedIn = optionalString(pick(fields, "signed-in-locator", "signedInLocator"), location + ".signed-in-locator");
+        return build(location, () -> new UiLoginFormConfig(path, username, password, submit, signedIn));
+    }
+
+    /**
+     * Reads the {@code challenge} flag. Declaring one does not make the SDK defeat it — there is
+     * deliberately no MFA/OTP/CAPTCHA bypass — it makes the UI adapter refuse with a message naming the
+     * gate instead of hanging on a screen it cannot pass.
+     */
+    private static UiLoginChallenge uiLoginChallenge(Object value, String location) {
+        if (value == null) {
+            return UiLoginChallenge.NONE;
+        }
+        String declared = optionalString(value, location);
+        if (declared == null) {
+            return UiLoginChallenge.NONE;
+        }
+        try {
+            return UiLoginChallenge.valueOf(declared.trim().replace('-', '_').toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException unknown) {
+            throw new StandTestException("Field 'challenge' at " + location + " must be one of " + Set.of(UiLoginChallenge.values()) + ", but was '" + declared + "'");
+        }
     }
 
     private static UiAuthScheme uiAuthScheme(String scheme, String location) {

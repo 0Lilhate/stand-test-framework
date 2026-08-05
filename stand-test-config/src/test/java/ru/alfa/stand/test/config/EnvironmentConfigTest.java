@@ -14,6 +14,8 @@ import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.UiApplicationDefinition;
 import ru.alfa.stand.test.core.environment.UiAuthConfig;
 import ru.alfa.stand.test.core.environment.UiAuthScheme;
+import ru.alfa.stand.test.core.environment.UiLoginChallenge;
+import ru.alfa.stand.test.core.environment.UiLoginFormConfig;
 import ru.alfa.stand.test.core.environment.UiTraceMode;
 import ru.alfa.stand.test.core.environment.ViewportProfile;
 import ru.alfa.stand.test.core.exception.StandTestException;
@@ -418,7 +420,7 @@ class EnvironmentConfigTest {
     @DisplayName("a ui-applications section parses alias, base-url-ref, viewport profiles, trace and auth")
     void uiApplicationsSectionIsParsed() {
         EnvironmentDefinition ift = parse("""
-                version: 2
+                version: 3
                 environments:
                   ift:
                     ui-applications:
@@ -434,6 +436,13 @@ class EnvironmentConfigTest {
                           credentials-pool-ref: CLIENT_PORTAL_TEST_USERS
                           roles: [client, operator, no-rights]
                           discovery-account-ref: CLIENT_PORTAL_DISCOVERY
+                          challenge: none
+                          login:
+                            path: /login
+                            username-locator: testId=login-username
+                            password-locator: testId=login-password
+                            submit-locator: "role=button:Sign in"
+                            signed-in-locator: testId=user-menu
                 """).environment("ift").orElseThrow();
 
         UiApplicationDefinition portal = ift.uiApplication("client-portal").orElseThrow();
@@ -442,8 +451,13 @@ class EnvironmentConfigTest {
         assertThat(portal.viewportProfile("mobile")).contains(new ViewportProfile(390, 844));
         assertThat(portal.defaultViewportProfile()).contains(new ViewportProfile(1440, 900));
         assertThat(portal.trace()).isEqualTo(UiTraceMode.OFF);
-        assertThat(portal.auth()).isEqualTo(
-                new UiAuthConfig(UiAuthScheme.FORM, "CLIENT_PORTAL_TEST_USERS", List.of("client", "operator", "no-rights"), "CLIENT_PORTAL_DISCOVERY"));
+        assertThat(portal.auth()).isEqualTo(new UiAuthConfig(
+                UiAuthScheme.FORM,
+                "CLIENT_PORTAL_TEST_USERS",
+                List.of("client", "operator", "no-rights"),
+                "CLIENT_PORTAL_DISCOVERY",
+                new UiLoginFormConfig("/login", "testId=login-username", "testId=login-password", "role=button:Sign in", "testId=user-menu"),
+                UiLoginChallenge.NONE));
         assertThat(ift.uiApplication("ghost-portal")).isEmpty();
     }
 
@@ -451,7 +465,7 @@ class EnvironmentConfigTest {
     @DisplayName("the ui section accepts the camelCase spelling of every key, like the rest of the format")
     void uiApplicationsAcceptCamelCase() {
         EnvironmentDefinition ift = parse("""
-                version: 2
+                version: 3
                 environments:
                   ift:
                     uiApplications:
@@ -465,12 +479,17 @@ class EnvironmentConfigTest {
                           scheme: storage-state
                           credentialsPoolRef: POOL
                           discoveryAccountRef: DISCOVERY
+                          challenge: mfa
+                          login:
+                            signedInLocator: testId=user-menu
                 """).environment("ift").orElseThrow();
 
         UiApplicationDefinition portal = ift.uiApplication("client-portal").orElseThrow();
         assertThat(portal.defaultViewport()).isEqualTo("desktop");
         assertThat(portal.trace()).isEqualTo(UiTraceMode.ON_FAILURE);
         assertThat(portal.auth().scheme()).isEqualTo(UiAuthScheme.STORAGE_STATE);
+        assertThat(portal.auth().challenge()).isEqualTo(UiLoginChallenge.MFA);
+        assertThat(portal.auth().login().signedInLocator()).isEqualTo("testId=user-menu");
     }
 
     @Test
@@ -636,5 +655,125 @@ class EnvironmentConfigTest {
                 """))
                 .isInstanceOf(StandTestException.class)
                 .hasMessageContaining("duplicates");
+    }
+
+    @Test
+    @DisplayName("a credential typed into password-locator is refused when the file is read — the field addresses an element, and the shape check says so")
+    void credentialInTheLoginSectionIsRefused() {
+        assertThatThrownBy(() -> parse("""
+                version: 3
+                environments:
+                  ift:
+                    ui-applications:
+                      client-portal:
+                        base-url-ref: URL
+                        auth:
+                          scheme: FORM
+                          credentials-pool-ref: POOL
+                          login:
+                            username-locator: testId=login-username
+                            password-locator: P@ssw0rd-2026
+                            submit-locator: testId=submit
+                            signed-in-locator: testId=user-menu
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("password-locator")
+                .hasMessageContaining("never holds a credential");
+    }
+
+    @Test
+    @DisplayName("a scheme that signs in without a login section is refused where it is written, not when the browser is already open")
+    void formWithoutALoginSectionIsRefused() {
+        assertThatThrownBy(() -> parse("""
+                version: 2
+                environments:
+                  ift:
+                    ui-applications:
+                      client-portal:
+                        base-url-ref: URL
+                        auth: { scheme: FORM, credentials-pool-ref: POOL }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("login section");
+    }
+
+    @Test
+    @DisplayName("an unknown key inside the login section is refused, like everywhere else in this fail-closed loader")
+    void unknownLoginKeysAreRefused() {
+        assertThatThrownBy(() -> parse("""
+                version: 3
+                environments:
+                  ift:
+                    ui-applications:
+                      client-portal:
+                        base-url-ref: URL
+                        auth:
+                          scheme: STORAGE_STATE
+                          credentials-pool-ref: POOL
+                          login: { signed-in-locator: testId=user-menu, otp-locator: testId=otp }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("Unknown field 'otp-locator'");
+    }
+
+    @Test
+    @DisplayName("auth.login arrived after version 2, so a version-2 document carrying it is refused with the version it needs — not with 'Unknown field'")
+    void loginRequiresFormatVersion3() {
+        String yaml = """
+                version: 2
+                environments:
+                  ift:
+                    ui-applications:
+                      client-portal:
+                        base-url-ref: URL
+                        auth:
+                          scheme: STORAGE_STATE
+                          credentials-pool-ref: POOL
+                          login: { signed-in-locator: testId=user-menu }
+                """;
+
+        assertThatThrownBy(() -> parse(yaml))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("auth.login")
+                .hasMessageContaining("requires environment registry format version " + EnvironmentConfigFormat.UI_LOGIN_SINCE_VERSION)
+                .hasMessageContaining("declares version 2");
+    }
+
+    @Test
+    @DisplayName("the challenge flag is gated on the same version — a field added to a section is a section for this purpose")
+    void challengeRequiresFormatVersion3() {
+        assertThatThrownBy(() -> parse("""
+                version: 2
+                environments:
+                  ift:
+                    ui-applications:
+                      client-portal:
+                        base-url-ref: URL
+                        auth: { scheme: NONE, challenge: none }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("auth.challenge")
+                .hasMessageContaining("format version " + EnvironmentConfigFormat.UI_LOGIN_SINCE_VERSION);
+    }
+
+    @Test
+    @DisplayName("an unknown challenge value is refused with the closed list — declaring one does not make the SDK defeat it, it makes the refusal speak")
+    void unknownChallengeIsRefused() {
+        assertThatThrownBy(() -> parse("""
+                version: 3
+                environments:
+                  ift:
+                    ui-applications:
+                      client-portal:
+                        base-url-ref: URL
+                        auth:
+                          scheme: STORAGE_STATE
+                          credentials-pool-ref: POOL
+                          challenge: fingerprint
+                          login: { signed-in-locator: testId=user-menu }
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("challenge")
+                .hasMessageContaining("MFA");
     }
 }

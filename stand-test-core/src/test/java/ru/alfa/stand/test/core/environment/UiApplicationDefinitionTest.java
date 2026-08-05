@@ -17,7 +17,13 @@ class UiApplicationDefinitionTest {
     @Test
     @DisplayName("an application carries its alias, base-url reference, viewport profiles, trace mode and auth")
     void fullDefinition() {
-        UiAuthConfig auth = new UiAuthConfig(UiAuthScheme.FORM, "PORTAL_TEST_USERS", List.of("client", "operator"), "PORTAL_DISCOVERY");
+        UiAuthConfig auth = new UiAuthConfig(
+                UiAuthScheme.FORM,
+                "PORTAL_TEST_USERS",
+                List.of("client", "operator"),
+                "PORTAL_DISCOVERY",
+                new UiLoginFormConfig("/login", "testId=login-username", "testId=login-password", "role=button:Sign in", "testId=user-menu"),
+                UiLoginChallenge.NONE);
         UiApplicationDefinition application = new UiApplicationDefinition(
                 "client-portal", "CLIENT_PORTAL_URL", "desktop", PROFILES, UiTraceMode.ON_FAILURE, auth);
 
