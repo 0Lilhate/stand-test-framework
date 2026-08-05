@@ -1,5 +1,9 @@
 .gradle
 build/
+# CI keeps Gradle's home and the run metrics inside the workspace (GitLab can only cache paths under
+# $CI_PROJECT_DIR) — both are per-run state, and `.gradle` above does not match `.gradle-home`.
+.gradle-home/
+ci-metrics/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/

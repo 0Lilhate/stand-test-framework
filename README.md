@@ -30,6 +30,7 @@ YAML DSL ──────────────────┘
 | [stand-test-kafka](stand-test-kafka/README.md) | Kafka-шаги (`kafka.send`/`kafka.expect`), корреляция по заголовку, ограниченные клиенты |
 | [stand-test-db](stand-test-db/README.md) | DB-шаги проверки/ассертов с fail-closed SQL write-guard |
 | [stand-test-grpc](stand-test-grpc/README.md) | gRPC unary-шаги через server reflection + `DynamicMessage`, обязательный deadline, полный набор матчеров |
+| [stand-test-ui](stand-test-ui/README.md) | UI-шаги (`ui.open`/`click`/`fill`/`expect`/`expectEventually`/`login`) на Playwright: приложение только по алиасу, свой `BrowserContext` на прогон, пул техучёток по ролям |
 | [stand-test-allure](stand-test-allure/README.md) | Маппит reporting-события SDK в Allure (шаги, labels, параметры, вложения) |
 | [stand-test-config](stand-test-config/README.md) | Файловый `EnvironmentRegistry` (`stand-test-environments.yml`) — SPI-провайдер для plain JUnit |
 | [stand-test-spring-boot-starter](stand-test-spring-boot-starter/README.md) | Auto-configuration для Boot 3: `@Autowired StandClient`, окружения из `application.yml` |
@@ -70,7 +71,7 @@ environments:
         password-ref: MAIN_DB_PASSWORD
         allowed-schemas: [test_data]
         write-allowed: true
-    ui-applications:                             # требует version: 2
+    ui-applications:                             # требует version: 2 (секция auth.login — version: 3)
       client-portal:
         base-url-ref: CLIENT_PORTAL_IFT_URL      # имя переменной окружения, не URL
         default-viewport: desktop                # профиль прогона — конфигурацией, не полем сценария
@@ -78,8 +79,25 @@ environments:
           desktop: { width: 1440, height: 900 }
           mobile:  { width: 390, height: 844 }
         trace: off                               # off (умолчание) | on-failure
-        auth: { scheme: FORM, credentials-pool-ref: CLIENT_PORTAL_TEST_USERS, roles: [client, operator] }
+        auth:
+          scheme: FORM                           # NONE | FORM | STORAGE_STATE | SSO (SSO — говорящий отказ)
+          credentials-pool-ref: CLIENT_PORTAL_TEST_USERS   # переменная с РЕЕСТРОМ учёток, не с учёткой
+          roles: [client, operator]              # объявлены роли ⇒ ui.login обязан назвать одну из них
+          discovery-account-ref: CLIENT_PORTAL_DISCOVERY   # учётка разведки, вне пула (SEC-10)
+          challenge: none                        # none | mfa | otp | captcha — объявляется, не обходится
+          login:                                 # локаторы формы входа: <стратегия>=<значение>
+            path: /login
+            username-locator: testId=login-username
+            password-locator: testId=login-password
+            submit-locator: "role=button:Sign in"
+            signed-in-locator: testId=user-menu   # элемент, который есть только после входа
 ```
+
+Переменная `CLIENT_PORTAL_TEST_USERS` содержит **реестр учёток**, а не учётку:
+`portal-client-1:client;portal-client-2:client;portal-manager-1:manager`. Каждая запись — это
+`<id>:<роль>` (имена переменных с логином и паролем выводятся из id: `PORTAL_CLIENT_1_USERNAME` /
+`PORTAL_CLIENT_1_PASSWORD`) либо `<id>:<роль>:<переменная-логина>:<переменная-пароля>`. Ни логина, ни
+пароля в конфигурации нет ни на одном уровне.
 
 ### Версия формата реестра
 
@@ -95,14 +113,18 @@ environments:
 | не целое число или ≤ 0 | ошибка конфигурации (fail-closed) |
 
 Секции, появившиеся после версии 1, требуют явного объявления версии: `ui-applications` — это
-`version: 2`. Смысл правила в том, что более старый SDK, встретив такой файл, скажет «файл версии 2,
-поддерживается 1 — обновите SDK», а не «неизвестный ключ `ui-applications`».
+`version: 2`, а `auth.login`/`auth.challenge` внутри неё — `version: 3` (поле, добавленное в секцию,
+считается секцией для этого правила). Смысл в том, что более старый SDK, встретив такой файл, скажет
+«файл версии 3, поддерживается 2 — обновите SDK», а не «неизвестный ключ `login`».
 
 **UI-приложения** адресуются логическим алиасом ровно так же, как сервисы и топики: сценарий называет
 `client-portal`, реестр — единственное место, где алиас превращается в адрес, произвольный URL в шаге
 указать негде. Неизвестный алиас отвергается валидатором **до** запуска шага
-(`NON_WHITELISTED_UI_APPLICATION`). Сами `ui.*`-шаги в SDK пока не поставляются — секция реестра и
-guardrail заведены заранее (волна 1 UI-тестирования).
+(`NON_WHITELISTED_UI_APPLICATION`). Сами `ui.*`-шаги поставляет модуль
+[stand-test-ui](stand-test-ui/README.md): `open`/`click`/`fill`/`expect`/`expectEventually` плюс
+`login` — вход техучёткой, выданной **по роли** из пула, с ограниченным ожиданием свободной учётки и
+переиспользованием сессии браузера. Секция `trace` реестром принимается, но UI-модуль её пока **не
+использует** (артефакты падения — следующий срез).
 
 **3. Напишите первый тест.** `@StandTest` инжектит `StandClient`, собранный из адаптеров, найденных на
 classpath — никакого кода проводки:
@@ -233,6 +255,21 @@ junit.jupiter.execution.parallel.config.dynamic.factor=0.5
 Для взаимного исключения только между тестами, делящими один именованный ресурс (например, два класса
 занимают один порт), используйте нативный JUnit'овый `@ResourceLock("<alias>")` напрямую.
 
+**UI-набор — та же модель и два дополнительных правила.** Браузерный прогон изолирован
+`BrowserContext`'ом (свои куки, storage, кэш), а сессия и аренда учётки живут в `ResourceScope` прогона,
+поэтому `ui.*` параллелится как всё остальное. Но:
+
+- **потолок параллельности UI-набора равен размеру пула техучёток.** Выше потолка прогоны ждут
+  свободную учётку — но ждут **ограниченно**: при параллельности `P`, пуле `N` и длительности сценария
+  `T` последний в очереди простаивает ≈ `T × (P/N − 1)`, и если это больше `accountTimeout`
+  (умолчание 60 с), прогон падает как `BROKEN`. Посчитайте до запуска; диагностика
+  `ui.account.waitMillis` показывает фактический простой;
+- **только потоки, не форки:** `maxParallelForks = 1`. Пул живёт в процессе, и вторая JVM заведёт
+  свой — то есть выдаст ту же учётку второму прогону, ровно вопреки тому, ради чего пул существует;
+- поток браузерного набора стоит Chromium плюс процесс драйвера, поэтому число для него задаётся
+  отдельно и меньше, чем для обычного. Подробности — в
+  [stand-test-ui/README.md](stand-test-ui/README.md#параллельность-набора).
+
 **Риски против реальных стендов DEV/IFT** — общий стенд по определению находится под конкуренцией. Изоляция
 данных держится на том, что каждая запись/чтение скоуплены по `testRunId`, а каждый Kafka expect
 отфильтрован по корреляции (guardrails выше enforce'ят сторону записи/expect'а; скоупьте и свои чтения).
@@ -277,6 +314,43 @@ multiple-bindings не возникает.
 Toolchain — Java 21, байткод таргетит **Java 17** (`--release 17`) — артефакты грузятся на потребительских
 JDK 17/21/24. Публикация во внутренний репозиторий параметризована через свойства `standTestPublish*` /
 переменные окружения `STAND_TEST_PUBLISH_*` — см. [docs/publishing.md](docs/publishing.md).
+
+## CI
+
+Пайплайн GitLab [`.gitlab-ci.yml`](.gitlab-ci.yml) прогоняет ту же самую команду, что и разработчик:
+
+| Джоба | Когда | Команда |
+|---|---|---|
+| `verify` | merge request и push в ветку | `./gradlew build --console=plain` |
+| `nightly-verify` | расписание (Settings → CI/CD → Schedules) | `./gradlew build --console=plain --rerun-tasks --no-build-cache` |
+
+Между прогонами переносится **только кеш загруженных зависимостей** (`.gradle-home/caches/modules-2`,
+`.gradle-home/wrapper`): build-cache, configuration-cache и каталоги `build/` не кешируются, поэтому
+джоба не может отчитаться `UP-TO-DATE` за то, что изменено этим коммитом. Ночной прогон вдобавок
+переисполняет всё от холодного состояния. Длительность пишется в артефакт
+`ci-metrics/gradle-build-seconds.txt` — вход в KPI-8.
+
+Браузерный набор (`:stand-test-ui:browserTest`) здесь **намеренно не запускается**: ему нужен образ с
+Chromium — это отдельная задача (`UITG-S026`). Тест `CiPipelineConfigTest` роняет сборку, если
+`browserTest` появится в пайплайне.
+
+**Что нужно настроить один раз** — координаты раннера и доступ к Artifactory не зашиты в файл, это
+факты организации, а не репозитория. Переменные проекта (Settings → CI/CD → Variables):
+
+| Переменная | Назначение |
+|---|---|
+| `STAND_TEST_CI_IMAGE` | образ с JDK 21 (toolchain; авто-провижининга нет — сборка ничего не тянет из интернета) |
+| `STAND_TEST_CI_RUNNER_TAG` | тег раннера, которому разрешены эти джобы |
+| `ORG_GRADLE_PROJECT_binaryPublicRepoUrl` | публичный прокси-репозиторий (Maven Central + Plugin Portal) |
+| `ORG_GRADLE_PROJECT_artifactoryUrl` | базовый URL Artifactory |
+| `ORG_GRADLE_PROJECT_artifactorySnapshotRepo` | ключ snapshot-репозитория |
+| `ORG_GRADLE_PROJECT_artifactoryUser` | read-пользователь (masked) |
+| `ORG_GRADLE_PROJECT_artifactoryPassword` | read-токен (masked + protected) |
+
+`before_script` проверяет их наличие и падает с перечнем недостающих **имён** (значения не печатаются
+никогда). Блокировка merge — настройка проекта, а не файла: включите Settings → Merge requests →
+«Pipelines must succeed»; со своей стороны пайплайн не помечает ни одну джобу `allow_failure` и даёт
+merge request собственный прогон.
 
 ## Известные ограничения
 
