@@ -54,6 +54,12 @@ jackson = "2.18.2"
 # in-process transport is test-only. Pinned as a compatible pair (grpc-java 1.68.x ships protobuf 3.25.x).
 grpc = "1.68.1"
 protobuf = "3.25.5"
+# stand-test-ui adapter: Playwright for Java — the browser driver, confined to the module's
+# `…ui.playwright` package (ADR-UI-001) and never reachable from core or from any other adapter.
+# The artefact resolves through the internal Artifactory mirror; the browser binaries themselves are
+# downloaded by the bundled driver on first use (or preinstalled into the CI image), which is why the
+# browser-backed tests live behind a separate `browserTest` task rather than in `test`.
+playwright = "1.61.0"
 # Reserved for later phases (not applied at the skeleton stage):
 springBoot = "3.5.14"
 springDependencyManagement = "1.1.7"
@@ -84,6 +90,7 @@ grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }
 grpc-services = { module = "io.grpc:grpc-services", version.ref = "grpc" }
 grpc-netty-shaded = { module = "io.grpc:grpc-netty-shaded", version.ref = "grpc" }
 grpc-inprocess = { module = "io.grpc:grpc-inprocess", version.ref = "grpc" }
+playwright = { module = "com.microsoft.playwright:playwright", version.ref = "playwright" }
 protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
 protobuf-java-util = { module = "com.google.protobuf:protobuf-java-util", version.ref = "protobuf" }
 # stand-test-spring-boot-starter: Spring Boot auto-configuration. The library ships only the

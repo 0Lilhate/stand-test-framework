@@ -135,6 +135,7 @@ include(
   "stand-test-kafka",
   "stand-test-db",
   "stand-test-grpc",
+  "stand-test-ui",
   "stand-test-allure",
   "stand-test-example",
   "stand-test-spring-boot-starter",
