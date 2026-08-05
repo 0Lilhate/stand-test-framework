@@ -27,17 +27,29 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { basename, join } from 'node:path';
-import { discover, expectations, NOT_CHECKED } from './lib/cases.mjs';
+import { branch, discover, expectations, NOT_CHECKED } from './lib/cases.mjs';
 import { BUNDLE, STATE_DIR } from './lib/bundle.mjs';
 import { mappings, claimsArtifact } from './lib/mapping.mjs';
 
 const STATE = `${STATE_DIR}/state.json`;
 
-const PROMPT = (casePath) => `/stand-test-generate-java-test ${casePath}
+const COMMAND = { protocol: '/stand-test-generate-java-test', ui: '/stand-test-generate-ui-test' };
 
-Это неинтерактивный прогон: ответить на вопрос некому. Если стадия 3 даёт блокирующие вопросы —
+const TAIL = {
+  protocol: `Это неинтерактивный прогон: ответить на вопрос некому. Если стадия 3 даёт блокирующие вопросы —
 остановись и перечисли их. Не выдумывай контрактные детали, не подставляй правдоподобные пути и поля:
-нерешённый вопрос, вернувшийся вопросом, стоит дешевле теста, который проверяет выдумку.`;
+нерешённый вопрос, вернувшийся вопросом, стоит дешевле теста, который проверяет выдумку.`,
+  // The UI tail says the same thing about the thing a browser makes easy to get wrong. Discovery needs a
+  // live application; where the case supplies the discovery report instead, that report is the DOM and
+  // nothing outside it exists. A locator with no row there is invented, and an invented locator is the
+  // one defect of this branch that compiles, survives review by eye, and fails like application drift.
+  ui: `Это неинтерактивный прогон: ответить на вопрос некому. Если стадия 2 или стадия 4 даёт блокирующие
+вопросы — остановись и перечисли их. Локаторы и тексты берутся ТОЛЬКО из отчёта разведки (подсаженного
+кейсом либо снятого с живого приложения): выдуманный локатор компилируется, проходит ревью глазами и
+падает потом так же, как дрейф вёрстки. Ни адресов, ни sleep, ни обхода второго фактора.`,
+};
+
+const PROMPT = (casePath, kind) => `${COMMAND[kind]} ${casePath}\n\n${TAIL[kind]}`;
 
 function readState(project) {
   const file = join(project, STATE);
@@ -100,6 +112,11 @@ function compare(project, expected, outcome) {
     }
   }
 
+  if (expected.forbidsCode && outcome.written.some((path) => path.endsWith('.java'))) {
+    matched = false;
+    notes.push('кейс запрещал производить тест, а .java записан — правильным исходом был вопрос, а не правдоподобный артефакт');
+  }
+
   for (const pattern of expected.forbidden) {
     for (const path of outcome.written) {
       let text = '';
@@ -144,7 +161,7 @@ function main(argv) {
   }
   if (argv.includes('--dry-run')) {
     process.stdout.write(`${selected.length} кейсов, по одной сессии на каждый, последовательно:\n`
-      + selected.map((item) => `  ${item.id}${item.spec ? ' (+ case.yml)' : ''} ← ${item.input}`).join('\n')
+      + selected.map((item) => `  ${item.id}${item.spec ? ' (+ case.yml)' : ''} ← ${item.input}  [${COMMAND[branch(item.spec)]}]`).join('\n')
       + '\n\nПоследовательно потому, что состояние хуков одно на ПРОЕКТ: параллельные сессии затирали бы\n'
       + 'бухгалтерию гейтов друг друга, и любой вердикт здесь стал бы догадкой.\n');
     process.exit(0);
@@ -154,8 +171,9 @@ function main(argv) {
   const results = [];
   for (const item of selected) {
     const before = readState(project);
+    const kind = branch(item.spec);
     const started = Date.now();
-    const session = spawnSync(runner, ['-p', PROMPT(item.input)], { cwd: project, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    const session = spawnSync(runner, ['-p', PROMPT(item.input, kind)], { cwd: project, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
     writeFileSync(join(project, out, `${item.id}.log`),
       `${session.stdout || ''}${session.stderr ? `\n--- stderr ---\n${session.stderr}` : ''}`, 'utf8');
 
@@ -164,6 +182,7 @@ function main(argv) {
     results.push({
       case: item.id,
       input: item.input,
+      branch: kind,
       ...outcome,
       expectation: compare(project, expected, outcome),
       seconds: Math.round((Date.now() - started) / 1000),
@@ -186,15 +205,16 @@ function main(argv) {
     'Вердикты выведены из того, что записали хуки (артефакты, их хеши, гейты), а не из того, что сказала',
     'модель. NEEDS-HUMAN — нормальный исход: в неинтерактивной сессии некому ответить на блокирующие',
     'вопросы стадии 3, и вернувшийся вопрос стоит дешевле теста, проверяющего выдумку.', '',
-    '| Кейс | Вердикт | Что записано | Ожидание | Лог |', '|---|---|---|---|---|',
-    ...results.map((item) => `| ${item.case} | ${item.verdict} | ${item.detail} | `
+    '| Кейс | Ветка | Вердикт | Что записано | Ожидание | Лог |', '|---|---|---|---|---|---|',
+    ...results.map((item) => `| ${item.case} | ${item.branch} | ${item.verdict} | ${item.detail} | `
       + `${item.expectation === null ? '—' : item.expectation.matched ? 'совпало' : item.expectation.notes.join('; ')} | ${item.log} |`),
     '',
     '## Что здесь НЕ проверено',
     '',
-    'Сверяются два семейства ожиданий: нужен ли был человек и не попало ли запрещённое содержимое в',
-    'записанные файлы. Остальное в `case.yml` невидимо для хуков по построению — они записывают, ЧТО',
-    'написано и что прогейчено, и ничего о том, как это было решено:',
+    'Сверяются три семейства ожиданий: нужен ли был человек, не попало ли запрещённое содержимое в',
+    'записанные файлы и не появился ли артефакт, который кейс запрещал производить. Остальное в',
+    '`case.yml` невидимо для хуков по построению — они записывают, ЧТО написано и что прогейчено, и',
+    'ничего о том, как это было решено:',
     '',
     ...NOT_CHECKED.map((line) => `- ${line}`),
     '',

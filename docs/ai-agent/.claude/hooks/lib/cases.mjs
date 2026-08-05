@@ -43,6 +43,26 @@ export function discover(path) {
   return found;
 }
 
+/**
+ * Which branch of the pipeline a case belongs to — and therefore which command drives it.
+ *
+ * Read from `case.yml`, never guessed from the input text: the corpus spells it twice over (a `ui-…`
+ * category and a `ui:` block), and a runner that sniffed prose for the word "screen" would route by
+ * coincidence. A flat text file carries no signal at all, so it stays on the protocol branch — the
+ * default that existed before UI cases did.
+ *
+ * Getting this wrong is not a detail. `/stand-test-generate-java-test` would take a UI case through
+ * the protocol stages, skipping discovery, and produce locators from nothing but plausibility — the
+ * one artifact the UI guardrails call the worst this branch can make.
+ */
+export function branch(spec) {
+  if (spec === null) return 'protocol';
+  const text = readFileSync(spec, 'utf8');
+  const category = value(text, 'category');
+  if (category !== null && category.startsWith('ui-')) return 'ui';
+  return /^[^\S\n]*ui:[^\S\n]*$/m.test(text) ? 'ui' : 'protocol';
+}
+
 /** The value of a key at any indent, first occurrence. */
 function value(text, key) {
   const match = new RegExp(`^[^\\S\\n]*${key}:[^\\S\\n]*(.+?)[^\\S\\n]*$`, 'm').exec(text);
@@ -95,11 +115,17 @@ export function expectations(spec) {
   }
 
   const terminalState = value(text, 'terminalState');
+  // `expected.artifacts.forbidden` is the third family a run CAN be checked against here, and it is
+  // cheap: the hooks already record every file written, so "no test was to be produced" is a fact on
+  // disk rather than a judgement. It matters most where it is easiest to fail quietly — a case whose
+  // correct outcome is a question, answered instead with a plausible test nobody asked for.
+  const forbiddenArtifacts = list(text, 'forbidden');
   return {
     id: value(text, 'id'),
     humanRequired: humanRequired === null && terminalState === null ? null
       : humanRequired === true || terminalState === 'AWAITING_APPROVAL',
     forbidden: list(text, 'forbiddenArtifactPatterns'),
+    forbidsCode: forbiddenArtifacts.some((kind) => ['ui-test', 'java-test', 'page-object'].includes(kind)),
   };
 }
 
@@ -119,4 +145,9 @@ export const NOT_CHECKED = [
   'sut (5 кейсов) — нужен управляемый дубль системы под тестом',
   'kbOverlay (2 кейса) — нужно затенение базы знаний на один прогон',
   'repeats — прогон одного кейса несколько раз без дубля ничего не измеряет',
+  'expected.artifacts.required — «отчёт написан» видно, «отчёт полон» не видно: восемь разделов BR-07 читает человек',
+  'expected.questions.mustAsk / mustAssume / mustNotAsk — вопрос задан в диалоге, а не записан на диск',
+  'expected.mandatoryChecks — форма ассершена внутри написанного файла; хук знает, что файл написан, а не что в нём проверяется',
+  'expected.gates.safety.mustFlag / quality — вердикт гейта записывается, ПЕРЕЧЕНЬ находок нет',
+  'ui.discoveryEvidence — что разведка действительно выполнялась на живом приложении, доказать нечем',
 ];

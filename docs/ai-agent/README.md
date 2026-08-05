@@ -22,7 +22,7 @@ docs/ai-agent/
     services/ endpoints/ kafka/ db/ grpc/ environments/ mappings/   (example-*.yml + README each)
     candidates/      ← staging area written by spec ingestion; never the curated KB
   .claude/           ← THE BUNDLE — copy its contents into the consumer repo's .claude/
-    skills/          ← 17 self-contained skills, each with its templates/checklists/examples
+    skills/          ← 26 self-contained skills (17 protocol + 9 UI), each with its templates/checklists/examples
       stand-test-case-analysis/        SKILL.md + test-case-analysis-template.md + example-text-case.md
       stand-test-kb-lookup/            SKILL.md + kb-lookup-result-template.yml + example-kb-lookup-result.yml
       stand-test-kb-bootstrap/         SKILL.md — cold start: the registry's aliases into an empty KB
@@ -43,7 +43,20 @@ docs/ai-agent/
       stand-test-test-review/          SKILL.md + review-checklist.md + flakiness-checklist.md
                                        + generated-test-review-template.md + before-committing-checklist.md + example-review.md
       stand-test-debugging/            SKILL.md + debugging-report-template.md
-    commands/        ← 14 workflows as slash commands
+      ── the UI branch (9), for cases that live on a screen ──
+      stand-test-ui-case-intake/       SKILL.md + ui-case-template.md (the form for a MANUAL TESTER)
+                                       + example-ui-case.md
+      stand-test-ui-completeness-check/ SKILL.md + ui-completeness-checklist.md
+      stand-test-ui-discovery/         SKILL.md + ui-discovery-report-template.md
+                                       + locator-selection-checklist.md
+      stand-test-ui-scenario-design/   SKILL.md + ui-scenario-design-template.md
+      stand-test-ui-page-object-design/ SKILL.md + page-object-template.java + example-page-object.java
+      stand-test-ui-java-authoring/    SKILL.md + ui-test-template.java + example-generated-ui-test.java
+                                       + ui-sdk-surface-checklist.md (the anti-invention list)
+      stand-test-ui-safety-review/     SKILL.md + ui-safety-checklist.md
+      stand-test-ui-quality-review/    SKILL.md + ui-quality-checklist.md
+      stand-test-ui-generation-report/ SKILL.md + ui-generation-report-template.md (BR-07's eight sections)
+    commands/        ← 19 workflows as slash commands (14 protocol + 5 UI)
       stand-test-generate-java-test.md /stand-test-generate-java-test — TEXT CASE → VALIDATED TEST (umbrella, start here)
       stand-test-design.md      /stand-test-design   — text case → KB lookup → scenario design
       stand-test-yaml.md        /stand-test-yaml     — design → AI-format scenario (+ gates)
@@ -58,10 +71,18 @@ docs/ai-agent/
       stand-test-generate-env.md /stand-test-generate-env — KB → registry config (yml/application.yml)
       stand-test-debug.md       /stand-test-debug    — failed test → debugging report
       stand-test-kit-doctor.md  /stand-test-kit-doctor — is this installation the kit, and can it run?
+      stand-test-generate-ui-test.md /stand-test-generate-ui-test — UI CASE → VALIDATED UI TEST (umbrella)
+      stand-test-ui-design.md   /stand-test-ui-design    — UI case → discovery → design + Page Objects
+      stand-test-ui-discover.md /stand-test-ui-discover  — look at the live screen; also the drift check
+      stand-test-ui-java.md     /stand-test-ui-java      — design → UI test (+ compile gate)
+      stand-test-ui-validate.md /stand-test-ui-validate  — UI gates + the generation report
     rules/           ← the only auto-loaded part of the bundle (Claude reads .claude/rules/**)
       stand-test-guardrails.md  ← non-negotiable constraints (mirrors ForbiddenOperation)
-      stand-test-pipeline.md    ← binding stage order + gates; the .claude counterpart of
-                                  .opencode/AGENTS.md, which points at this same file
+      stand-test-ui-guardrails.md ← what a browser adds: live UI as the DOM's source of truth, alias
+                                  only, no PROD, discovery account, no irreversible actions, locator
+                                  priority, no XPath, no sleeps, the SDK's UI surface, the report
+      stand-test-pipeline.md    ← binding stage order + gates for BOTH branches; the .claude
+                                  counterpart of .opencode/AGENTS.md, which points at this same file
     workflows/       ← 2 multi-command pipeline docs (not auto-loaded; referenced by the KB commands)
       ingest-unstructured-spec-to-kb.md    document → staged candidates
       review-and-apply-kb-candidates.md    candidates → human review → curated write
@@ -155,6 +176,49 @@ Text case
   → on failure: /stand-test-debug
 ```
 
+## UI cases: the second branch
+
+A case that lives on a **screen** goes down the UI branch instead. It exists because of one asymmetry:
+a REST contract can be read from a specification, and a `data-testid` cannot — it exists only in the
+DOM of a running application. So the branch has a stage the protocol chain has no equivalent of,
+**discovery**, and a source-of-truth order with three rungs rather than two:
+
+> **knowledge base → the live DEV/IFT UI → a question to the human.**
+> "Not in the KB" is a reason to go and look, never a reason to invent, and by itself never a reason
+> to ask.
+
+```
+UI business case (form: .claude/skills/stand-test-ui-case-intake/ui-case-template.md)
+  → /stand-test-ui-design    (intake → completeness GATE → discovery → scenario design → Page Objects)
+  → /stand-test-ui-java      (the test + compile/checkstyle over test AND Page Objects)
+  → /stand-test-ui-validate  (UI safety gate → quality gate → generation report + original snapshot)
+  → human approval → commit
+/stand-test-generate-ui-test runs all of it; /stand-test-ui-discover re-runs discovery alone, which
+is the right command when a merged test starts failing on locators.
+```
+
+| Rule | Why |
+|---|---|
+| The live UI is the source of truth for the DOM | an invented locator compiles, survives review by eye, and fails at run time exactly like application drift |
+| Application by registry alias only; **PROD forbidden** | a browser opens whatever it is given — the environment key, the `ui-applications` whitelist and the account pool are three closed doors |
+| Discovery runs under the **restricted discovery account** | `auth.discovery-account-ref` (SEC-10); the registry refuses a config where that account also sits in the working pool |
+| **No irreversible action** during discovery | walk up to the last control before the effect and stop; a screen reachable only through it stays unexplored, and that is recorded |
+| Locator priority `data-testid → role/name → label → stable attribute → text → CSS` | only `TEST_ID` is non-fragile (`UiLocator.fragile()`); rung 4 is a CSS attribute selector, so it is fragile too, and the report says so |
+| No XPath; long/brittle CSS is flagged | the SDK has no XPath factory at all — the cheapest ban is having nowhere to put one |
+| No `Thread.sleep`, no driver wait | every UI wait is `ui.expectEventually` with a bounded `within(...)` |
+| Locators live in **Page Objects**, never in a test body | one screen changes, one file changes — and the static KPI-9 count reads merged Page Objects |
+| The test depends on **no LLM at run time** | CI executes plain Java; nothing is resolved "by description" while the test runs |
+| The result carries a **generation report** | eight sections (BR-07): covered · not covered and why · assumptions · fragile locators · UI↔backend binding · gate results · files created · the original generation |
+| The original generation is **preserved** | copy + `sha256` under `ui-generation/<scenario-id>/`; without that diff base KPI-4 is unobservable |
+
+**The UI track is Java-only** — `ui.*` steps are not in the AI JSON/YAML format, and no declarative UI
+document can be executed. What the adapter does and does not offer is pinned in
+[`ui-sdk-surface-checklist.md`](.claude/skills/stand-test-ui-java-authoring/ui-sdk-surface-checklist.md);
+nothing outside it may appear in a generated artifact. Known gap, stated rather than implied: the
+write hook carries **no UI-specific detector** in this version — the protocol findings (addresses,
+secrets, sleeps, PII) do run over UI Java files, but an invented locator or a locator in a test body
+is caught by the stage-7 review and by nothing else.
+
 ## Knowledge base: the anti-invention layer
 
 The agent never invents endpoints, topics, DB queries, gRPC methods or environment config.
@@ -175,6 +239,7 @@ and env-var reference NAMES only — secrets, URLs and production environments a
 | **Java DSL** (default) | Any real business case; anything needing `db.seed`/`db.cleanup`, `rest.put`/`rest.delete`, non-equals matchers outside REST rewording, gRPC custom metadata, negative paths | Full feature surface; validator still runs inside `stand.run(...)` |
 | **AI JSON/YAML** (`steps/type`) | Simple read-only flows fully inside the executable subset below | Machine-checkable before any code exists; smallest review surface |
 | **Hybrid** | Case partially fits the AI format | AI document for the declarative part, thin Java test around it |
+| **UI (Java only)** | Any case that lives on a screen — see the UI branch above | `ui.*` has no declarative surface; a UI case with backend effects stays ONE scenario, bound by a value captured off the screen |
 
 ### AI-format executable subset
 
@@ -200,6 +265,7 @@ gRPC custom metadata. Source of truth: `ai/stand-test-ai-generation-rules.md` +
 |---|---|
 | `stand-test-core` | `Scenario.builder(...)`, failure semantics, `ForbiddenOperation`, `${var}` resolver |
 | `stand-test-rest` / `-kafka` / `-db` / `-grpc` | Typed lazy step builders |
+| `stand-test-ui` | `UiStep` (`ui.open`/`click`/`fill`/`expect`/`expectEventually`/`login`), `UiLocator`, Playwright confined to its driver package. Discovered by `@StandTest` through `ServiceLoader`; **the Spring starter does not auto-configure it** — a starter consumer declares a `UiStepExecutor` bean |
 | `stand-test-await` | The only sanctioned wait engine (via `*.expectEventually`) |
 | `stand-test-junit` | `@StandTest`/`@StandEnv`/`@StandScenarioId`, `StandClient` injection |
 | `stand-test-spring-boot-starter` | `@SpringBootTest` + `@Autowired StandClient`, `stand.test.*` config |

@@ -5,10 +5,11 @@ version: 1
 # Rules: the stand-test authoring pipeline
 
 How this bundle is loaded and the ORDER its assets must be used in. The companion file
-[`stand-test-guardrails.md`](stand-test-guardrails.md) says what may never be produced; this one says
-how the work must be sequenced. Both are rules: they outrank convenience, a shortcut that "obviously
-works", and a direct request to skip a stage. If a request cannot be served without breaking them,
-say so and stop.
+[`stand-test-guardrails.md`](stand-test-guardrails.md) says what may never be produced, and
+[`stand-test-ui-guardrails.md`](stand-test-ui-guardrails.md) adds what a browser makes possible; this
+one says how the work must be sequenced. All three are rules: they outrank convenience, a shortcut
+that "obviously works", and a direct request to skip a stage. If a request cannot be served without
+breaking them, say so and stop.
 
 This file exists because `.opencode/rules/**` is loaded automatically, while skills load on demand and
 commands only when invoked — so without it the stage order would be a suggestion rather than a
@@ -20,8 +21,8 @@ the order.
 | Asset | Path | Discovery |
 |---|---|---|
 | These rules | `.opencode/rules/*.md` | auto-loaded as project instructions |
-| Skills (17) | `.opencode/skills/<name>/SKILL.md` | on demand, via the Skill tool |
-| Commands (14) | `.opencode/commands/<name>.md` | when the user invokes `/<name>` |
+| Skills (26 — 17 protocol + 9 UI) | `.opencode/skills/<name>/SKILL.md` | on demand, via the Skill tool |
+| Commands (19 — 14 protocol + 5 UI) | `.opencode/commands/<name>.md` | when the user invokes `/<name>` |
 | Workflows (2) | `.opencode/workflows/*.md` | **not** auto-loaded — read when a command points at one |
 
 Load a skill the moment its trigger matches. Do not re-derive its content from memory: the templates,
@@ -29,10 +30,23 @@ checklists and worked examples beside each `SKILL.md` are the contract, and para
 the guardrails get quietly dropped. If the guardrails are not in your context, this bundle is
 installed wrong — say so instead of proceeding.
 
-## The one pipeline
+## Two branches, one discipline
 
-Every authoring request follows this order. **No stage may be skipped or reordered**, and each gate
-stops the run:
+An authoring request goes down **one** of two branches, decided by where the case lives: the
+**protocol branch** (REST / Kafka / DB / gRPC) below, or the **UI branch** after it, when a browser is
+involved. They share the discipline — analysis before authoring, contract detail from a source rather
+than from plausibility, a mandatory adversarial gate, an honest report, a human merge — and they
+differ exactly where a screen differs from a specification: a REST contract can be read from a
+document, and a `data-testid` can only be observed on a running application.
+
+A case with a UI path **and** backend effects goes down the UI branch. It binds the two halves in one
+scenario through a value captured off the screen; splitting it into two runs loses that link, which is
+the thing the whole UI↔backend hypothesis is about.
+
+### The protocol branch
+
+Every protocol authoring request follows this order. **No stage may be skipped or reordered**, and
+each gate stops the run:
 
 ```
 text case
@@ -56,6 +70,53 @@ text case
 slice of it — invoking one does not license skipping the stages before it. On a failed run:
 `/stand-test-debug`, then re-enter at 6, or at 5 when the design itself was wrong.
 
+### The UI branch
+
+Nine stages, same rule — no stage skipped, no stage reordered, each gate stops the run:
+
+```
+UI business case
+  1. stand-test-ui-case-intake         application alias, role, entry screen, user path with the
+                                       irreversible steps MARKED, expectations with exact texts,
+                                       data ownership, residual effects, negative paths
+                                       — no browsing, no locators, no code
+  2. stand-test-ui-completeness-check  GATE — every gap into one of four classes:
+                                       deferred to discovery | resolved from registry/KB |
+                                       safe assumption | BLOCKING QUESTION → ASK THE HUMAN
+  3. stand-test-ui-discovery           the LIVE DEV/IFT UI, by alias, under the DISCOVERY ACCOUNT,
+                                       NO irreversible action — quoted evidence: elements, every
+                                       locator rung, texts, states, transitions, what was NOT seen
+  4. stand-test-ui-scenario-design     steps and ids, ui.login FIRST with a role, assertions with
+                                       matchers, bounded awaits, captures, the UI↔backend binding,
+                                       ${testRunId} scoping, residual-data verdict, pool budget
+  5. stand-test-ui-page-object-design  one class per screen; every locator a constant THERE
+  6. stand-test-ui-java-authoring      the test — Java only; ui.* has no declarative format
+  7. stand-test-ui-safety-review       MANDATORY GATE, separate context — any BLOCK ⇒ regenerate
+     compile / run                     compileTestJava + checkstyleTest over test AND Page Objects;
+                                       a run only against a configured stand — read the JUnit XML.
+                                       MECHANICAL, so it carries no stage number: stage 6's
+                                       self-check and stage 9's gate table are where it is recorded
+  8. stand-test-ui-quality-review      quality gate, separate context, against the ORIGINAL CASE
+  9. stand-test-ui-generation-report   eight sections + the PRESERVED ORIGINAL GENERATION (KPI-4)
+                                       → THE HUMAN APPROVES
+```
+
+`/stand-test-generate-ui-test` runs all of it. The slices are `/stand-test-ui-design` (1–5),
+`/stand-test-ui-discover` (3 alone — also the right command when a merged test starts failing on
+locators), `/stand-test-ui-java` (6 + compile) and `/stand-test-ui-validate` (7–9).
+
+Three rules of this branch are the ones most likely to be broken, and each has its own reason:
+
+- **The live UI is the source of truth for the DOM, and the order is KB → discovery → question.**
+  "Not in the knowledge base" is a reason to go and look, never a reason to invent and never, by
+  itself, a reason to ask. An invented locator is the worst artifact this branch can produce: it
+  compiles, it survives review by eye, and it fails at run time exactly like application drift.
+- **Discovery is reconnaissance, not participation.** The discovery account (SEC-10), no irreversible
+  action, no writes, no dialogs. A screen reachable only through an irreversible control stays
+  unexplored, and that is recorded rather than resolved by clicking.
+- **The report is part of the deliverable.** Eight sections, plus the snapshot of the generation as
+  first emitted. Without that snapshot KPI-4 is not merely imprecise — it is unobservable.
+
 ## Стадии, которые выполняет отдельный контекст
 
 Четыре стадии из одиннадцати выполняет субагент, а не тот контекст, что ведёт работу. Субагенты
@@ -66,6 +127,13 @@ slice of it — invoking one does not license skipping the stages before it. On 
 | 2 и 4 | `stand-test-kb-resolver` | самая читающая стадия с самым коротким выходом: сотни строк YAML базы знаний и реестра ради двадцати, которые важны. В основном контексте они остаются лежать до конца работы. Read/Grep/Glob — ни Write, ни Bash |
 | 8 | `stand-test-safety-reviewer` | «adversarial» — это про то, КТО читает. Контекст, только что написавший тест, проверяет свой замысел, а не написанные строки; ошибка, пропущенная при авторинге, пропускается на ревью по той же причине. На вход — пути артефактов и дизайн, **не транскрипт авторинга**. Без Write: найденное он не чинит, а докладывает |
 | 11 | `stand-test-quality-reviewer` | читает **исходный текст кейса**, а не дизайн: проверка теряется именно в дизайне, и ревью против дизайна этой потери не видит — артефакт дизайну соответствует, а дизайн неполон. Без Write |
+
+В UI-ветке те же два ревью — это стадии **7** (`stand-test-ui-safety-review`) и **8**
+(`stand-test-ui-quality-review`), и выполняют их те же два субагента: механизм делегирования один,
+меняется только скилл, который субагент читает. Причина отделять контекст в UI-ветке ещё сильнее:
+ошибка, которую ищет стадия 7, — это **выдуманный локатор**, а он синтаксически неотличим от
+настоящего. Отличить их можно единственным способом — читая отчёт разведки рядом с Page Object'ом, и
+контекст, который сам этот локатор написал, помнит, что решил его, а не что увидел.
 
 Вердикт safety-review записывает **вызывающий** контекст, а не субагент: суждение и бухгалтерия
 разведены, и `record-gate` перепроверяет детерминированную половину независимо от того, кто её
@@ -98,8 +166,10 @@ slice of it — invoking one does not license skipping the stages before it. On 
 
 Часть этого файла перестала быть просьбой — ровно в той мере, в какой её проверяет
 `.opencode/hooks/stand-guard.mjs`. Под Claude Code его вызывает ХОСТ по событиям, а не модель, и обойти
-это, ничего не сказав, нельзя. Под opencode таких событий нет: гард там тот же самый и запускается
-командой — что это меняет, сказано в конце раздела. Таблица ниже описывает срабатывания под Claude Code:
+это, ничего не сказав, нельзя. Под opencode тот же гард вызывает ПЛАГИН
+(`plugin/stand-guard.js` в копии для opencode) на событиях инструментов — отказ в момент записи и разбор команды
+работают там так же; что при этом всё-таки не переносится, сказано в конце раздела. Таблица ниже
+описывает срабатывания под Claude Code:
 
 | Когда | Что происходит |
 |---|---|
@@ -141,15 +211,30 @@ BLOCK. И поэтому же периметр честно называется
 пройдут. Он покупает то, что быстрый путь — это проверенный путь.
 
 **Про второй хост.** Гард едет в обе копии — это обычный Node, и `scan`, `kb-validate`, `alias-check`,
-`kb-status`, `record-gate`, `doctor` работают одинаково там и там. Не едет ПРИВЯЗКА К СОБЫТИЯМ: её даёт
-`settings.json` Claude Code, а у opencode таких событий нет. Значит, под opencode нет автоматической
-половины — отказа в момент записи, сверки с прежней версией, чтения результатов прогона, гейта на
-завершении сессии; те же проверки существуют, но запускает их тот, кто о них помнит, то есть снова
-добросовестность. Автоматически там держится только `deny`/`ask` из `opencode.json` — включая запрет
-на правку собственных хуков, правил, скиллов и команд. Субагентов вторая копия тоже не объявляет
-(`agents/` — механизм Claude Code), поэтому стадии 2, 4, 8 и 11 выполняются в основном контексте, и
-гейт `safety-review` под opencode доказывает меньше, чем под Claude Code. Это не паритет, и называть
-его паритетом было бы ровно тем отчётом, который следующий раздел запрещает.
+`kb-status`, `record-gate`, `doctor` работают одинаково там и там. ПРИВЯЗКА К СОБЫТИЯМ теперь тоже
+едет, но другим механизмом: `settings.json` — это Claude Code, а у opencode есть плагины, и
+`plugin/stand-guard.js` подхватывается автоматически из каталога `plugin/` его копии бандла. Он вешает тот же
+гард на `tool.execute.before` (инструменты `write`, `edit`, `bash` → `pre-write`, `pre-bash`) и на
+`tool.execute.after` (→ `post-write`, `post-run`). Хост ждёт этот хук ДО запуска инструмента, поэтому
+исключение из него — это отказ в записи, а не жалоба после неё: запись с `Thread.sleep` отвергается
+под opencode так же, как под Claude Code.
+
+**Чего под opencode по-прежнему нет, и это не смягчение формулировки.** Во-первых, **гейта на
+завершении сессии**: у Claude Code хук `Stop` может не дать закончить, потому что имеет право выйти с
+кодом 2, а `event` у opencode возвращает void — гейт, который не может отказать, это отчёт. Он там не
+ослаблен, он не заведён. Во-вторых, **субагентов**: вторая копия их не объявляет (`agents/` — механизм
+Claude Code), поэтому стадии 2, 4, 8 и 11 выполняются в основном контексте, и гейт `safety-review` под
+opencode доказывает меньше. В-третьих, `deny`/`ask` из `opencode.json` держатся автоматически и
+дальше — включая запрет на правку собственных хуков, правил, скиллов и команд. Паритетом целиком это
+называть нельзя, и половина, которой нет, названа здесь по именам.
+
+**Про UI-ветку отдельно.** В `detectors.json` этой версии кита **нет ни одной UI-специфичной
+находки**. Общие находки над Java-артефактами работают и там — адрес, секрет, `Thread.sleep`, ПД
+ловятся в тесте и в Page Object'е так же, как в любом другом файле. Но выдуманный локатор, локатор в
+теле теста, самодельный вход вместо `ui.login`, `${…}` там, где он не резолвится, и API за пределами
+поверхности `stand-test-ui` не ловит ничто, кроме глаз стадии 7. Отчёт обязан говорить об этом прямо:
+чистый хук в UI-ветке — это не чистое ревью, и выдавать одно за другое — та самая отчётность, которую
+запрещает последний раздел.
 
 Что по-прежнему держится на добросовестности: порядок стадий 1-7, выбор трека, скупость вопросов и
 честность отчёта. Про ревью хук знает ровно одно — что после записи артефакта хост сообщил о

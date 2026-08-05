@@ -27,6 +27,7 @@ import { diagnose, render as renderReport } from './lib/doctor.mjs';
 import { toSarif } from './lib/sarif.mjs';
 import { mappings, claimsArtifact, needsMapping, template } from './lib/mapping.mjs';
 import { fileWrites, renderWrites, guardSubcommands } from './lib/shell.mjs';
+import { countLocators, renderLocatorKpi } from './lib/locators.mjs';
 import { GUARD, STATE_DIR } from './lib/bundle.mjs';
 import * as state from './lib/state.mjs';
 
@@ -804,6 +805,25 @@ function commandAliasCheck(argv) {
 }
 
 /**
+ * KPI-9: the share of locators built on something other than `data-testid`, over the Page Objects of
+ * a directory.
+ *
+ * Counted here, and never taken from a generation report, because the metric decides whether the
+ * `data-testid` policy is escalated (BRD D-5): a number that judges the agent's output cannot come
+ * from the agent's own account of it. The BRD says the same in one line — "статически по Page
+ * Object'ам смерженного набора, а не по отчётам генерации".
+ *
+ * It never blocks. Exceeding the threshold is a trigger for a conversation with the product teams,
+ * not a defect in the run that happened to measure it, and a metric that fails a build is a metric
+ * people stop computing.
+ */
+function commandKpiLocators(argv) {
+  const [directory] = positional(argv);
+  const result = countLocators(resolve(process.cwd(), directory || 'src/test/java'));
+  proceed(argv.includes('--json') ? JSON.stringify(result, null, 2) : renderLocatorKpi(result));
+}
+
+/**
  * Is this installation the kit, and can it run?
  *
  * The one command that answers the questions a consumer cannot otherwise ask: which version arrived,
@@ -881,9 +901,10 @@ try {
     case 'kb-status': commandKbStatus(argv); break;
     case 'kb-validate': commandKbValidate(argv); break;
     case 'alias-check': commandAliasCheck(argv); break;
+    case 'kpi-locators': commandKpiLocators(argv); break;
     case 'status': commandStatus({}); break;
     default:
-      process.stdout.write('stand-guard: scan | pre-write | post-write | pre-bash | post-run | record-gate | kb-write-permit | stop | subagent-stop | kb-status | kb-validate | alias-check | doctor | status\n');
+      process.stdout.write('stand-guard: scan | pre-write | post-write | pre-bash | post-run | record-gate | kb-write-permit | stop | subagent-stop | kb-status | kb-validate | alias-check | kpi-locators | doctor | status\n');
       process.exit(0);
   }
 } catch (error) {

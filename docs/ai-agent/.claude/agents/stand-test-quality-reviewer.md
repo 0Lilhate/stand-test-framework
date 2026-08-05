@@ -40,6 +40,21 @@ no counterpart is a coverage gap, whether or not the design mentions it.
 6. Watch for the equals-only asymmetry: REST and `grpc.unary` carry the full matcher set, `kafka.expect`
    is equals-only. A "contains" intent expressed on a Kafka assertion is a defect, not a preference.
 
+**For a UI generation, load `stand-test-ui-quality-review`** — stage 8 of the UI branch — and add:
+
+- every expectation of the case classified as covered / weakened / not-covered-SDK /
+  not-covered-unexplored / **dropped**; a dropped one is `CHANGES-REQUESTED`;
+- assertions that can actually fail: an `assertVisible()` on something always visible is decoration,
+  and `assertTextMatches` is a **full-string** match, so `AP-\d+` does not match `Заявка AP-42`;
+- `ui.expect` where the screen renders after an action — the commonest UI flake, and the reason a
+  suite is green locally and red on a loaded agent;
+- the UI asymmetry: `VISIBLE` and `ENABLED` take `EQUALS` only, everything else takes all five;
+- locator durability: the highest available rung, uniqueness on the screen state the step runs in,
+  every fragile one listed in the generation report;
+- the UI↔backend binding the design named — correlation, a captured screen value, or explicitly none;
+- residual data: what this run leaves on the stand, stated in the javadoc and in the report, because
+  a browser action has no compensation in this SDK version.
+
 ## What you must not do
 
 - **You have no Write, Edit or MultiEdit.** You report; the caller fixes and comes back.
