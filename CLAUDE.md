@@ -95,11 +95,16 @@ YAML DSL ────────────────┘                    
 
 ### Module graph (`A → B` = A depends on B; keep this acyclic, core is the only sink)
 
-- `await`, `junit`, `rest`, `kafka`, `db`, `grpc` → `core` (and the adapters + junit also → `await`)
+- `await`, `junit`, `rest`, `kafka`, `db`, `grpc`, `ui` → `core` (and the adapters + junit also → `await`)
 - `allure` → `core`; `scenario-yaml` → **core only** (adapters resolved via SPI at runtime, no compile edges); `ai-schema` → **core only** (no runtime/adapter deps, no `scenario-yaml`); `config` → **core only** (+ SnakeYAML; ships the `FileEnvironmentRegistry` SPI provider that loads `stand-test-environments.yml`)
 - `spring-boot-starter` → the runtime modules it wires as `compileOnly` optionals (never the reverse); `bom` is the `java-platform` outside the compile graph — it constrains every published module plus the curated third-party versions (only external consumers import it)
 - **Adapter modules must not depend on each other.** Each module's `build.gradle.kts` keeps its
   `Planned internal dependencies` as commented stubs that must match this target graph.
+- `ModuleDependencyArchTest` (in `stand-test-example`, the only module with the whole graph on one
+  classpath) now also pins the **external** edges, which nothing checked before: `coreHasNoUiOrIoDependencies`
+  (core may see only the JDK + `slf4j-api` — an explicit allow-list), `scenarioHasNoUiFields` (the field
+  list of `Scenario` is fixed), `playwrightIsConfinedToDriverPackage` plus its non-vacuity guard, and
+  `nothingDependsOnUi`. Each was verified to fail on a deliberate violation before being committed.
 
 ### Core contracts to respect (plan §8)
 
@@ -141,8 +146,37 @@ YAML DSL ────────────────┘                    
   what makes the promise real rather than nominal. **`ui-applications` (version 2)** whitelists UI
   application aliases (`base-url-ref`, `default-viewport`/`viewport-profiles`, `trace`, `auth` with the
   service spelling `scheme`); `Scenario` gets no browser fields — viewport and the rest are configuration.
-  `ui.*` steps are not implemented (that is `stand-test-ui`, unbuilt), but the pre-flight guardrail
-  `NON_WHITELISTED_UI_APPLICATION` for the `application` alias already is.
+  The `ui.*` steps themselves ship in **`stand-test-ui`**: `open`/`click`/`fill`/`expect`/
+  `expectEventually` plus `login`; the registry's `trace` is parsed but not yet consumed by that module.
+  The pre-flight guardrail `NON_WHITELISTED_UI_APPLICATION` refuses a non-whitelisted alias before a
+  browser is ever started, and `UI_LOGIN_ROLE_REQUIRED`/`UI_LOGIN_ROLE_UNKNOWN` refuse a sign-in naming no
+  role (or an undeclared one) on an application that declares them — plain validator codes, not
+  `ForbiddenOperation` constants, because they are scenario/registry mismatches rather than forbidden acts.
+- **Sign-in is `ui.login`, a step of its own** (ADR-UI-006, implemented): a technical account is leased
+  **by role** from a per-JVM `AccountPool` whose roster lives behind `credentials-pool-ref` — a variable
+  holding account ids, roles and the *names* of the credential variables, so no login or password exists at
+  any configuration level. The lease is registered in the `ResourceScope`, so the runner's `finally`
+  returns it on every outcome; waiting for a free account is bounded (`accountTimeout`, default 60 s,
+  capped by `MAX_TIMEOUT_MILLIS`) and exhaustion is a `StandTestException` naming application, role, pool
+  size and timeout. `FORM` fills the form every time; `STORAGE_STATE` restores a session saved per
+  **account** at `<artifacts.dir>/storage-state/<environment>/<application>/<accountId>.json`, checks it
+  against the registry's `signed-in-locator` and falls back to the form (re-saving) when it has expired.
+  `StorageStateStore` can only check a file's *shape* (the module has no JSON parser, and the one library
+  that could is confined to the driver package), so the browser has the last word: a state it refuses at
+  context creation is deleted and the run signs in without it — otherwise one half-written file would break
+  that account's every later run identically. The state file is effectively a secret: never attached, never
+  logged, never printed. **There is deliberately no
+  MFA/OTP/CAPTCHA bypass** — external gate G-1: an application declares `challenge`, and the SDK either
+  finds a `UiLoginChallengeHandler` on the classpath or refuses with a message naming the gate and
+  `STORAGE_STATE` as the alternative. `SSO` is a registry spelling with a speaking "not implemented".
+- **The UI suite runs classes concurrently** (`stand-test-ui/src/test/resources/junit-platform.properties`,
+  the same model `stand-test-example` uses), with `maxParallelForks = 1` on both `test` and `browserTest`
+  because the account pool is in-process — a second JVM would hand the same account to a second run.
+  `browserTest` overrides the parallelism downwards (a thread costs a Chromium); raise it with
+  `-Pstand.test.ui.browser.parallelism=N`. The ceiling of a UI suite's parallelism is the size of the
+  account pool: above it runs queue, they do not fail. `UiAccountPools` is instantiable for exactly this
+  reason — a JVM-wide singleton with a `reset()` would make the suite that proves parallel isolation the
+  one most likely to break it, so production takes `shared()` and each test takes its own.
 - Value types are immutable `record`s with defensive copies (`List`/`Set`/`Map.copyOf`).
 
 ## Current state & where to work
@@ -156,7 +190,10 @@ matchers, registry-driven service auth, `rest.expectEventually` GET-polling thro
 transport errors abort as infra failures, 5xx polls through, captures apply to the final response only),
 **`stand-test-kafka`**, **`stand-test-db`** (design record in `docs/arch/stand-test-db-decisions.md`,
 hardening in `docs/arch/stand-test-db-remediation-plan.md`), **`stand-test-grpc`** (unary via server
-reflection + `DynamicMessage`; all five assertion matchers, at parity with REST), **`stand-test-allure`** (with sink-side secret masking of attachment
+reflection + `DynamicMessage`; all five assertion matchers, at parity with REST), **`stand-test-ui`** (the
+wave-1 UI slice: five `ui.*` step types on Playwright, application by registry alias only, one
+`BrowserContext` per run in the `ResourceScope`, browser-backed tests behind a separate `browserTest`
+task — see `stand-test-ui/README.md` and `docs/ui-test-generation/`), **`stand-test-allure`** (with sink-side secret masking of attachment
 bodies), **`stand-test-scenario-yaml`** (two surfaces: given/then YAML and the AI steps/type format),
 **`stand-test-ai-schema`** (JSON Schema + generation rules; a cross-check test pins the matcher grammar
 to the core enum), **`stand-test-spring-boot-starter`** (Boot-3 auto-configuration, adapters as
@@ -178,10 +215,23 @@ kit under `docs/ai-agent/`, and its roadmap is
 [`docs/plans/ai-agent-kit-implementation.md`](docs/plans/ai-agent-kit-implementation.md) — read that
 before picking up work on the kit.
 
+The kit now has **two branches**: the protocol one (REST/Kafka/DB/gRPC) and a **UI branch** — 9
+skills + 5 commands + `rules/stand-test-ui-guardrails.md`, wave-1 backlog items S-5.1/S-5.2. Its
+premise is the asymmetry that a REST contract can be read from a specification and a `data-testid`
+cannot, so it carries a *discovery* stage against the live DEV/IFT UI (registry alias only, restricted
+`discovery-account-ref`, no irreversible action) and a source order of KB → discovery → question.
+Locators live in Page Objects, `ui.*` is Java-only (no declarative surface), and every generation ends
+in the eight-section BR-07 report plus a preserved snapshot of the original generation — the diff base
+without which KPI-4 is unobservable. Not done and deliberately so: **`detectors.json` carries no
+UI-specific detector** (backlog S-5.4), so the UI half of the safety gate is eye-only and every asset
+says so; UI entries in the knowledge base are S-5.3.
+
 Three artefacts of that effort survive because they were written before it and do not depend on it:
 `docs/agent-analysis/current-state-analysis.md` (findings A-01…A-17 about the kit, the SDK and this
-repository), `docs/agent-evaluation/dataset/` (15 cases with invariants — the only way to answer "did
-the kit get better after a prompt edit", measurable by a person in the host), and six ADRs under
+repository), `docs/agent-evaluation/dataset/` (27 cases with invariants — 15 protocol plus 12 UI, the only way to
+answer "did the kit get better after a prompt edit", measurable by a person in the host; the UI half
+carries seeded discovery reports and `execution.outcome: NOT_RUN`, because no browser-side double
+ships with the corpus — see `docs/agent-evaluation/ui-wave-1-readiness.md`), and six ADRs under
 `docs/agent-architecture/adr/` (0004, 0006, 0007, 0012, 0013, 0014). The ADRs about the runtime —
 0001, 0002, 0003, 0005, 0008 — are gone with it, as are 0009, 0010 and 0011, whose motivation was
 real but whose remedy was Java.
