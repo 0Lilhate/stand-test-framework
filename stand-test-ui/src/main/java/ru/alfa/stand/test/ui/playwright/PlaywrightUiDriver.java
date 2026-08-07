@@ -85,6 +85,15 @@ final class PlaywrightUiDriver implements UiDriver {
     private boolean traceStopped;
 
     /**
+     * Whether the recording has been given up on purpose, because a credential was about to be typed and the
+     * recorder could not be suspended (SEC-05, see {@link #suspendTracing()}). A suppressed trace is never
+     * exported — {@link #captureTrace} answers {@code null} exactly as it does for a run that never recorded
+     * — while the buffer is still released at {@link #close()}. Giving up the artefact is the fail-closed
+     * direction: a trace costs a debugging session, a leaked password costs a rotation.
+     */
+    private boolean traceSuppressed;
+
+    /**
      * The page's console lines observed since this run's page was opened, newest-last (UITG-S014). A
      * frontend error is often visible in the console before it does anything visible, so the failing run
      * attaches what the page logged. Recorded on the driver (not the executor) because only the adapter
@@ -301,13 +310,61 @@ final class PlaywrightUiDriver implements UiDriver {
         return target;
     }
 
+    /**
+     * Closes the current recording chunk and throws it away, so that whatever happens next — the sign-in
+     * typing a password — is recorded by nobody. Playwright keeps only the chunk that is open when
+     * {@code stop(path)} runs, so a discarded chunk takes its actions and their parameters with it. Verified
+     * by run rather than by reading the API: with a chunk discarded around a fill, the value is absent from
+     * the exported ZIP, and a fill after the resume is still present.
+     *
+     * <p><strong>Do not "simplify" this call away.</strong> {@code startChunk()} in {@link #resumeTracing()}
+     * implicitly closes the open chunk, so the secret would be dropped by the resume alone — measured, and it
+     * is exactly the reasoning that would delete this line. The difference is the window in between: without
+     * the {@code stopChunk} here the credential IS recorded and merely discarded afterwards, so any path that
+     * reaches {@code stop(path)} before the resume — a capture triggered on the way, an exception route that
+     * skips the {@code finally} — exports it. With it, no chunk is open while the value is typed and there is
+     * nothing to leak in the first place. Fail-safe, not fail-late.
+     */
+    @Override
+    public void suspendTracing() {
+        if (!this.traceEnabled || this.traceStopped || this.traceSuppressed) {
+            return;
+        }
+        try {
+            this.context.tracing().stopChunk();
+        } catch (PlaywrightException cannotSuspend) {
+            // Fail-closed: the caller is about to type a credential, so a recorder that would not stop must
+            // lose its artefact rather than capture the secret. captureTrace answers null from here on.
+            this.traceSuppressed = true;
+            LOG.warn("Could not suspend the browser trace of application '{}' before a credential is typed — the trace "
+                    + "is given up for this run rather than record it: {}", this.application.alias(), cannotSuspend.getMessage());
+        }
+    }
+
+    @Override
+    public void resumeTracing() {
+        if (!this.traceEnabled || this.traceStopped || this.traceSuppressed) {
+            return;
+        }
+        try {
+            this.context.tracing().startChunk();
+        } catch (PlaywrightException cannotResume) {
+            // Nothing was leaked — the recorder is simply not running any more. The run continues without
+            // the artefact, which is a normal outcome for a trace (UITG-S016).
+            this.traceSuppressed = true;
+            LOG.warn("Could not resume the browser trace of application '{}' after signing in; this run exports no trace: {}",
+                    this.application.alias(), cannotResume.getMessage());
+        }
+    }
+
     @Override
     public Path captureTrace(Path directory, Duration timeout) {
         // A driver that never recorded — the application opted out, so tracing().start() was never called —
-        // answers null: an absent artefact is a normal outcome, not an error (UITG-S016). stop() writes the
-        // ZIP accumulated since context creation and frees the recording buffer, so it is called exactly
-        // once, guarded by the traceStopped flag.
-        if (!this.traceEnabled || this.traceStopped) {
+        // answers null: an absent artefact is a normal outcome, not an error (UITG-S016). A SUPPRESSED trace
+        // answers null for the same reason and deliberately looks identical: it was given up so a credential
+        // would not be recorded (SEC-05). stop() writes the ZIP accumulated since the last resume and frees
+        // the recording buffer, so it is called exactly once, guarded by the traceStopped flag.
+        if (!this.traceEnabled || this.traceStopped || this.traceSuppressed) {
             return null;
         }
         this.traceStopped = true;
@@ -325,6 +382,7 @@ final class PlaywrightUiDriver implements UiDriver {
         // A defensive copy: the returned snapshot is handed to the failing step's report, which must never
         // observe the driver's growing buffer mutating (one run, one thread — but the copy keeps the
         // contract honest and the artefact stable).
+        dispatchPendingEvents();
         return List.copyOf(this.consoleMessages);
     }
 
@@ -333,7 +391,37 @@ final class PlaywrightUiDriver implements UiDriver {
         // A defensive copy, for the same reason the console list is copied: the snapshot reaches the
         // failing step's report and must stay stable while the listener keeps appending (one run, one
         // thread — but the copy keeps the "never return null, never leak a mutating buffer" contract).
+        dispatchPendingEvents();
         return List.copyOf(this.networkRequests);
+    }
+
+    /**
+     * Delivers the page events Playwright has received but not yet handed to the listeners, so that a read of
+     * the console or network buffer answers with what the browser has already reported.
+     *
+     * <p>Playwright for Java dispatches a page's events <strong>only while the owning thread is inside a
+     * Playwright call</strong>. Nothing is pumped in the background: a thread that stops calling Playwright
+     * stops receiving events, however long it waits. So a caller that merely reads these buffers — the
+     * failure branch attaching the console and the network story, or an await polling them — can see a
+     * response the browser received seconds ago simply missing, and no timeout ever helps, because waiting
+     * longer is exactly what does not dispatch it.
+     *
+     * <p>Measured, not deduced. Polling {@code networkRequests()} for five seconds after a click left the
+     * story at {@code [GET /applications/new 200]} while the server had already recorded the POST;
+     * {@code page.url()} — served from a cached value, so no round-trip — changed nothing; the first real
+     * round-trip produced {@code [GET …, POST /api/submit 204]} at once. Under a suite that runs browsers
+     * concurrently this decided whether a green run was green.
+     *
+     * <p>{@code page.title()} is the cheapest honest round-trip: it asks the page for something it always
+     * has, reads nothing sensitive, and changes no state. A page that is already gone throws, and there is
+     * nothing left to dispatch — the buffers are then complete by definition, so the failure is swallowed.
+     */
+    private void dispatchPendingEvents() {
+        try {
+            this.page.title();
+        } catch (PlaywrightException pageAlreadyGone) {
+            LOG.debug("Could not pump the page's pending events before reading its buffers: {}", pageAlreadyGone.getMessage());
+        }
     }
 
     @Override

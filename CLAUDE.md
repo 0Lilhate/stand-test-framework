@@ -147,7 +147,15 @@ YAML DSL ────────────────┘                    
   application aliases (`base-url-ref`, `default-viewport`/`viewport-profiles`, `trace`, `auth` with the
   service spelling `scheme`); `Scenario` gets no browser fields — viewport and the rest are configuration.
   The `ui.*` steps themselves ship in **`stand-test-ui`**: `open`/`click`/`fill`/`expect`/
-  `expectEventually` plus `login`; the registry's `trace` is parsed but not yet consumed by that module.
+  `expectEventually` plus `login`. A failing step leaves artefacts — a screenshot with the sensitive zones
+  painted over *before* the grab, the console and the network story as text, and, where the registry declares
+  `trace: on-failure`, a Playwright trace — all under the retention of
+  `stand.test.ui.artifacts.retention.days` (7 by default). The trace has one non-obvious rule that is
+  load-bearing rather than editorial: a trace records the **parameters of the actions it saw**, and a
+  `fill`'s parameter is the typed value, so `ui.login` brackets its credential fills with
+  `suspendTracing()`/`resumeTracing()` — no recording chunk is open while a password is typed. Neither
+  `asSensitive()` (a screenshot mask) nor `UiSecrets` (an exception-message sanitiser) nor the report's
+  masker (text channel only; a ZIP is the file channel) reaches that, which is why the bracket exists.
   The pre-flight guardrail `NON_WHITELISTED_UI_APPLICATION` refuses a non-whitelisted alias before a
   browser is ever started, and `UI_LOGIN_ROLE_REQUIRED`/`UI_LOGIN_ROLE_UNKNOWN` refuse a sign-in naming no
   role (or an undeclared one) on an application that declares them — plain validator codes, not

@@ -173,14 +173,26 @@ final class UiLoginService {
         UiLocator username = UiLocatorExpressions.parse(form.usernameLocator(), "username-locator", alias).asSensitive();
         UiLocator password = UiLocatorExpressions.parse(form.passwordLocator(), "password-locator", alias).asSensitive();
         LOG.debug("Signing in to application '{}' as account '{}' (role '{}')", alias, account.accountId(), account.role());
-        UiSecrets.guard(
-                () -> UiDriverCalls.run(() -> session.driver().fill(username, credentials.username(), settings.actionTimeout()), "fill the login field of application '" + alias + "'"),
-                secrets,
-                "fill the login field of application '" + alias + "'");
-        UiSecrets.guard(
-                () -> UiDriverCalls.run(() -> session.driver().fill(password, credentials.password(), settings.actionTimeout()), "fill the password field of application '" + alias + "'"),
-                secrets,
-                "fill the password field of application '" + alias + "'");
+        // The recorder is stopped for exactly as long as the credentials are being typed (SEC-05). A trace
+        // records the PARAMETERS of the actions it sees, and a fill's parameter is the value — so a run with
+        // `trace: on-failure` would otherwise seal the technical account's password into a ZIP that is
+        // attached to a report, and the file channel cannot mask bytes the way the text channel masks
+        // strings. Neither asSensitive() nor UiSecrets reaches that: the first paints over a screenshot, the
+        // second sanitises an exception message. Restored in a finally, so a rejected credential — the very
+        // case that ends in a failure artefact — does not leave the run permanently unrecorded.
+        session.driver().suspendTracing();
+        try {
+            UiSecrets.guard(
+                    () -> UiDriverCalls.run(() -> session.driver().fill(username, credentials.username(), settings.actionTimeout()), "fill the login field of application '" + alias + "'"),
+                    secrets,
+                    "fill the login field of application '" + alias + "'");
+            UiSecrets.guard(
+                    () -> UiDriverCalls.run(() -> session.driver().fill(password, credentials.password(), settings.actionTimeout()), "fill the password field of application '" + alias + "'"),
+                    secrets,
+                    "fill the password field of application '" + alias + "'");
+        } finally {
+            session.driver().resumeTracing();
+        }
     }
 
     /**

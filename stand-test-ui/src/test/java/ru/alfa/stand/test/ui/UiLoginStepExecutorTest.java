@@ -43,6 +43,55 @@ class UiLoginStepExecutorTest {
     private final UiAccountPools pools = new UiAccountPools();
 
     @Test
+    @DisplayName("the recorder is suspended around the credential fills and resumed after them, so a trace cannot record a password")
+    void formLoginSuspendsTracingAroundTheCredentials() {
+        FakeUiDriverFactory factory = signingInFactory();
+
+        StepResult result = execute(factory, new ResourceScope(), UiAuthScheme.FORM,
+                UiStep.login(UiTestSupport.APPLICATION).id("login").role("client").build());
+
+        assertThat(result.status()).isEqualTo(StepStatus.SUCCESS);
+        // A trace records the parameters of the actions it sees, and a fill's parameter is the typed value.
+        // Bracketing is therefore the only thing that keeps a password out of the ZIP: neither asSensitive()
+        // (a screenshot mask) nor UiSecrets (an exception-message sanitiser) reaches a trace. The order is
+        // asserted, not merely the presence — a resume that landed BEFORE the fills would read as wired while
+        // recording every credential.
+        assertThat(factory.only().calls()).containsSubsequence(
+                "suspendTracing",
+                "fill:" + UiLoginTestSupport.USERNAME.describe() + "=" + CLIENT_USERNAME,
+                "fill:" + UiLoginTestSupport.PASSWORD.describe() + "=" + CLIENT_PASSWORD,
+                "resumeTracing");
+        // And nothing types a credential outside the bracket: every fill sits between the two calls.
+        List<String> calls = factory.only().calls();
+        int suspended = calls.indexOf("suspendTracing");
+        int resumed = calls.indexOf("resumeTracing");
+        for (int i = 0; i < calls.size(); i++) {
+            if (calls.get(i).startsWith("fill:")) {
+                assertThat(i).as("fill '%s' must be recorded inside the suspended window", calls.get(i))
+                        .isBetween(suspended, resumed);
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("a rejected credential still resumes the recorder, so the failing run that follows can be traced")
+    void rejectedCredentialStillResumesTracing() {
+        // Programmed at construction: the factory opens its driver during execute(), so only() has nothing
+        // to hand out before the run starts.
+        FakeUiDriverFactory factory = new FakeUiDriverFactory(driver -> driver
+                .signsInOn(UiLoginTestSupport.SUBMIT, UiLoginTestSupport.SIGNED_IN)
+                .failFillWith(new RuntimeException("the field went away")));
+
+        assertThatThrownBy(() -> execute(factory, new ResourceScope(), UiAuthScheme.FORM,
+                UiStep.login(UiTestSupport.APPLICATION).id("login").role("client").build()))
+                .isInstanceOf(RuntimeException.class);
+
+        // The finally is what makes this the ordinary case rather than the one that silently loses the
+        // artefact: a wrong password is exactly the run whose failure someone will want to read.
+        assertThat(factory.only().calls()).containsSubsequence("suspendTracing", "resumeTracing");
+    }
+
+    @Test
     @DisplayName("a FORM sign-in opens the login page, types the credentials of the leased account and waits for the signed-in marker")
     void formLoginFillsTheFormAsTheLeasedAccount() {
         FakeUiDriverFactory factory = signingInFactory();

@@ -235,6 +235,16 @@ final class FakeUiDriver implements UiDriver {
     }
 
     @Override
+    public void suspendTracing() {
+        this.calls.add("suspendTracing");
+    }
+
+    @Override
+    public void resumeTracing() {
+        this.calls.add("resumeTracing");
+    }
+
+    @Override
     public void saveStorageState(Path target) {
         this.calls.add("saveStorageState:" + target);
         this.savedStorageState = target;

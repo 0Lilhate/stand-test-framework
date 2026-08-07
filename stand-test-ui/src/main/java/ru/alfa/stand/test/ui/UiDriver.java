@@ -124,6 +124,42 @@ public interface UiDriver extends AutoCloseable {
      */
     Path captureScreenshot(Path directory, Duration timeout);
 
+    /**
+     * Suspends trace recording around a stretch of work that types a credential, so the secret never enters
+     * the recording at all (SEC-05).
+     *
+     * <p>This exists because masking cannot reach a trace. {@link #maskSensitive} paints over a
+     * <em>screenshot</em>, and the recording is started with snapshots and screenshots disabled, so no frame
+     * of the screen is kept — but a trace also records the <em>parameters of the actions it saw</em>, and
+     * {@link #fill} is an action whose parameter is the value typed. Marking the locator
+     * {@link UiLocator#asSensitive() sensitive} does not help there: it drives the screenshot mask and
+     * nothing else. Measured, not assumed — a filled value was found verbatim in the {@code trace.trace}
+     * entry of an exported ZIP, with snapshots and screenshots already off.
+     *
+     * <p>So a credential must not be typed while the recorder is running, and the sign-in brackets its fills
+     * with this pair. Everything recorded before the suspension is dropped along with it; in the UI branch
+     * the sign-in is the first step of the scenario, so what is lost is at most the navigation to the login
+     * screen, and what a reader needs — the run after sign-in — is kept.
+     *
+     * <p><strong>Fail-closed.</strong> A driver that cannot suspend must not let the secret be recorded
+     * anyway: it gives up the artefact instead, so a later {@link #captureTrace} answers {@code null}. Losing
+     * a trace costs a debugging session; leaking a password costs a rotation. Never throws — the sign-in must
+     * not fail because housekeeping did.
+     *
+     * <p>Defaulted to a no-op: a driver that records nothing has nothing to suspend, and every existing
+     * implementation stays source- and binary-compatible.
+     */
+    default void suspendTracing() {
+    }
+
+    /**
+     * Resumes trace recording after {@link #suspendTracing}, beginning a fresh recording that the failure
+     * path exports. Idempotent, best-effort and never throwing, for the same reasons; a driver that failed to
+     * suspend stays suspended rather than resuming into a compromised recording.
+     */
+    default void resumeTracing() {
+    }
+
     @Override
     void close();
 
@@ -173,6 +209,14 @@ public interface UiDriver extends AutoCloseable {
      * log, not an error: the executor treats it as a missed artefact, like a screenshot the browser could
      * no longer grab.
      *
+     * <p><strong>Contract for implementors: this call must deliver what the browser has already reported.</strong>
+     * "Observed so far" means observed by the browser, not "whatever the driver happened to be handed". A
+     * driver whose automation library only dispatches events while the owning thread is inside one of its
+     * calls — Playwright for Java is one — must pump that queue here, or a caller that merely reads this
+     * buffer will miss lines the page emitted seconds earlier. Waiting longer does not fix such a gap; it is
+     * precisely the not-calling that withholds the events, so an await polling this method would poll an
+     * eternally stale list. Measured on the Playwright driver, where it decided whether a green run was green.
+     *
      * @return the console lines observed so far, newest-last, possibly empty
      */
     java.util.List<String> consoleMessages();
@@ -198,6 +242,12 @@ public interface UiDriver extends AutoCloseable {
      * requests is the honest empty list. A page that could not be probed (the browser already closed) is
      * an empty list, not an error: the executor treats it as a missed artefact, like a screenshot the
      * browser could no longer grab.
+     *
+     * <p><strong>Same contract for implementors as {@link #consoleMessages()}:</strong> this call must deliver
+     * the exchanges the browser has already completed, pumping the automation library's event queue when that
+     * library only dispatches during its own calls. Without it a response can be missing from the story while
+     * the server has long since served it — and no timeout recovers it, because waiting is exactly what
+     * fails to dispatch.
      *
      * @return the observed requests, in the order the responses arrived, possibly empty
      */
