@@ -317,6 +317,21 @@ function commandScan(argv) {
   const against = argumentValue(argv, '--against');
   const files = positional(argv);
   const policy = policyOf(process.cwd());
+  // The discovery report that U1 (finding 25) compares a Page Object against is a different artifact;
+  // it travels with the scan the way the previous version travels with `--against`. Absent it, the
+  // parity detector reports a BLOCK — a generation scanned without its discovery evidence is not a
+  // generation that passed.
+  const discovery = argumentValue(argv, '--discovery');
+  if (discovery !== null) {
+    if (!existsSync(discovery)) {
+      // The caller said a discovery report exists and it does not — that is not a scan that ran, it is
+      // a generation claiming discovery evidence it cannot point at. Marked so the parity detector
+      // (U1) can answer with a BLOCK, rather than silently passing a page nobody can vouch for.
+      policy.discoveryMissing = true;
+    } else {
+      policy.discovery = readFileSync(discovery, 'utf8');
+    }
+  }
   let findings = [];
   const contents = {};
   for (const file of files) {
@@ -856,7 +871,7 @@ function commandStatus(payload) {
     + (dropped ? `\n⚠ пермит на запись в KB от ${dropped.issuedAt} снят: он принадлежал прошлой сессии` : ''));
 }
 
-const VALUE_FLAGS = new Set(['--gate', '--verdict', '--as', '--reason', '--document', '--source', '--format', '--against', '--case']);
+const VALUE_FLAGS = new Set(['--gate', '--verdict', '--as', '--reason', '--document', '--source', '--format', '--against', '--case', '--discovery']);
 
 function argumentValue(argv, name) {
   const index = argv.indexOf(name);

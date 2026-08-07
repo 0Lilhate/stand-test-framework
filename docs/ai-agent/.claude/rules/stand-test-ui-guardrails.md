@@ -40,6 +40,22 @@ at run time in a way that looks exactly like application drift.
 
 ## Hard constraints (violations BLOCK, never work around)
 
+**Machine coverage is now partial, not zero** — the "every UI gate is eye-only" claim is obsolete:
+- XPath anywhere → `XPATH_LOCATOR`
+- a locator outside `**/ui/pages/**` → `UI_LOCATOR_OUTSIDE_PAGES`
+- a locator that does not trace to `UiDiscoveryReport.md` → `UI_DISCOVERY_PARITY`
+- `UiStep.login(` without `.role(...)` → `UI_LOGIN_WITHOUT_ROLE`
+- driver-level waits (`page.waitForSelector`/`waitForTimeout`/`waitForLoadState`/`.waitFor`) → `THREAD_SLEEP`
+- `expectEventually` without `within(...)` → `EXPECT_EVENTUALLY_WITHOUT_WITHIN`
+- `${…}` in a `ui.open` path or an assertion's expected value → `UI_OPEN_OR_ASSERT_TEMPLATE`
+- an address in a `Ui*Report.md` → `UI_REPORT_STAND_ADDRESS`
+- a generation report missing a section, or naming a snapshot that is not on disk → `UI_GENERATION_REPORT_INCOMPLETE`
+- a static mutable field in a test class or Page Object → `SHARED_MUTABLE_TEST_STATE`
+
+The rest stay human: U4, U8, U10, U11a/b, U12, U14, U15, U18, U19 — enumerated in
+[`ui-safety-checklist.md`](../skills/stand-test-ui-safety-review/ui-safety-checklist.md) and in the
+`stand-test-ai-schema` test. A clean hook run is still not a clean UI review.
+
 ### 1. The live DEV/IFT UI is the source of truth for the DOM
 
 Every **locator** and every **screen transition** in a generated artifact traces to **a row of the
@@ -163,7 +179,14 @@ There is no XPath in `stand-test-ui` — no `LocatorStrategy` constant, no `UiLo
 that finds itself wanting XPath has reached the end of a rung and must either go back up (ask the
 team for a `data-testid`) or drop to a CSS selector and declare it.
 
-A CSS selector is **long/brittle**, and must be listed as such in the report, when it carries any of:
+Machine enforcement of the XPath ban lives in the kit's write hook: XPath signatures (`xpath=`,
+`//*[`, `by.xpath`, `.xpath(`) over the projection *without comments* are caught by detector
+`XPATH_LOCATOR` (BLOCK, appliesTo java). The kit's own reference corpus must stay mute — the canonical
+UI artefacts carry no XPath, so a clean hook run over them exercises the negative case. The detector
+over the projection without comments does not replace human reading of commented-out or string-built
+spellings.
+
+A CSS selector is **long/brittle**, and must be listed as such in the report when it carries any of:
 a descendant chain of three or more steps, `nth-child`/`nth-of-type`, a generated/hashed class name
 (`.css-1x2y3z`, `.MuiBox-root`), a tag-only step (`div > span`), a sibling combinator (`+`, `~`), or a
 positional index of any kind. The list names the cases seen so far and is **not** closed: a selector
@@ -184,6 +207,12 @@ for a free account); a single click or fill is bounded by
 
 A UI test that "passes locally and flakes on CI" is nearly always a missing `expectEventually` —
 the rendering is asynchronous whether or not the case says so.
+
+Machine enforcement extends `THREAD_SLEEP` (still BLOCK) with the driver-side vocabulary the browser
+tempts an agent into: `page.waitForSelector(`, `page.waitForTimeout(`, `page.waitForLoadState(` and
+`.waitFor(` are now caught over Java without comments, on the same footing as `Thread.sleep`.
+`expectEventually` without a bounded `within(...)`/`withinSeconds(...)` before `.build()` is a separate
+machine finding — `EXPECT_EVENTUALLY_WITHOUT_WITHIN` (HIGH).
 
 ### 10. The Java test and its Page Objects pass the linter
 
@@ -208,7 +237,11 @@ nothing.
 A `UiLocator` constant belongs to a Page Object class; the test body reads as business steps. This
 is the SDK's only mitigation against markup drift — one screen changes, one file changes — and it is
 also what makes the static KPI-9 count possible at all, since that count reads merged Page Objects.
-A `UiLocator.*` call inside a test method is a finding even when it works.
+A `UiLocator.*` call inside a test method is a finding even when it works. Machine enforcement:
+`UiLocator` appearing in a Java file that does not declare itself a Page Object (no
+`package … ui.pages;` / `…ui.pageobject` line) is caught by detector `UI_LOCATOR_OUTSIDE_PAGES`
+(BLOCK, appliesTo java). The detector reads source, not intent — a locator smuggled through a constant
+in a neighbour file still needs the human.
 
 ### 13. Sensitive fields are marked `asSensitive()`
 
@@ -227,6 +260,8 @@ skips the session reuse the scheme provides. `UiStep.login("<alias>").role("<rol
 **mandatory** once the application declares roles, and the validator refuses an undeclared one
 pre-flight (`UI_LOGIN_ROLE_REQUIRED` / `UI_LOGIN_ROLE_UNKNOWN`). Place it **before** the first
 `ui.open` of that application; a later sign-in can no longer restore a saved session and says so.
+`UiStep.login(` without a `.role(...)` before `.build()` is caught by detector `UI_LOGIN_WITHOUT_ROLE`
+(BLOCK).
 
 There is **no MFA/OTP/CAPTCHA bypass** and there will not be one (external gate G-1). An application
 declaring a `challenge` either has a `UiLoginChallengeHandler` on the test classpath or is refused

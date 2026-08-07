@@ -221,10 +221,16 @@
           "regex": "\\b(?:Thread\\.sleep|TimeUnit\\.[A-Z]+\\.sleep|Uninterruptibles\\.sleepUninterruptibly)\\s*\\([^)]*\\)?",
           "flags": "g"
         },
-        {
+{
           "regex": "\\bAwaitility\\b",
           "flags": "g",
           "$comment": "имя класса ловит и импорт, и статический импорт `org.awaitility.Awaitility.await`, и вызов — а импорт Awaitility в стенд-тесте сам по себе и есть находка: у SDK один механизм ожидания, и второй, заведённый рядом, не получает ни диагностики await-движка, ни границы, которую проверяет валидатор"
+        },
+        {
+          "regex": "\\bpage\\.(?:waitForSelector|waitForTimeout|waitForLoadState)\\s*\\(|\\.waitFor\\s*\\(",
+          "flags": "g",
+          "projection": "withoutComments",
+          "$comment": "UI-половина находки 6 (гейт U6): у адаптера нет ни одного driver-wait — страница не должна ждать руками. `page.waitForSelector(...)`, `page.waitForTimeout(...)`, `page.waitForLoadState(...)` и любой `.waitFor(` — это тот же `Thread.sleep`, написанный в лексике Playwright. Проекция withoutComments: шаблон сам объясняет, почему `waitFor` отсутствует, и описание правила не должно читаться как его нарушение (измерено в 30-ui-gate-expressibility-spike.md §4.3)"
         }
       ],
       "sqlPatterns": [
@@ -531,6 +537,126 @@
       ],
       "title": "сокрытие отказа: проверка перестала выполняться",
       "fix": "верни проверку, а не подгоняй тест под падение: удалённая ассерция и выключенный тест не делают систему исправной, а делают её отказ незаметным. Если проверка была неверной — объясни это в PR; если тест выключают, @Disabled должен нести номер задачи; если ожидание правда длиннее — обоснуй новое значение, а не увеличивай его вслепую"
+    },
+    {
+      "finding": 19,
+      "ruleId": "XPATH_LOCATOR",
+      "severity": "BLOCK",
+      "source": "STATIC_SCAN",
+      "appliesTo": "java",
+      "title": "XPath написан там, где у SDK его нет вовсе",
+      "patterns": [
+        {
+          "regex": "\\bxpath\\s*=|//\\*\\[|\\bby\\.xpath|\\b\\.xpath\\s*\\(",
+          "flags": "gi",
+          "projection": "withoutComments",
+          "$comment": "гейт U7. У stand-test-ui нет ни LocatorStrategy, ни фабрики UiLocator, ни xpath=-грамматики реестра — XPath в артефакте означает либо обход, либо выдумку. Проекция без комментариев: правило само объясняет, какой XPath запрещён, и его описание не должно читаться как нарушение (30-ui-gate-expressibility-spike.md §4.3)"
+        }
+      ],
+      "fix": "вернись к стратегии локатора из правил-8: data-testid, role+accessible name, label, атрибут или CSS — XPath в списке SDK нет"
+    },
+    {
+      "finding": 20,
+      "ruleId": "UI_LOCATOR_OUTSIDE_PAGES",
+      "severity": "BLOCK",
+      "source": "STATIC_SCAN",
+      "appliesTo": "java",
+      "rule": "uiLocatorOutsidePages",
+      "title": "локатор объявлен вне своего Page Object",
+      "fix": "держи UiLocator в Page Object под ui/pages или ui/pageobject; тест читается шагами, а локатор правится в одном месте"
+    },
+    {
+      "finding": 21,
+      "ruleId": "EXPECT_EVENTUALLY_WITHOUT_WITHIN",
+      "severity": "HIGH",
+      "source": "STATIC_SCAN",
+      "appliesTo": "java",
+      "rule": "uiChainFactoryAndCompanion",
+      "factory": "\\bUiStep\\s*\\.\\s*expectEventually\\s*\\(",
+      "companion": "\\.(?:within|withinSeconds)\\s*\\(",
+      "title": "проверка, которая ждёт появления, не объявляет границы",
+      "$comment": "гейты U17 и правила-9: ui.expectEventually обязано нести bounded within(...)/withinSeconds(...) до build. Companion локанется по коду без комментариев — иначе «нет within(...)» в комментарии зачтётся как вызов"
+    },
+    {
+      "finding": 22,
+      "ruleId": "UI_LOGIN_WITHOUT_ROLE",
+      "severity": "BLOCK",
+      "source": "STATIC_SCAN",
+      "appliesTo": "java",
+      "rule": "uiChainFactoryAndCompanion",
+      "factory": "\\bUiStep\\s*\\.\\s*login\\s*\\(",
+      "companion": "\\.role\\s*\\(",
+      "title": "вход без объявленной роли",
+      "fix": "называй роль: UiStep.login(alias).role(role)...build(); самодельная последовательность формы мимо пула оставляет учётку в сценарии и рдво двум прогонам — находка"
+    },
+    {
+      "finding": 23,
+      "ruleId": "UI_OPEN_OR_ASSERT_TEMPLATE",
+      "severity": "BLOCK",
+      "source": "STATIC_SCAN",
+      "appliesTo": "java",
+      "rule": "uiTemplateInOpenOrAssert",
+      "title": "${…} там, где значение не резолвится",
+      "fix": "резолвится только capture/переменная; в пути UiStep.open и в ожидаемом значении ассерта литеральный ${…} сравнивается строкой и тест падает — выведи значение из захвата или константы"
+    },
+{
+      "finding": 24,
+      "ruleId": "UI_REPORT_STAND_ADDRESS",
+      "severity": "BLOCK",
+      "source": "STATIC_SCAN",
+      "appliesTo": "prose",
+      "rule": "uiReportAddress",
+      "title": "адрес стенда продублирован в отчёте разведки",
+      "fix": "адрес живёт ровно в одном месте — за base-url-ref в реестре; отчёт, воспроизводящий его, становится каналом доставки адреса, а не его фиксации. Ссылка — на алиас"
+    },
+    {
+      "finding": 25,
+      "ruleId": "UI_DISCOVERY_PARITY",
+      "severity": "BLOCK",
+      "source": "STATIC_SCAN",
+      "appliesTo": "java",
+      "rule": "uiDiscoveryParity",
+      "title": "локатор Page Object не прослеживается до отчёта разведки",
+      "$rule": [
+        "Гейт U1 (UITG-S021): инвентированный локатор синтаксически неотличим от настоящего — только",
+        "сверка с колонкой «Chosen locator» UiDiscoveryReport.md отделяет тот, что разведка записала,",
+        "от того, что агент выдумал. Каждый UiLocator.* нормируется в ту же поверхность (`testId=...`,",
+        "`role=<role>:<name>`, `label=...`, `text=...`, `css=...`), что и колонка отчёта, и сравнивается",
+        "как множество: локатор, которого в отчёте нет, — находка (BR-03, RISK-03). Отчёт подаётся",
+        "как policy.discovery (сканирование целой генерации). Если его нет вовсе — тоже BLOCK:",
+        "генерация без разведки не принимается. Источник истины — живой DOM, записанный в отчёт;",
+        "кейс и KB локатор не свидетельствуют."
+      ],
+      "fix": "используй локатор, который отчёт разведки записал для этого элемента, либо пере-открой разведку: агент-локатор, которого разведка не видела, собран по памяти, а не по DOM"
+    },
+    {
+      "finding": 26,
+      "ruleId": "UI_GENERATION_REPORT_INCOMPLETE",
+      "severity": "BLOCK",
+      "source": "STATIC_SCAN",
+      "appliesTo": "prose",
+      "rule": "uiGenerationReport",
+      "title": "отчёт генерации неполон либо его снимок не существует",
+      "sections": 8,
+      "snapshotHashFile": "original.sha256",
+      "$rule": [
+        "Гейт U16 (UITG-F006): отчёт генерации со всеми восемью секциями, и снимок исходной",
+        "генерации сохранён. Обе половины проверяются над файлом с именем Ui*GenerationReport.md —",
+        "шаблон кита (ui-generation-report-template.md) под это имя не попадает и потому молчит.",
+        "",
+        "Первая половина — структура: восемь нумерованных заголовков `## N.`. Проверяется НОМЕР,",
+        "а не формулировка: заголовки переписывают под сценарий, и детектор, требующий дословного",
+        "текста, ронял бы законные отчёты. Это нижняя граница: секция, существующая заголовком и",
+        "пустая содержанием, проходит — полноту содержания читает человек (стадия 7).",
+        "",
+        "Вторая половина — снимок. Секция 8 обязана назвать original.sha256, и названный файл",
+        "обязан существовать на диске: без сохранённой базы KPI-4 не занижен, а НЕНАБЛЮДАЕМ —",
+        "диффить не с чем. Копии original/ проект вправе отменить решением (SKILL §8), хеши —",
+        "нет, поэтому проверяется именно файл хешей. Плейсхолдер <scenario-id>, оставшийся",
+        "незаполненным, на диске не резолвится и потому находка, а не молчаливый проход."
+      ],
+      "limit": "существование файла хешей проверяется относительно каталога самого отчёта и рабочего каталога; если отчёт сканируется вне своего дерева (pre-write по голому имени), проверяется только упоминание, и это назван предел, а не пройденная проверка",
+      "fix": "допиши недостающие секции по ui-generation-report-template.md и сохрани снимок исходной генерации Write-инструментом (original/ + original.sha256) ДО того, как отчёт на него сошлётся"
     }
   ]
 }

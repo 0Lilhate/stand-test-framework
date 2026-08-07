@@ -111,6 +111,46 @@ class GuardDetectorCoverageTest {
         return found;
     }
 
+    /** {@code rules} for a Page Object judged against a discovery report (finding 25, gate U1). */
+    private static TreeSet<String> parity(Path directory, String pageName, String pageContent, String reportContent) {
+        Path page = directory.resolve(pageName);
+        Path report = directory.resolve("UiDiscoveryReport.md");
+        try {
+            Files.createDirectories(page.getParent());
+            Files.writeString(page, pageContent, StandardCharsets.UTF_8);
+            Files.writeString(report, reportContent, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException("could not stage the parity fixture", e);
+        }
+
+        List<String> line = List.of("node", repositoryRoot().resolve(GUARD).toString(),
+                "scan", pageName, "--discovery", "UiDiscoveryReport.md", "--json");
+        String output;
+        try {
+            Process process = new ProcessBuilder(line).directory(directory.toFile()).start();
+            output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            Assumptions.assumeTrue(process.waitFor(60, TimeUnit.SECONDS), "the scan did not finish in 60s");
+        } catch (IOException e) {
+            Assumptions.abort("node is not available on this machine: " + e.getMessage());
+            throw new IllegalStateException("unreachable", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
+
+        TreeSet<String> found = new TreeSet<>();
+        try {
+            for (JsonNode finding : MAPPER.readTree(output).path("findings")) {
+                if ("UI_DISCOVERY_PARITY".equals(finding.path("ruleId").asText())) {
+                    found.add(finding.path("ruleId").asText());
+                }
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("the scan did not answer with JSON:\n" + output, e);
+        }
+        return found;
+    }
+
     @Test
     @DisplayName("SQL in a Java text block is read — it is how Java 17 writes multi-line SQL, and it was invisible")
     void sqlInATextBlock_isExtracted(@TempDir Path temporary) {
@@ -408,5 +448,244 @@ class GuardDetectorCoverageTest {
                 .as("a disclosure finding must never be waived on prose: the file is committed either way, and this "
                         + "is the line between a distinction and an exemption")
                 .doesNotContain("SECRET_IN_SOURCE", "MASKED_SECRET", "PII_IN_FIXTURE");
+    }
+
+    @Test
+    @DisplayName("the UI half of the sleep gate — driver-level waits the browser tempts the agent into (U6)")
+    void uiDriverWait_isAThreadSleep(@TempDir Path temporary) {
+        assertThat(blocking(temporary, "DriverWaitTest.java",
+                "class DriverWaitTest {\n    void t() { page.waitForTimeout(2000); page.waitForSelector(\"#x\"); }\n}\n"))
+                .contains("THREAD_SLEEP");
+
+        assertThat(blocking(temporary, "WithDoubleWait.java",
+                "class WithDoubleWait {\n    void t() { UiStep.expectEventually(\"p\", L).withinSeconds(5).build(); }\n}\n"))
+                .as("a bounded within() is the sanctioned wait, and the driver-word detector must not read .withinSeconds as page.waitFor")
+                .doesNotContain("THREAD_SLEEP");
+    }
+
+    @Test
+    @DisplayName("the server's comment may explain why XPath is absent; only real XPath signatures are findings (U7)")
+    void xpathLocator_isFound(@TempDir Path temporary) {
+        assertThat(blocking(temporary, "XpathProbe.java",
+                "class XpathProbe {\n    void t() { var l = by.xpath(\"//*[@id='x']\"); }\n}\n"))
+                .contains("XPATH_LOCATOR");
+
+        assertThat(blocking(temporary, "Xsaves.java",
+                "class Xsaves {\n    void t() { /* no xpath spelling here */ }\n}\n"))
+                .as("the projection without comments keeps the kit's own ban text out of its own findings")
+                .doesNotContain("XPATH_LOCATOR");
+    }
+
+    @Test
+    @DisplayName("a locator declared off-page is a finding; a Page Object keeps its own locators (U2)")
+    void uiLocatorOutsidePages_isFound(@TempDir Path temporary) {
+        assertThat(blocking(temporary, "BadConsumer.java",
+                "class BadConsumer {\n    static final UiLocator L = UiLocator.testId(\"x\");\n}\n"))
+                .contains("UI_LOCATOR_OUTSIDE_PAGES");
+
+        assertThat(blocking(temporary, "ui/pages/GoodPage.java",
+                "package a.b.ui.pages;\nclass GoodPage {\n    static final UiLocator L = UiLocator.label(\"X\");\n}\n"))
+                .as("a file under ui/pages or declaring a ui.pages package owns its locators")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("sign-in without a role bypasses the pool and the validator — login(...) without .role(...) is a finding (U5)")
+    void uiLoginWithoutRole_isFound(@TempDir Path temporary) {
+        assertThat(blocking(temporary, "NoRole.java",
+                "class NoRole {\n    void t() { UiStep.login(\"portal\").build(); }\n}\n"))
+                .contains("UI_LOGIN_WITHOUT_ROLE");
+
+        assertThat(blocking(temporary, "WithRole.java",
+                "class WithRole {\n    void t() { UiStep.login(\"portal\").role(\"client\").build(); }\n}\n"))
+                .doesNotContain("UI_LOGIN_WITHOUT_ROLE");
+    }
+
+    @Test
+    @DisplayName("${…} in a ui.open path or in an assertion's expected value is not resolved — finding (U9)")
+    void uiTemplateInOpenOrAssert_isFound(@TempDir Path temporary) {
+        assertThat(blocking(temporary, "Templated.java",
+                "class Templated {\n    void t() {\n        UiStep.open(\"p\", \"/apps/${tenantId}\");\n"
+                        + "        UiStep.expect(\"p\", L).assertValue(\"${expected}\").build();\n}\n}\n"))
+                .contains("UI_OPEN_OR_ASSERT_TEMPLATE");
+
+        assertThat(blocking(temporary, "Resolved.java",
+                "class Resolved {\n    void t() {\n        String v = \"ext-\" + testRunId();\n "
+                        + "       UiStep.open(\"p\", \"/apps/123\").build();\n}\n}\n"))
+                .as("a value built from a variable or a literal, not a ${…} placeholder, is resolved and not a finding")
+                .doesNotContain("UI_OPEN_OR_ASSERT_TEMPLATE");
+    }
+
+    @Test
+    @DisplayName("an address reproduced in a Ui*Report.md is a delivery channel — a focused detector closes U3's report half (U3)")
+    void uiReportAddress_isFound(@TempDir Path temporary) {
+        assertThat(blocking(temporary, "UiDiscoveryReport.md",
+                "# UiDiscoveryReport\n\nurl: https://prod.example-bank.ru/requests\n"))
+                .as("a Ui*Report.md must never reproduce a live stand address")
+                .contains("UI_REPORT_STAND_ADDRESS");
+
+assertThat(blocking(temporary, "safety-review-report.md",
+                "## Находка\nадрес https://prod.example-bank.ru/requests из транскрипта\n"))
+                .as("an ordinary markdown report may still describe a found address — that is finding 1's reason to skip prose")
+                .doesNotContain("UI_REPORT_STAND_ADDRESS");
+    }
+
+    /** A generation report with all eight sections and a section 8 that names its snapshot (gate U16). */
+    private static final String COMPLETE_GENERATION_REPORT = """
+            # UI Generation Report: demo
+
+            ## 1. What is covered
+            one row per expectation.
+            ## 2. What is not covered, and why
+            none.
+            ## 3. Assumptions
+            none.
+            ## 4. Fragile locators
+            none.
+            ## 5. How the UI is bound to the backend
+            correlation.
+            ## 6. Gate results
+            safety PASS, quality PASS.
+            ## 7. Files created or changed
+            ui/pages/Page.java
+            ## 8. Original generation (diff base for KPI-4)
+
+            | Field | Value |
+            |---|---|
+            | Hash file | `original.sha256` |
+            """;
+
+    @Test
+    @DisplayName("a generation report missing a section is blocked — gate U16 (finding 26, F006)")
+    void uiGenerationReport_catchesAMissingSection(@TempDir Path temporary) {
+        String truncated = COMPLETE_GENERATION_REPORT.replace("## 6. Gate results\nsafety PASS, quality PASS.\n", "");
+        assertThat(blocking(temporary, "UiGenerationReport.md", truncated))
+                .as("section 6 carries the gate verdicts; a report handed over without it presents an unverified artifact as reviewed")
+                .contains("UI_GENERATION_REPORT_INCOMPLETE");
+    }
+
+    @Test
+    @DisplayName("a generation report naming a snapshot that is not on disk is blocked — KPI-4 has nothing to diff (U16 negative)")
+    void uiGenerationReport_catchesAnAbsentSnapshot(@TempDir Path temporary) {
+        assertThat(blocking(temporary, "UiGenerationReport.md", COMPLETE_GENERATION_REPORT))
+                .as("every section is present, but original.sha256 was never written: the diff base KPI-4 is measured against does not exist")
+                .contains("UI_GENERATION_REPORT_INCOMPLETE");
+    }
+
+    @Test
+    @DisplayName("a complete generation report whose snapshot exists is silent (U16 clean case)")
+    void uiGenerationReport_completeReportWithSnapshotIsSilent(@TempDir Path temporary) {
+        try {
+            Files.writeString(temporary.resolve("original.sha256"),
+                    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  ui/pages/Page.java\n",
+                    StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException("could not stage the snapshot", e);
+        }
+        assertThat(reported(temporary, "UiGenerationReport.md", COMPLETE_GENERATION_REPORT))
+                .as("eight sections and a snapshot that is really there — the shape the gate exists to let through")
+                .doesNotContain("UI_GENERATION_REPORT_INCOMPLETE");
+    }
+
+    @Test
+    @DisplayName("the kit's own report template is not a report and stays silent (U16 false-positive guard)")
+    void uiGenerationReport_theTemplateIsNotAReport(@TempDir Path temporary) {
+        String template = read(repositoryRoot()
+                .resolve("docs/ai-agent/.claude/skills/stand-test-ui-generation-report/ui-generation-report-template.md"));
+        assertThat(reported(temporary, "ui-generation-report-template.md", template))
+                .as("the template carries unfilled <scenario-id> placeholders by design; a detector that refused it would refuse the kit's own asset")
+                .doesNotContain("UI_GENERATION_REPORT_INCOMPLETE");
+    }
+
+    @Test
+    @DisplayName("a discovery report is not judged by the generation report's sections (U16 scoping)")
+    void uiGenerationReport_doesNotJudgeADiscoveryReport(@TempDir Path temporary) {
+        assertThat(reported(temporary, "UiDiscoveryReport.md", DISCOVERY_REPORT))
+                .as("the two reports have different shapes; applying one's structure to the other reports a defect that is not there")
+                .doesNotContain("UI_GENERATION_REPORT_INCOMPLETE");
+    }
+
+    private static String read(Path file) {
+        try {
+            return Files.readString(file, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException("could not read " + file, e);
+        }
+    }
+
+    private static final String DISCOVERY_REPORT = """
+            # UI Discovery Report: demo / client-portal
+            ## Elements observed
+            | # | Case name | `data-testid` | role + accessible name | label | Chosen locator | Why not |
+            |---|---|---|---|---|---|---|
+            | 1 | поле «Статус» | `request-status` | — | — | `testId=request-status` | — |
+            | 2 | кнопка «Отправить» | — | `button` / `Отправить` | — | `role=button:Отправить` | — |
+            """;
+
+    @Test
+    @DisplayName("a locator the discovery report never observed is a fabrication — gate U1 (finding 25, S021)")
+    void uiDiscoveryParity_catchesAnUntracedLocator(@TempDir Path temporary) {
+        String page = """
+                package demo.ui.pages;
+                public class Page {
+                    static final UiLocator STATUS = UiLocator.testId("requestStatus");
+                    static final UiLocator SEND = UiLocator.role("button", "Отправить");
+                }
+                """;
+        assertThat(parity(temporary, "ui/pages/Page.java", page, DISCOVERY_REPORT))
+                .as("the report records `testId=request-status`; `requestStatus` does not trace to any row — a released rename or an invention")
+                .containsExactly("UI_DISCOVERY_PARITY");
+    }
+
+    @Test
+    @DisplayName("a Page Object whose every locator is a Chosen-locator row is silent (S21)")
+    void findingPageParity_cleanPageIsSilent(@TempDir Path temporary) {
+        String page = """
+                package demo.ui.pages;
+                public class Page {
+                    static final UiLocator STATUS = UiLocator.testId("request-status");
+                    static final UiLocator SEND = UiLocator.role("button", "Отправить");
+                }
+                """;
+        assertThat(parity(temporary, "ui/pages/Page.java", page, DISCOVERY_REPORT))
+                .as("each locator maps onto a row of the report; the clean build is exactly what the gate exists to keep")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("a Page Object scanned against a discovery report that does not exist is blocked — claimed discovery evidence is not passed (S21 negative)")
+    void findingPageUi_absentReportIsBlocked(@TempDir Path temporary) {
+        Path page = temporary.resolve("ui/pages/Page.java");
+        try {
+            Files.createDirectories(page.getParent());
+            Files.writeString(page,
+                    "package demo.ui.pages;\npublic class Page {\n    static final UiLocator S = UiLocator.testId(\"request-status\");\n}\n",
+                    StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException("could not stage the page", e);
+        }
+        String output = run(temporary, List.of("scan", "ui/pages/Page.java", "--discovery", "UiDiscoveryReport.md", "--json"));
+        assertThat(output)
+                .as("the caller named a report that is not on disk; that is not a scan over discovery evidence, and the parity gate refuses it")
+                .contains("UI_DISCOVERY_PARITY");
+    }
+
+    /** Runs the scanner against a staged directory and returns its JSON output, or aborts if node is absent. */
+    private static String run(Path directory, List<String> args) {
+        List<String> line = new ArrayList<>(List.of("node", repositoryRoot().resolve(GUARD).toString()));
+        line.addAll(args);
+        String output;
+        try {
+            Process process = new ProcessBuilder(line).directory(directory.toFile()).start();
+            output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            Assumptions.assumeTrue(process.waitFor(60, TimeUnit.SECONDS), "the scan did not finish in 60s");
+        } catch (IOException e) {
+            Assumptions.abort("node is not available on this machine: " + e.getMessage());
+            throw new IllegalStateException("unreachable", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
+        return output;
     }
 }

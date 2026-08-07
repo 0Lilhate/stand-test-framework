@@ -76,17 +76,32 @@ grep -rn 'UiStep\.fill(' -A 1 src/test/java | grep -vE '\$\{testRunId\}|\$\{[a-z
 
 The greps are a sweep, not the review: the scanner reads text, so a locator assembled from a constant
 in a neighbouring file, a fully qualified call, or a value passed in through three layers all slip
-past. **U1 in particular cannot be grepped at all** — an invented locator is syntactically perfect.
-Read the discovery report and the Page Objects side by side.
+past. **U1 is caught only by the parity scanner `UI_DISCOVERY_PARITY` (`scan --discovery UiDiscoveryReport.md`),
+not by grep** — an invented locator is syntactically perfect, so `UiLocator.testId("requestStatus")`
+compiles like the real `"request-status"`. Run that scan; then still read the discovery report and the
+Page Objects side by side, because the scanner sees only the Page Object being scanned, not the case's
+own divergences from the report.
 
 ## Machine coverage — state it honestly in the report
 
 | Gate | Automated? |
 |---|---|
-| U3 (addresses), U4 (secret half), U6 (sleeps), U13 (secrets/PII in prose) | yes — the protocol write hook's detectors run over Java and, for disclosure findings, over prose |
-| U1, U2, U5, U7–U12, U14–U20 | **no detector in this version of the kit** — eye only |
+| U1 (invented locator: no report row) | yes — `UI_DISCOVERY_PARITY` (needs `--discovery UiDiscoveryReport.md`; absent report is itself a BLOCK) |
+| U2 (locator off-page) | yes — `UI_LOCATOR_OUTSIDE_PAGES` |
+| U3 (addresses): java + `Ui*Report.md` | yes — `HARDCODED_STAND_URL` (code) + `UI_REPORT_STAND_ADDRESS` (report names) |
+| U5 (login without a role) | yes — `UI_LOGIN_WITHOUT_ROLE` |
+| U6 (sleep, driver wait) | yes — `THREAD_SLEEP` (includes `page.waitForSelector/Timeout/LoadState`, `.waitFor`) |
+| U7 (XPath) | yes — `XPATH_LOCATOR` |
+| U9 (template in open/assert) | yes — `UI_OPEN_OR_ASSERT_TEMPLATE` |
+| U13 (secrets/PII), U4 (secret half) | yes — the protocol disclosure detectors already run over prose |
+| U16 (report sections, snapshot) | partly — `UI_GENERATION_REPORT_INCOMPLETE`: the eight headings are counted by NUMBER and `original.sha256` must exist on disk. A heading with nothing under it passes; **section content stays eye only** |
+| U17 (expectEventually without within) | yes — `EXPECT_EVENTUALLY_WITHOUT_WITHIN` |
+| U20 (shared mutable state) | yes — `SHARED_MUTABLE_TEST_STATE` (static field of a mutable type; a hand-rolled mutable holder still passes) |
+| U4 (semantic half), U8, U10, U11a/b, U12, U14, U15, U18, U19 | **no detector in this kit** — eye only |
 
-A clean hook run is therefore **not** a clean UI review, and the report must not present it as one.
+A clean hook run is therefore **still not** a clean UI review, and the report must not present it as
+one. The detector IDs are the source of truth: they live in `detectors.json`, and
+`GuardrailScannerParityTest` pins the count against the corpus.
 
 ## Findings
 

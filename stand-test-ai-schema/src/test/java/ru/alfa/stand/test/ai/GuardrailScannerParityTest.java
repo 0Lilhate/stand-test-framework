@@ -71,7 +71,18 @@ class GuardrailScannerParityTest {
             "shared-state-test.java.txt", Map.of("HARDCODED_CORRELATION_ID", 1L, "SDK_EXCEPTION_SWALLOWED", 1L, "SHARED_MUTABLE_TEST_STATE", 2L),
             "destructive-sql-test.java.txt", Map.of("DESTRUCTIVE_SQL_WITHOUT_ALLOW", 4L),
             "sanctioned-db-writes.java.txt", Map.of(),
-            "clean-declarative-test.java.txt", Map.of());
+            "clean-declarative-test.java.txt", Map.of(),
+            // UI half of the safety gate (UITG-S020): headers and "Genealogy" spell out the counts a
+            // detector could quietly lose if a regex half-regressed (the same discipline as the SQL sleep
+            // fixture above).
+            "ui-orphaned-wait.java.txt", Map.of(
+                    "THREAD_SLEEP", 1L,
+                    "XPATH_LOCATOR", 1L,
+                    "UI_LOCATOR_OUTSIDE_PAGES", 1L,
+                    "EXPECT_EVENTUALLY_WITHOUT_WITHIN", 1L,
+                    "UI_LOGIN_WITHOUT_ROLE", 1L,
+                    "UI_OPEN_OR_ASSERT_TEMPLATE", 2L),
+            "clean-ui-page.java.txt", Map.of());
 
     private static Path repositoryRoot() {
         Path current = Paths.get("").toAbsolutePath();
@@ -142,7 +153,17 @@ class GuardrailScannerParityTest {
                 "SCRIPT_IN_DECLARATIVE_DOCUMENT", "DIRECT_TRANSPORT_CLIENT", "VALIDATOR_BYPASS",
                 "HARDCODED_CORRELATION_ID", "SDK_EXCEPTION_SWALLOWED", "MASKED_SECRET", "PII_IN_FIXTURE",
                 "UNSANCTIONED_DEPENDENCY", "KAFKA_EXPECT_WITHOUT_DISCRIMINATOR", "SHARED_MUTABLE_TEST_STATE",
-                "FAILURE_CONCEALMENT"));
+                "FAILURE_CONCEALMENT",
+                // UI half of the safety gate (UITG-S020): these are kit-own findings — the SDK's runtime
+                // validator cannot name a static scan of a generated artifact, and no ForbiddenOperation
+                // constant backs them.
+                "XPATH_LOCATOR", "UI_LOCATOR_OUTSIDE_PAGES", "EXPECT_EVENTUALLY_WITHOUT_WITHIN",
+                "UI_LOGIN_WITHOUT_ROLE", "UI_OPEN_OR_ASSERT_TEMPLATE", "UI_REPORT_STAND_ADDRESS",
+                "UI_DISCOVERY_PARITY",
+                // Gate U16 (UITG-F006): the completeness of a generation report and the existence of its
+                // snapshot are properties of the deliverable, not of a scenario — nothing the runtime
+                // validator ever sees, so no constant backs it either.
+                "UI_GENERATION_REPORT_INCOMPLETE"));
 
         List<String> unknown = new ArrayList<>();
         detectorTable().path("detectors").forEach(detector -> {
@@ -158,7 +179,7 @@ class GuardrailScannerParityTest {
     }
 
     @Test
-    @DisplayName("the table declares all eighteen findings and says which one needs more than one artifact")
+    @DisplayName("the table declares all twenty-six findings and says which one needs more than one artifact")
     void table_isComplete() {
         JsonNode detectors = detectorTable().path("detectors");
         TreeSet<Integer> numbers = new TreeSet<>();
@@ -174,9 +195,10 @@ class GuardrailScannerParityTest {
             }
         });
 
-        assertThat(numbers).as("the numbering is the safety review's own, and a gap in it is a finding nobody carried over").hasSize(18);
+        assertThat(numbers).as("the numbering is the safety review's own, and a gap in it is a finding nobody carried over")
+                .hasSize(26);
         assertThat(numbers.first()).isEqualTo(1);
-        assertThat(numbers.last()).isEqualTo(18);
+        assertThat(numbers.last()).isEqualTo(26);
         assertThat(unimplemented).as("every finding in the table is implemented; a declared-but-absent check is worse than an absent one").isEmpty();
         assertThat(needTwoVersions)
                 .as("finding 18 asks what a CHANGE stopped checking, which one version of a file cannot answer — so a plain scan reports it as not run rather than counting it among the passes")

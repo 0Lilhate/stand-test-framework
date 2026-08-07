@@ -4,9 +4,9 @@
 // function serve a PreToolUse hook (content about to be written), a whole-file sweep and a CI run
 // without any of the three being able to disagree with the others.
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { concealment, isExecutableScenario } from './conceal.mjs';
-import { codeOnly } from './source.mjs';
+import { codeOnly, withoutComments } from './source.mjs';
 import { dirname, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -437,14 +437,17 @@ function extractAll(content, spec) {
 // ---------------------------------------------------------------------------------------------
 
 function runPatterns(detector, content, findings) {
+  const raw = content;
+  const projected = withoutComments(content);
   for (const pattern of detector.patterns || []) {
+    const haystack = pattern.projection === 'withoutComments' ? projected : raw;
     const regex = new RegExp(pattern.regex, pattern.flags || 'g');
     const exemptKey = pattern.exemptKeyRegex ? new RegExp(pattern.exemptKeyRegex) : null;
     const exemptValue = pattern.exemptValueRegex ? new RegExp(pattern.exemptValueRegex) : null;
     const mutableType = pattern.mutableTypeRegex ? new RegExp(pattern.mutableTypeRegex) : null;
     const seen = new Set();
     let match;
-    while ((match = regex.exec(content)) !== null) {
+    while ((match = regex.exec(haystack)) !== null) {
       if (match[0] === '') { regex.lastIndex += 1; continue; }
 
       // Shared-mutable-state carries its own question: a static FINAL field is a finding only when
@@ -584,6 +587,325 @@ function runMarkers(detector, content, findings) {
 }
 
 /**
+ * The nearest end of a builder chain opened at `factoryAt`: the `.build()` or the statement `;`.
+ *
+ * The window is lexical and deliberately narrow. A `.build()` anywhere after the factory closes its
+ * own chain, and a `;` means the chain was assigned to a local (and so never built) — in both cases
+ * the search for the companion stops. A second factory whose chain happens to follow is not part of
+ * the window: the guardrail is about a step declaring its own bound before it is built, and a step
+ * that assigns the builder to a variable and calls `.role(...)` later has no static proof to offer.
+ */
+function builderWindow(content, from) {
+  const closes = [content.indexOf('.build()', from), content.indexOf(';', from)].filter((at) => at !== -1);
+  return closes.length > 0 ? Math.min(...closes) : content.length;
+}
+
+/**
+ * A UI step that must carry a companion call before it is built: `ui.expectEventually(...)` must
+ * bound its wait with `within(...)`/`withinSeconds(...)` (U17), `ui.login(...)` must name its role
+ * with `.role(...)` (U5). The factory is the anchor; the companion is sought in the same chain.
+ *
+ * Factory and companion come from the detector so the same walk serves both. Matching over the
+ * projected code (comments and string literals blanked) keeps a comment like "no within(...) here"
+ * from vouching for a missing call — the pattern that funded the sanctioned-db-writes machinery.
+ */
+function runUiChain(detector, content, findings, kind) {
+  if (kind !== 'java' || !detector.factory || !detector.companion) return;
+  const code = codeOnly(content);
+  const factory = new RegExp(detector.factory, 'g');
+  const companion = new RegExp(detector.companion, 'g');
+  let match;
+  while ((match = factory.exec(code)) !== null) {
+    const end = uiWindow(code, match.index + match[0].length);
+    const window = code.slice(match.index + match[0].length, end);
+    companion.lastIndex = 0;
+    if (!companion.test(window)) {
+      findings.push(finding(detector, `step '${match[0]}' does not declare its required companion before build`, match[0]));
+    }
+  }
+}
+
+/** One window for both UI-chain factories: this chain's own end, ignoring any later chain that opens. */
+function uiWindow(code, from) {
+  let depth = 0;
+  for (let at = from; at < code.length; at += 1) {
+    const ch = code[at];
+    if (ch === '(') depth += 1;
+    else if (ch === ')' && depth > 0) depth -= 1;
+    else if (depth === 0 && (ch === ';')) return at;
+    else if (depth === 0 && code.startsWith('.build()', at)) return at;
+  }
+  return code.length;
+}
+
+/**
+ * A `UiLocator.*` constant that escaped its Page Object (U2). A Java file is that Page Object's home
+ * only when its package declarations say so (`package … .ui.pages;` or `…ui.pageobject`) or when the
+ * path places it under a `ui/pages` tree. A `UiLocator.*` factory call in any other Java file is
+ * a locator living outside the Page Object the rules require, and every detection needs to be above
+ * the code-with-comments projection so a commented-out locator is not read as the real one.
+ */
+function runUiLocator(detector, content, findings, relativePath) {
+  const code = withoutComments(content);
+  const hasLocator = /UiLocator\.testId|UiLocator\.role|UiLocator\.label|UiLocator\.css|UiLocator\.text|UiLocator\.byAttribute/.test(code)
+    || /\bUiLocator\./.test(code);
+  if (!hasLocator) return;
+  const declaresPageObjectPackage = /^\s*package\s+[\w.]*\.?ui\.(?:pages|pageobject)[\w.]*\s*;/m.test(code);
+  const sitsInPagesTree = /(?:^|[/\\.])ui[/\\]pages[/\\]/.test(relativePath);
+  const isNamedPageObject = /page[-_]object/i.test(relativePath);
+  if (declaresPageObjectPackage || sitsInPagesTree || isNamedPageObject) return;
+  const regex = /\bUiLocator\s*\.\s*(\w+)\s*\(/g;
+  let m;
+  while ((m = regex.exec(code)) !== null) {
+    findings.push(finding(detector, `UiLocator.${m[1]}(...) outside a Page Object (no ui.pages/ pageobject package and no ui/pages path)`, m[0]));
+  }
+}
+
+/**
+ * `${…}` where nothing resolves it (U9): inside a `UiStep.open(...)` path, or inside the expected
+ * value of a UI assertion. Both factories and assert builders are sought over code-with-comments so
+ * that `<script>` samples and prose mentioning `…` cannot vouch. Values that are legitimately
+ * resolved (`${testRunId}`, captures) are preserved only when the resolved context says so; an expect
+ * whose expected value carries a literal `${…}` is a test that compares against the un-resolved
+ * string and fails — the rule the golden test itself explains in a comment.
+ */
+function runUiTemplate(detector, content, findings) {
+  const code = withoutComments(content);
+  const path = /\bUiStep\s*\.\s*open\s*\(\s*"[^"]*"\s*,\s*"(?=[^"]*\$\{)[^"]*"/g;
+  let m;
+  while ((m = path.exec(code)) !== null) {
+    findings.push(finding(detector, `ui.open path carries '${stripQuotes(m[0])}' — a ${'${'+'…}'} the SDK will not resolve`, stripQuotes(m[0])));
+  }
+  const asserts = /\bassert(?:Text|Value|TextContains|TextMatches|Attribute|Property)\s*\([^;]*\$\{/g;
+  let a;
+  while ((a = asserts.exec(code)) !== null) {
+    findings.push(finding(detector, `assertion expected value carries '${a[0]}' — a ${'${...}'} is not resolved in expected values`, a[0]));
+  }
+}
+
+function stripQuotes(text) {
+  return text.replace(/^"+|"+$/g, '').trim();
+}
+
+/**
+ * A production address in the discovery/generation reports (U3, report half). The existing
+ * HARDCODED_STAND_URL deliberately does not run over prose — a stage-8 report quoting a found address
+ * must be writable, and finding 1's `$notOn: prose` records that decision. This is a NARROWER rule,
+ * not a waiver of it: it applies only to files whose basename matches `Ui*Report.md`, the reports the
+ * UI gate writes, and it re-uses the address shapes finding 1 knows. A `Ui*Report.md` must never
+ * contain a live address whether or not a stage-8 read wants to quote it — the address is curated
+ * behind the registry alias, and a report that reproduces it becomes a delivery channel.
+ */
+function runReportAddress(detector, content, findings, relativePath) {
+  const name = basenamePosix(relativePath);
+  if (!/^Ui.*Report\.md$/i.test(name)) return;
+  const shapes = [
+    /\b(?:https?|grpc|amqp|mongodb|redis):\/\/[^\s"'<>)\]}]*/gi,
+    /\bjdbc:[a-z0-9]+:[^\s"'<>)\]}]*/gi,
+    /\b(?:[a-z0-9-]+\.)+[a-z][a-z0-9-]*:\d{2,5}\b/gi,
+  ];
+  const seen = new Set();
+  for (const shape of shapes) {
+    let m;
+    while ((m = shape.exec(content)) !== null) {
+      if (seen.has(m[0])) continue;
+      seen.add(m[0]);
+      findings.push(finding(detector, `address '${m[0]}' reproduced in ${name} — the base address lives in the registry, never here`, m[0]));
+    }
+  }
+}
+
+function basenamePosix(path) {
+  return path.split(/[\\/]/).pop() || path;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Finding 26 — UI_GENERATION_REPORT_INCOMPLETE (gate U16, UITG-F006).
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * The generation report's eight sections, and the snapshot that makes KPI-4 observable (gate U16).
+ *
+ * Two halves, and they fail for different reasons. The STRUCTURE half counts the eight numbered
+ * headings — by NUMBER, not by wording, because the section titles get rewritten per scenario and a
+ * detector demanding the template's exact prose would refuse legitimate reports. That makes it a
+ * lower bound by construction: a heading with nothing under it passes here and is caught by the
+ * human read at stage 7. Saying so is the point — the checklist records the gap rather than letting
+ * a green scan read as a filled report.
+ *
+ * The SNAPSHOT half is the one with teeth. Without a preserved original there is nothing to diff the
+ * merged file against, so KPI-4 is not merely imprecise — it is unobservable, and no later work
+ * recovers it. The copies under `original/` a project may rule out by recorded decision; the hashes
+ * may not, which is why the file checked is `original.sha256` and not the directory.
+ *
+ * Existence is resolved against the report's own directory first and the working directory second. A
+ * report scanned outside its tree (a pre-write hook handed a bare name) can only be checked for the
+ * mention — reported as a limit in the table, never as a check that passed.
+ */
+function runUiGenerationReport(detector, content, findings, relativePath) {
+  const name = basenamePosix(relativePath);
+  if (!/^Ui.*GenerationReport\.md$/i.test(name)) return;
+
+  const required = detector.sections || 8;
+  const missing = [];
+  for (let section = 1; section <= required; section++) {
+    if (!new RegExp(`^#{1,6}\\s*${section}\\.`, 'm').test(content)) missing.push(section);
+  }
+  if (missing.length > 0) {
+    findings.push(finding(detector,
+      `отчёт генерации не несёт секци${missing.length === 1 ? 'ю' : 'и'} ${missing.join(', ')} из ${required}: неполный отчёт выдаётся человеку как полный`,
+      `sections missing: ${missing.join(',')}`));
+  }
+
+  const hashFile = detector.snapshotHashFile || 'original.sha256';
+  const reference = new RegExp(`([^\\s"'\`<>()\\[\\]]*${hashFile.replace('.', '\\.')})`).exec(content);
+  if (reference === null) {
+    findings.push(finding(detector,
+      `секция 8 не называет ${hashFile}: без сохранённого снимка исходной генерации KPI-4 нечем измерить — диффить не с чем`,
+      `no ${hashFile}`));
+    return;
+  }
+
+  const referenced = reference[1];
+  const reportDirectory = relativePath.includes('/') || relativePath.includes('\\')
+    ? dirname(relativePath)
+    : '.';
+  const candidates = [join(reportDirectory, referenced), referenced];
+  if (!candidates.some((candidate) => existsSync(candidate))) {
+    findings.push(finding(detector,
+      `секция 8 ссылается на '${referenced}', которого на диске нет: снимок обязан быть записан ДО того, как отчёт на него сошлётся`,
+      referenced));
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Finding 25 — UI_DISCOVERY_PARITY (gate U1, UITG-S021).
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * A locator expression as the discovery report spells it: `<strategy>=<value>`.
+ *
+ * The report's "Chosen locator" column is the canonical side (see ui-discovery-report-template.md):
+ * `testId=request-status`, `role=button:Отправить`, `label=Тема`. The same expression is written in
+ * Java as `UiLocator.testId("request-status")` etc. Normalising to one surface is what lets the two
+ * be compared at all — a tester is not a table of strategy+operand, so nothing else does.
+ */
+function normaliseLocator(strategy, value, accessibleName) {
+  if (strategy === 'role') {
+    return `role=${value}:${accessibleName}`;
+  }
+  return `${strategy}=${value}`;
+}
+
+/**
+ * The locators a discovery report observes, as a canonical set.
+ *
+ * The report is a fixed-shape markdown document (SP003 §7.2): an "Elements observed" table whose
+ * columns include "Chosen locator", holding the adopted `<strategy>=<value>`. The column is located
+ * by its HEADER rather than by a hard-coded index, so a column added before it (a new observed rung)
+ * does not silently shift the parse: the header is the template's contract, and this reads it where
+ * it actually is. A row whose chosen locator is `—` (nothing chosen) is an element discovery chose
+ * not to address — it cannot vouch for a Java locator and is read as absent. Every row this misses
+ * degrades toward an empty set, which is a missed finding rather than an invented one.
+ *
+ * @param report the raw markdown of a UiDiscoveryReport
+ * @returns a Set of canonical `<strategy>=<value>` strings
+ */
+function discoveryLocatorSet(report) {
+  const chosen = new Set();
+  if (report === null || report === undefined) return chosen;
+  let chosenIndex = -1;
+  const lines = report.split('\n');
+  for (const line of lines) {
+    if (/^\s*\|/.test(line) === false) continue;
+    const cells = splitRow(line);
+    if (cells.some((cell) => /chosen\s*locator/i.test(cell))) {
+      chosenIndex = cells.findIndex((cell) => /chosen\s*locator/i.test(cell));
+      break;
+    }
+  }
+  if (chosenIndex < 0) return chosen;
+  for (const line of lines) {
+    const cell = /^\s*\|\s*\d+\s*\|([^\n]*)\|/.exec(line);
+    if (cell === null) continue;
+    const segments = cell[1].split('|').map((segment) => segment.trim());
+    const chosenCell = segments[chosenIndex - 1];
+    if (chosenCell === undefined || chosenCell === '' || chosenCell === '—') continue;
+    chosen.add(chosenCell.replace(/^`|`$/g, ''));
+  }
+  return chosen;
+}
+
+/** Splits one markdown table row into the text of its cells, the leading `#` column dropped. */
+function splitRow(line) {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith('|') || !trimmed.endsWith('|')) return [];
+  return trimmed.slice(1, -1).split('|').map((cell) => cell.trim());
+}
+
+/**
+ * Every `UiLocator.*` constant in a Page Object, as its canonical expression.
+ *
+ * Matched over code-with-comments blanked of comments and string literals there is NOTHING here that
+ * needs the commented-out projection: a locator in a comment is not a locator, and quoting a locator
+ * in a javadoc is quoting the rule, not breaking it. String-literals are PRESERVED by
+ * `withoutComments`, which is exactly right — the operand lives in a string. The call shapes are
+ * those the SDK's factories spell (UiLocator.java): testId/role/label/text/css. A `UiLocator.` call
+ * whose factory these do not match (for example a future one) is not read as a locator at all — an
+ * unknown strategy must not silently vouch for nothing, and a future factory that this fails to check
+ * is a found gap, not a false pass.
+ */
+export function pageLocators(content) {
+  const code = withoutComments(content);
+  const found = [];
+  const regex = /\bUiLocator\s*\.\s*(testId|role|label|text|css)\s*\(\s*"((?:[^"\\]|\\.)*)"(?:\s*,\s*"((?:[^"\\]|\\.)*)")?\s*\)/g;
+  let match;
+  while ((match = regex.exec(code)) !== null) {
+    const factory = match[1];
+    const value = match[2];
+    if (value === undefined || value === '') continue;
+    const name = match[3];
+    if (factory === 'role' && (name === undefined || name === '')) continue;
+    found.push({ factory, value, name, expression: normaliseLocator(factory, value, name) });
+  }
+  return found;
+}
+
+/**
+ * Gate U1 — the invented locator (UITG-S021). A Page Object locator must trace to a row of the
+ * discovery report; a locator the report does not say it observed is a candidate for a fabrication
+ * (BR-03, RISK-03). The report is a different artifact and is supplied the same way the environment
+ * allowlist is — as policy (`policy.discovery`), named by the caller with `--discovery <path>`. If
+ * that name is missing from disk, the scan reports the absence as a BLOCK: a generation claiming
+ * discovery evidence it cannot point at is not accepted. Presence is proven, never by the case text
+ * or the KB — those are not the DOM, and only the report records what discovery actually observed.
+ */
+function runUiParity(detector, content, findings, policy) {
+  // Parity is a REQUESTED check, not a background one: a single-file scan of an unrelated Java file
+  // has no discovery side to compare and must stay quiet. The caller asks for it by naming the report
+  // (`--discovery <path>`); if what it names does not exist, that is the negative the gate exists to
+  // make loud — a generation claiming discovery evidence it cannot point at.
+  const requested = policy !== null && policy !== undefined;
+  if (!requested) return;
+  if (policy.discoveryMissing === true) {
+    findings.push(finding(detector,
+      'заявлен отчёт разведки (--discovery), которого на диске нет: локатор без discovery-доказательства не принимается — генерация без разведки не проходит',
+      'missing UiDiscoveryReport'));
+    return;
+  }
+  const report = policy.discovery;
+  if (report === null || report === undefined || report === '') return;
+  const chosen = discoveryLocatorSet(report);
+  for (const locator of pageLocators(content)) {
+    if (!chosen.has(locator.expression)) {
+      findings.push(finding(detector,
+        `локатор '${locator.expression}' не прослеживается до строки UiDiscoveryReport.md (колонка «Chosen locator»)`,
+        locator.expression));
+    }
+  }
+}
+
+/**
  * Every dependency coordinate a build file declares.
  *
  * Two spellings rather than one, because `pom.xml` was named in `buildFiles` from the start and could
@@ -674,6 +996,12 @@ export function scanArtifact(content, relativePath, policy = {}) {
     if (detector.keys) runKeys(detector, content, findings);
     if (detector.imports || detector.transportFields) runTransport(detector, content, findings, kind);
     if (detector.markers) runMarkers(detector, content, findings);
+    if (detector.factory && detector.companion) runUiChain(detector, content, findings, kind);
+    if (detector.rule === 'uiLocatorOutsidePages') runUiLocator(detector, content, findings, relativePath);
+    if (detector.rule === 'uiTemplateInOpenOrAssert') runUiTemplate(detector, content, findings);
+    if (detector.rule === 'uiReportAddress') runReportAddress(detector, content, findings, relativePath);
+    if (detector.rule === 'uiGenerationReport') runUiGenerationReport(detector, content, findings, relativePath);
+    if (detector.rule === 'uiDiscoveryParity') runUiParity(detector, content, findings, policy);
     if (detector.buildFiles) runDependencies(detector, content, findings, relativePath);
     if (detector.shapes) runShapes(detector, content, findings);
     if (detector.rule === 'modelWalk' && detector.ruleId === 'UNBOUNDED_TIMEOUT') runTimeouts(detector, content, findings);

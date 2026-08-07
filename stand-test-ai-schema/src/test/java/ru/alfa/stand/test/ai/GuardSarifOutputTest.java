@@ -90,7 +90,7 @@ class GuardSarifOutputTest {
         assertThat(log.path("$schema").asText()).contains("sarif-2.1.0");
         JsonNode driver = log.path("runs").path(0).path("tool").path("driver");
         assertThat(driver.path("name").asText()).isEqualTo("stand-guard");
-        assertThat(driver.path("rules")).hasSize(18);
+        assertThat(driver.path("rules")).hasSize(26);
         assertThat(driver.path("rules").path(0).path("help").path("text").asText())
                 .as("a finding without its fix is a complaint; the fix travels into the annotation")
                 .isNotEmpty();
@@ -166,7 +166,7 @@ class GuardSarifOutputTest {
         assertThat(sarif(answer).path("runs").path(0).path("results")).isEmpty();
         assertThat(sarif(answer).path("runs").path(0).path("tool").path("driver").path("rules"))
                 .as("the rules travel even when nothing was found: that is what makes 'nothing was found' mean something")
-                .hasSize(18);
+                .hasSize(26);
     }
 
     @Test

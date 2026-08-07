@@ -60,13 +60,22 @@ Verdict: `PASS` / `PASS-WITH-NOTES` / `BLOCK`.
 ## What the machine does and does not do here
 
 The write hook (`detectors.json`) runs the **protocol** findings over every Java artifact, so an
-address, a secret, a `Thread.sleep`, a raw client and PII are caught in UI files too — U3, U4 (in its
-secret half), U6 and U13 have machine backing. **The UI-specific half — U1, U2, U5, U7–U12, U14–U20 —
-has no automated detector in this version of the kit.** Nothing intercepts an invented locator, a
-locator in a test body, or a `${var}` in a place that does not resolve; the eye is the only net.
+address, a secret, a `Thread.sleep`, a raw client and PII are caught in UI files too. The UI half is
+partially automated: U1 (invented locator) → `UI_DISCOVERY_PARITY`, U2 → `UI_LOCATOR_OUTSIDE_PAGES`,
+U5 → `UI_LOGIN_WITHOUT_ROLE`, U6 (driver wait) → `THREAD_SLEEP`, U7 → `XPATH_LOCATOR`,
+U9 → `UI_OPEN_OR_ASSERT_TEMPLATE`, U17 → `EXPECT_EVENTUALLY_WITHOUT_WITHIN`, and the U3 report half →
+`UI_REPORT_STAND_ADDRESS`. **The rest — U4 (semantic half), U8, U10, U11a/b, U12, U14, U15, U16,
+U18, U19, U20 — has no detector in this kit.** Nothing intercepts a fabricated-but-plausible `${var}`,
+a role discrepancy, or a report that hides its gaps; the eye is the only net.
 
-Say so in the report rather than implying a clean hook means a clean review. A UI detector set is
-planned work, not shipped work.
+`UI_DISCOVERY_PARITY` needs the discovery report to judge against: run
+`node <bundle>/hooks/stand-guard.mjs scan <page> --discovery UiDiscoveryReport.md`. Absent the report,
+the scan reports the absence as a BLOCK, and the parity check is the one part of U1 that must still be
+done by eye over the case's own divergences.
+
+Say so in the report rather than implying a clean hook means a clean review. The remaining set is
+enumerated in [`ui-safety-checklist.md`](ui-safety-checklist.md) as the human-only gates, and the
+`stand-test-ai-schema` test pins the detector count against the corpus.
 
 Runtime backstops that do exist, and that this review must still catch statically: a non-whitelisted
 alias and a `ui.login` naming an undeclared role are refused pre-flight by the validator

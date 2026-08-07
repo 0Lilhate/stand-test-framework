@@ -1,0 +1,13 @@
+// UI gate fixtures: every rule this file violates is a rule the UI half of S020 is about.
+// Transcribed into GuardrailScannerParityTest.EXPECTED — this header is the count that fixture records.
+class OrphanedWaitUi {
+    private static final UiLocator STATUS = UiLocator.testId("application-status");
+    void t() {
+        page.waitForTimeout(2000);                    // U6: driver wait is a Thread.sleep
+        String tableView = "//*[@data-id='row']";      // U7: XPath cannot exist
+        UiStep.open("portal", "/applications/${tenantId}"); // U9: path placeholder unresolvable
+        UiStep.expect("portal", STATUS).assertValue("${expected}").build(); // U9: assertion value placeholder
+        UiStep.login("portal").build();               // U5: no role
+        UiStep.expectEventually("portal", STATUS).assertVisible().build(); // U17: no bounded within
+    }
+}
