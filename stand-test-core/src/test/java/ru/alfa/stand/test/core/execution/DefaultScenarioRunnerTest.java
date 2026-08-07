@@ -29,6 +29,7 @@ import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
 import ru.alfa.stand.test.core.event.Attachment;
+import ru.alfa.stand.test.core.event.FailureAttachments;
 import ru.alfa.stand.test.core.event.NoOpReportingEventPublisher;
 import ru.alfa.stand.test.core.event.ReportingEvent;
 import ru.alfa.stand.test.core.event.ReportingEventPublisher;
@@ -720,6 +721,168 @@ class DefaultScenarioRunnerTest {
             });
         } finally {
             runnerLogger.detachAppender(appender);
+        }
+    }
+
+    // FailureAttachments — the opt-in marker a thrown failure uses to bring its evidence into the report
+    // (UITG-T006). Core had no failure implementing it at all, so both the marker's default method and the
+    // runner's two branches that read it were unexercised here; the UI adapter covered them at its own end.
+
+    @Test
+    @DisplayName("a failure implementing only failureAttachments() carries its evidence and, by the default, adds not one diagnostic key")
+    void run_failureCarriesAttachmentsOnly_defaultDiagnosticsAddNothing() {
+        RecordingReportingEventPublisher recording = new RecordingReportingEventPublisher();
+        DefaultScenarioRunner runner = new DefaultScenarioRunner(
+                List.of(new FakeStepExecutor("fake.evidence", (step, context) -> {
+                    throw new OnlyAttachmentsFailure("element never appeared",
+                            List.of(Attachment.of("screenshot-note", "text/plain", "the screen at the moment of failure")));
+                })),
+                new DefaultScenarioValidator(),
+                iftRegistry(),
+                recording);
+
+        assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.evidence"))))
+                .isInstanceOf(StandTestAssertionError.class)
+                .hasMessageContaining("element never appeared");
+
+        assertThat(recording.events()).anySatisfy(event -> assertThat(event).isInstanceOfSatisfying(StepEvent.class, e -> {
+            assertThat(e.phase()).isEqualTo(StepPhase.FINISHED);
+            assertThat(e.status()).isEqualTo(StepStatus.FAILED);
+            assertThat(e.attachments()).extracting(Attachment::name).containsExactly("screenshot-note");
+            // This is the promise the default body makes and nothing pinned: an adopter that only carries
+            // attachments gains nothing it did not ask for. Exactly the one key the runner builds itself.
+            assertThat(e.diagnostics()).containsOnlyKeys("exception.class");
+        }));
+    }
+
+    @Test
+    @DisplayName("diagnostics an opted-in failure supplies are merged into the runner's own, and its map is never mutated")
+    void run_failureDiagnostics_areMergedIntoTheStepEvent() {
+        Map<String, Object> supplied = Map.of("ui.masked.zones", 2);
+        RecordingReportingEventPublisher recording = new RecordingReportingEventPublisher();
+        DefaultScenarioRunner runner = new DefaultScenarioRunner(
+                List.of(new FakeStepExecutor("fake.evidence", (step, context) -> {
+                    throw new SuppliedDiagnosticsFailure("element never appeared", supplied);
+                })),
+                new DefaultScenarioValidator(),
+                iftRegistry(),
+                recording);
+
+        assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.evidence"))))
+                .isInstanceOf(StandTestAssertionError.class);
+
+        assertThat(recording.events()).anySatisfy(event -> assertThat(event).isInstanceOfSatisfying(StepEvent.class, e -> {
+            assertThat(e.phase()).isEqualTo(StepPhase.FINISHED);
+            assertThat(e.diagnostics()).containsEntry("exception.class", SuppliedDiagnosticsFailure.class.getName());
+            assertThat(e.diagnostics()).containsEntry("ui.masked.zones", 2);
+        }));
+        // An immutable map is the natural thing to return (Map.of is what the marker's own default returns),
+        // so the runner must merge into its own map rather than add to the caller's.
+        assertThat(supplied).containsOnlyKeys("ui.masked.zones");
+    }
+
+    @Test
+    @DisplayName("a marker implementation that returns null never replaces the step's real failure with a failure of the reporting branch")
+    void run_failureEvidenceIsNull_doesNotReplaceTheStepFailure() {
+        RecordingReportingEventPublisher recording = new RecordingReportingEventPublisher();
+        DefaultScenarioRunner runner = new DefaultScenarioRunner(
+                List.of(new FakeStepExecutor("fake.evidence", (step, context) -> {
+                    throw new NullEvidenceFailure("element never appeared");
+                })),
+                new DefaultScenarioValidator(),
+                iftRegistry(),
+                recording);
+
+        Logger runnerLogger = (Logger) LoggerFactory.getLogger(DefaultScenarioRunner.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        runnerLogger.addAppender(appender);
+        try {
+            // The contract of the marker says "empty, never null", but an implementation lives in another
+            // team's module. Breaking it must cost that team its evidence — not the run its real reason for
+            // failing. Before UITG-T006 this threw NullPointerException out of the reporting branch and the
+            // assertion the test was actually about never reached the report at all.
+            assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.evidence"))))
+                    .isInstanceOf(StandTestAssertionError.class)
+                    .hasMessageContaining("element never appeared")
+                    .hasRootCauseInstanceOf(NullEvidenceFailure.class);
+
+            assertThat(recording.events()).anySatisfy(event -> assertThat(event).isInstanceOfSatisfying(StepEvent.class, e -> {
+                assertThat(e.phase()).isEqualTo(StepPhase.FINISHED);
+                assertThat(e.status()).isEqualTo(StepStatus.FAILED);
+                assertThat(e.diagnostics()).containsOnlyKeys("exception.class");
+                assertThat(e.attachments()).isEmpty();
+            }));
+            // Silently dropping the evidence would leave the adopter with no way to learn it broke the
+            // contract, so both halves say so and both name the offending class.
+            assertThat(appender.list).anySatisfy(event -> {
+                assertThat(event.getLevel()).isEqualTo(Level.WARN);
+                assertThat(event.getFormattedMessage())
+                        .contains(NullEvidenceFailure.class.getName())
+                        .contains("failureDiagnostics()");
+            });
+            assertThat(appender.list).anySatisfy(event -> assertThat(event.getFormattedMessage()).contains("failureAttachments()"));
+        } finally {
+            runnerLogger.detachAppender(appender);
+        }
+    }
+
+    /**
+     * The smallest implementation the marker allows: {@code failureAttachments()} and nothing else.
+     * Overriding {@code failureDiagnostics()} here "for symmetry" would route around the default body and
+     * make the test above vacuous — which is precisely the hole UITG-T006 was filed for.
+     */
+    private static final class OnlyAttachmentsFailure extends StandTestAssertionError implements FailureAttachments {
+
+        private final List<Attachment> attachments;
+
+        private OnlyAttachmentsFailure(String message, List<Attachment> attachments) {
+            super(message);
+            this.attachments = List.copyOf(attachments);
+        }
+
+        @Override
+        public List<Attachment> failureAttachments() {
+            return this.attachments;
+        }
+    }
+
+    /** A failure that has something of its own to say about how it failed. */
+    private static final class SuppliedDiagnosticsFailure extends StandTestAssertionError implements FailureAttachments {
+
+        private final Map<String, Object> diagnostics;
+
+        private SuppliedDiagnosticsFailure(String message, Map<String, Object> diagnostics) {
+            super(message);
+            this.diagnostics = Map.copyOf(diagnostics);
+        }
+
+        @Override
+        public List<Attachment> failureAttachments() {
+            return List.of();
+        }
+
+        @Override
+        public Map<String, Object> failureDiagnostics() {
+            return this.diagnostics;
+        }
+    }
+
+    /** A misbehaving adopter: the marker says "empty, never null", and this one returns null from both. */
+    private static final class NullEvidenceFailure extends StandTestAssertionError implements FailureAttachments {
+
+        private NullEvidenceFailure(String message) {
+            super(message);
+        }
+
+        @Override
+        public List<Attachment> failureAttachments() {
+            return null;
+        }
+
+        @Override
+        public Map<String, Object> failureDiagnostics() {
+            return null;
         }
     }
 }

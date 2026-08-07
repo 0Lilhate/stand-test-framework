@@ -444,7 +444,12 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
         if (cause instanceof FailureAttachments withEvidence) {
             // A failing step can add its own picture of what happened (masked zones, element state) without
             // reaching for the runner; the runner is transport-agnostic and must not invent a vocabulary.
-            diagnostics.putAll(withEvidence.failureDiagnostics());
+            Map<String, Object> supplied = withEvidence.failureDiagnostics();
+            if (supplied == null) {
+                warnNullEvidence(cause, "failureDiagnostics()");
+            } else {
+                diagnostics.putAll(supplied);
+            }
         }
         List<Attachment> attachments = failureAttachments(cause);
         StepResult failed = new StepResult(step.id(), step.type(), status, start, clock.instant(), message, diagnostics, attachments);
@@ -462,9 +467,32 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
      */
     private static List<Attachment> failureAttachments(Throwable cause) {
         if (cause instanceof FailureAttachments withEvidence) {
-            return withEvidence.failureAttachments();
+            List<Attachment> supplied = withEvidence.failureAttachments();
+            if (supplied == null) {
+                warnNullEvidence(cause, "failureAttachments()");
+                return List.of();
+            }
+            return supplied;
         }
         return List.of();
+    }
+
+    /**
+     * Reports an implementation of {@link FailureAttachments} that broke the marker's "empty, never null"
+     * contract, and keeps going.
+     *
+     * <p>This is deliberately not an exception. The marker is read while the runner is recording a step
+     * that ALREADY failed, so throwing here would replace the run's real reason for failing — the assertion
+     * the test was about — with a failure of the reporting branch. The same rule the artefact lane follows
+     * everywhere (UITG-S013: a screenshot that cannot be taken is a WARN, never a substituted failure): a
+     * misbehaving adopter loses its evidence, never the run its diagnosis.
+     *
+     * @param cause the failure that implements the marker
+     * @param method the marker method that returned null
+     */
+    private static void warnNullEvidence(Throwable cause, String method) {
+        LOG.warn("{} returned null from {}: the contract of FailureAttachments is 'empty, never null'. "
+                + "The evidence is dropped and the step's own failure is kept.", cause.getClass().getName(), method);
     }
 
     private StepExecutor resolveExecutor(ScenarioStep step) {

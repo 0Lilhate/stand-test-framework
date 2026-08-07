@@ -21,6 +21,15 @@ import java.util.Map;
  * but the marker and the {@link Attachment} value-type that any adapter already understands crosses this
  * boundary. An executor that does not implement it loses nothing — an empty attachment list is the
  * pre-existing behaviour.
+ *
+ * <h2>Empty, never null</h2>
+ *
+ * <p>Both methods must return an empty collection rather than null. An implementation that returns null
+ * anyway does not fail the run: the runner reads this marker while recording a step that ALREADY failed,
+ * so throwing there would replace the run's real reason for failing with a failure of the reporting
+ * branch. The runner therefore logs a WARN naming the offending class and drops that piece of evidence —
+ * a misbehaving adopter loses its screenshot, never the run its diagnosis. Do not rely on that
+ * tolerance: it exists so a broken contract degrades honestly, not as a second spelling of "empty".
  */
 public interface FailureAttachments {
 

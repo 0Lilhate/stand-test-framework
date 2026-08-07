@@ -2971,6 +2971,96 @@ tasks:
     out_of_scope: ["инжекция DOM-масок (S017 уже делает закрашивание через setMask)"]
     implementation_notes: "Очистка перед применением (в начале captureScreenshot) либо после (в finally); не трогать живой DOM — маски только через setMask."
 
+  - id: UITG-T006
+    type: TASK
+    title: "Покрыть default-ветку FailureAttachments.failureDiagnostics и её путь через раннер"
+    description: >-
+      У маркера core/event/FailureAttachments метод failureDiagnostics() имеет default-тело (Map.of()), которое
+      в репозитории не исполняется НИ РАЗУ: обе реализации (UiAssertionFailure, UiInfrastructureFailure) его
+      переопределяют, двойники core — тоже. По JaCoCo в stand-test-core у класса METHOD missed 1, INSTRUCTION
+      missed 2, covered 0. Дыра не в проценте: default-ветка — это ровно тот способ подключения, к которому
+      приглашает javadoc маркера («реализация, которая несёт только вложения, не получает ничего, о чём не
+      просила»), и он не проверен ничем. Рядом с ним лежит незакреплённое поведение раннера:
+      DefaultScenarioRunner:447 делает diagnostics.putAll(withEvidence.failureDiagnostics()) — реализация,
+      вернувшая null, подменит НАСТОЯЩИЙ отказ шага падением ветки отчётности.
+    business_outcome: "Обещание маркера «подключение необязательно и бесплатно» становится проверенным, а не заявленным"
+    wave: 1
+    parent_id: UITG-F004
+    requirement_ids: [BR-21, D-2]
+    artifact_sources:
+      - "stand-test-core/src/main/java/ru/alfa/stand/test/core/event/FailureAttachments.java"
+      - "stand-test-core/src/main/java/ru/alfa/stand/test/core/execution/DefaultScenarioRunner.java:444-448"
+      - "замер JaCoCo сессии UITG-T001 (побочная находка за границей той карточки)"
+    affected_modules: [stand-test-core]
+    status: IN_REVIEW
+    status_reason: >-
+      ВЫПОЛНЕНА 2026-08-07. Разбор нашёл дыру ШИРЕ заявленной: непокрыт был не только default-метод маркера,
+      а ВЕСЬ его путь в stand-test-core — обе ветки чтения в DefaultScenarioRunner (строка 444 true-ветка,
+      447 putAll, 464 true-ветка, 465 return) тоже стояли нулями, то есть в core никогда не падал отказ,
+      реализующий маркер: его покрывал только stand-test-ui со своего конца. И дыра оказалась не только
+      покрытием: реализация, вернувшая null из failureDiagnostics(), роняла NullPointerException ВНУТРИ ветки
+      записи отказа и подменяла им настоящий отказ шага — воспроизведено тестом ДО правки, а не выведено
+      рассуждением (RED: 'Expecting StandTestAssertionError but was NullPointerException ... at
+      DefaultScenarioRunner.recordFailure(DefaultScenarioRunner.java:447)'). Сделано: три теста в
+      DefaultScenarioRunnerTest на трёх двойниках — реализующем ТОЛЬКО failureAttachments() (default-тело
+      исполняется по-настоящему), несущем свою диагностику (мерж в карту раннера, чужая Map.of не мутируется)
+      и нарушающем контракт возвратом null из обоих методов; в раннере — терпимость к null с WARN, называющим
+      класс-нарушитель и метод, по тому же правилу, что уже принято в лейне артефактов (S013: снятие скриншота
+      падает → WARN, отказ шага не подменяется). Терпимость распространена и на failureAttachments(): там она
+      фактически была, но держалась на null-коалесцировании внутри StepResult — скрытая опора, которая
+      молча исчезла бы при правке StepResult. Контракт «empty, never null» и цена его нарушения выписаны в
+      javadoc маркера, а не только в тесте (documentation_changes карточки). ПРОВЕРЕНО МУТАЦИЕЙ ТРИЖДЫ, каждая
+      роняет РОВНО один тест из 41: (1) default-тело возвращает непустую карту → падает тест default-ветки;
+      (2) вложения маркера не доходят до шага → он же; (3) снятие терпимости к null (состояние до задачи) →
+      падает тест про подмену отказа. Подтверждено: покрытие FailureAttachments в stand-test-core
+      INSTRUCTION/LINE/METHOD/CLASS 100% (было 0), путь маркера в DefaultScenarioRunner без пропущенных
+      инструкций; build 1570 тестов / 0 падений / 1 намеренный пропуск (было 1567 — прирост ровно на три
+      новых теста), checkstyle 0, JaCoCo ≥80%, browserTest 40/40 (прогнан, потому что правка лежит в core, от
+      которого зависит stand-test-ui). ОСТАЁТСЯ IN_REVIEW: DoD карточки закрыт, ревью человеком сессией не
+      заменяется. || Прежняя запись:
+      Заведена 2026-08-07 сессией UITG-T001 как побочная находка ЗА ГРАНИЦЕЙ её карточки: предмет T001 —
+      Attachment, а нулевое покрытие обнаружилось у соседнего FailureAttachments в том же пакете, и дописывать
+      его в чужую карточку значило бы размывать её область. Ничем не заблокирована: маркер в git с S013,
+      решений не требует, модуль один. Числа сняты замером, а не глазами: METHOD missed 1 / INSTRUCTION missed
+      2 / covered 0 у ru/alfa/stand/test/core/event/FailureAttachments в отчёте stand-test-core.
+    priority: P2
+    size: XS
+    uncertainty: LOW
+    owner_role: SDK developer
+    depends_on: [UITG-S013]
+    blocks: []
+    external_dependencies: []
+    adr_dependencies: []
+    risk_ids: [PR-01]
+    definition_of_ready: ["S013 в git — маркер и его чтение раннером существуют"]
+    acceptance_criteria:
+      - "Двойник, реализующий ТОЛЬКО failureAttachments(), проходит через DefaultScenarioRunner: вложения доходят до StepResult и StepEvent упавшего шага"
+      - "Диагностика такого упавшего шага равна построенной из причины — ни одного лишнего ключа от пустого default"
+      - "Покрытие FailureAttachments в stand-test-core: METHOD и INSTRUCTION 100%"
+    negative_scenarios:
+      - "реализация возвращает null из failureDiagnostics -> поведение названо явно и закреплено тестом; отказ шага НЕ подменяется падением ветки отчётности"
+      - "реализация возвращает неизменяемую карту -> раннер мержит её в свою, а не мутирует чужую"
+    test_requirements:
+      - "unit в stand-test-core (покрытие считается по модулю, где живёт класс, — тест в stand-test-ui дыру не закроет)"
+      - "двойник реализует ровно один метод интерфейса"
+      - "мутация: снятие default-тела либо ветки putAll роняет новый тест"
+    security_requirements: []
+    observability_requirements: ["диагностика упавшего шага остаётся ровно той, что построена из причины, когда реализация ничего не добавила"]
+    documentation_changes: ["javadoc FailureAttachments.failureDiagnostics — если контракт по null уточняется, он уточняется в тексте, а не только в тесте"]
+    definition_of_done:
+      - "покрытие FailureAttachments в stand-test-core 100% по методам и инструкциям (замер JaCoCo, а не впечатление)"
+      - "тест падал бы до изменения — проверено мутацией"
+    out_of_scope:
+      - "изменение сигнатуры маркера и перенос диагностики в другой канал"
+      - "покрытие реализаций UiAssertionFailure/UiInfrastructureFailure — они живут в stand-test-ui и считаются отдельно"
+      - "правка порядка ключей диагностики"
+    implementation_notes: >-
+      Ловушка, ради которой карточка и заведена: двойник обязан реализовать ТОЛЬКО failureAttachments().
+      Переопределив второй метод «для наглядности», тест снова обойдёт default и станет вакуумно-зелёным —
+      ровно тем, чем была прежняя дыра. Ответ по null стоит принять сознательно: сегодня раннер бросит NPE
+      из ветки отчётности и подменит им настоящий отказ шага; варианты — терпеть null как пустоту либо
+      оставить NPE, но назвать это в javadoc.
+
   - id: UITG-S021
     type: STORY
     title: "Детектор расхождения «локатор в тесте — локатор в отчёте разведки»"
