@@ -147,6 +147,25 @@ class PlaywrightUiDriverBrowserTest {
     }
 
     @Test
+    @DisplayName("a second extra header does not unset the first — the seam sets one header, Playwright replaces the set")
+    void extraHeadersAccumulate() {
+        // The seam is singular (setExtraHeader), the Playwright call underneath is not: setExtraHTTPHeaders
+        // REPLACES everything. Passing a single-entry map therefore dropped every header set before it —
+        // harmless while correlation was the only caller, and a trap armed for the second one.
+        this.driver.setExtraHeader("X-Correlation-Id", "corr-42");
+        this.driver.setExtraHeader("X-Scenario-Id", "scenario-7");
+        this.driver.navigate("/applications/new", TIMEOUT);
+        this.driver.click(UiLocator.testId("submit"), TIMEOUT);
+        waitForSubmission();
+
+        assertThat(this.application.submissions()).isNotEmpty();
+        assertThat(this.application.submissions().get(0))
+                .as("both headers must travel: the second call adds, it does not replace")
+                .containsEntry("x-correlation-id", "corr-42")
+                .containsEntry("x-scenario-id", "scenario-7");
+    }
+
+    @Test
     @DisplayName("a locator that matches several elements is refused by name, not by Playwright's strict-mode wording")
     void ambiguousLocatorIsRefusedWithAUsefulMessage() {
         this.driver.navigate("/applications/new", TIMEOUT);

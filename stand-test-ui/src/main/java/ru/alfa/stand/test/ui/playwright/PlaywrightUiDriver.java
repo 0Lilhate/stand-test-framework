@@ -15,7 +15,6 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -100,12 +99,12 @@ final class PlaywrightUiDriver implements UiDriver {
      * can see the page's console; surfaced through the driver-agnostic seam {@link UiDriver#consoleMessages}
      * so the executor and the failing step's report need to know nothing about Playwright.
      *
-     * <p>Deliberately a {@link CopyOnWriteArrayList}: the listeners ({@code page.onConsoleMessage} etc.) run
-     * on Playwright's event-dispatch path, which is not guaranteed to be the same thread as the run thread
-     * that reads the snapshot in a failing step's {@link UiDriver#consoleMessages()}. Copy-on-write makes a
-     * concurrent append and a concurrent {@code read} race-free, at the cost of one copy per append.
+     * <p>Bounded, and audibly so: a page that logs in a render loop would otherwise decide how much memory
+     * this run holds and how large an attachment a reviewer is handed. {@link BoundedObservationLog} keeps
+     * the newest entries — a failure is explained by what came just before it — and says in its own first
+     * line when it dropped anything.
      */
-    private final List<String> consoleMessages = new CopyOnWriteArrayList<>();
+    private final BoundedObservationLog consoleMessages = new BoundedObservationLog("console line");
 
     /**
      * The page's network requests observed since this run's page was opened, in the order their responses
@@ -116,11 +115,20 @@ final class PlaywrightUiDriver implements UiDriver {
      * so the executor and the failing step's report need to know nothing about Playwright.
      *
      * <p>Observation only — {@code page.onResponse} — never {@code route}, which is interception and stays
-     * out of scope (BR-33). Deliberately a {@link CopyOnWriteArrayList}, for the same reason as the console
-     * log above: the response listener runs on Playwright's event path, which is not guaranteed to be the
-     * run thread that reads the snapshot, and copy-on-write makes the concurrent append/read race-free.
+     * out of scope (BR-33). Bounded exactly like the console log above, and for the same reason: a page
+     * polling an endpoint every hundred milliseconds is an ordinary frontend, not a pathological one.
      */
-    private final List<String> networkRequests = new CopyOnWriteArrayList<>();
+    private final BoundedObservationLog networkRequests = new BoundedObservationLog("network exchange");
+
+    /**
+     * Every extra header this run has asked for, by name.
+     *
+     * <p>Playwright's {@code setExtraHTTPHeaders} REPLACES the whole set, while this driver's seam sets ONE
+     * header ({@link UiDriver#setExtraHeader}). Passing a single-entry map therefore made the second call
+     * silently drop the first header — harmless while correlation was the only caller, and a trap armed for
+     * the second. The union is kept here so the singular name means what it says.
+     */
+    private final Map<String, String> extraHeaders = new LinkedHashMap<>();
 
     PlaywrightUiDriver(Playwright playwright, Browser browser, BrowserContext context, ResolvedUiApplication application) {
         this.playwright = Objects.requireNonNull(playwright, "playwright must not be null");
@@ -146,7 +154,7 @@ final class PlaywrightUiDriver implements UiDriver {
         }
         // "type: text" is the same shape a developer reads in the browser's own console, and it costs the
         // reader nothing to scan; an empty text is still a message the page chose to log, so it is kept.
-        this.consoleMessages.add(message.type() + ": " + message.text());
+        this.consoleMessages.record(message.type() + ": " + message.text());
     }
 
     /**
@@ -173,7 +181,7 @@ final class PlaywrightUiDriver implements UiDriver {
         if (method == null) {
             method = "";
         }
-        this.networkRequests.add(method + " " + withoutQuery(request.url()) + " " + response.status());
+        this.networkRequests.record(method + " " + withoutQuery(request.url()) + " " + response.status());
     }
 
     /**
@@ -260,7 +268,12 @@ final class PlaywrightUiDriver implements UiDriver {
 
     @Override
     public void setExtraHeader(String name, String value) {
-        this.context.setExtraHTTPHeaders(Map.of(name, value));
+        // The union, not the one header: Playwright replaces the entire set on every call, so sending only
+        // the newest would unset every header set before it.
+        synchronized (this.extraHeaders) {
+            this.extraHeaders.put(name, value);
+            this.context.setExtraHTTPHeaders(Map.copyOf(this.extraHeaders));
+        }
     }
 
     @Override
@@ -383,7 +396,7 @@ final class PlaywrightUiDriver implements UiDriver {
         // observe the driver's growing buffer mutating (one run, one thread — but the copy keeps the
         // contract honest and the artefact stable).
         dispatchPendingEvents();
-        return List.copyOf(this.consoleMessages);
+        return this.consoleMessages.snapshot();
     }
 
     @Override
@@ -392,7 +405,7 @@ final class PlaywrightUiDriver implements UiDriver {
         // failing step's report and must stay stable while the listener keeps appending (one run, one
         // thread — but the copy keeps the "never return null, never leak a mutating buffer" contract).
         dispatchPendingEvents();
-        return List.copyOf(this.networkRequests);
+        return this.networkRequests.snapshot();
     }
 
     /**

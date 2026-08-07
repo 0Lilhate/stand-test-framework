@@ -43,8 +43,13 @@ public final class PlaywrightDriverFactory implements UiDriverFactory {
         Objects.requireNonNull(application, "application must not be null");
         Objects.requireNonNull(settings, "settings must not be null");
         Playwright playwright = createPlaywright();
+        // Held outside the try so the failure path can close what was already opened. Closing Playwright
+        // does bring the browser down with it, but only as a side effect of tearing the driver process
+        // down; releasing in reverse order of acquisition is what makes that a guarantee rather than an
+        // observation about the current client, and a leaked Chromium outlives the usefulness of a CI agent.
+        Browser browser = null;
         try {
-            Browser browser = browserType(playwright, settings.browser())
+            browser = browserType(playwright, settings.browser())
                     .launch(new BrowserType.LaunchOptions().setHeadless(settings.headless()));
             BrowserContext context = browser.newContext(contextOptions(application.viewport(), storageState));
             context.setDefaultTimeout((double) settings.actionTimeout().toMillis());
@@ -62,11 +67,28 @@ public final class PlaywrightDriverFactory implements UiDriverFactory {
             }
             return new PlaywrightUiDriver(playwright, browser, context, application);
         } catch (RuntimeException failure) {
+            closeQuietly(browser);
             playwright.close();
             if (failure instanceof StandTestException classified) {
                 throw classified;
             }
             throw new StandTestException("Could not start the '" + settings.browser() + "' browser for application '" + application.alias() + "': " + failure.getMessage(), failure);
+        }
+    }
+
+    /**
+     * Closes a browser that was launched before the failure, swallowing whatever closing it throws: the
+     * caller is already on its way out with a real cause, and a secondary failure here would replace the
+     * reason the run stopped with the reason the cleanup did.
+     */
+    private static void closeQuietly(Browser browser) {
+        if (browser == null) {
+            return;
+        }
+        try {
+            browser.close();
+        } catch (RuntimeException ignored) {
+            // Nothing to do and nothing worth saying: Playwright is closed next, which ends the process.
         }
     }
 
