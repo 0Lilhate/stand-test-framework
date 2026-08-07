@@ -39,8 +39,11 @@ import java.util.Objects;
  * against the run's artefacts directory before opening it — a reporting channel that reads an arbitrary
  * path is a file-disclosure channel.
  *
- * @param name a short, non-blank human-readable name (for example {@code request} or {@code screenshot})
- * @param mediaType the non-blank media type describing the body (for example {@code application/json})
+ * @param name a short, non-blank human-readable name (for example {@code request} or {@code screenshot});
+ *     null and blank are refused alike, as {@link IllegalArgumentException} rather than
+ *     {@link NullPointerException} — absent and empty are one contract here, not two
+ * @param mediaType the non-blank media type describing the body (for example {@code application/json});
+ *     null and blank are refused alike, as {@link IllegalArgumentException}
  * @param content the textual content, or null when this attachment carries a file
  * @param file the path to the binary body, or null when this attachment carries text
  */

@@ -37,6 +37,30 @@ class AttachmentTest {
                 .isInstanceOf(NullPointerException.class);
     }
 
+    @Test
+    @DisplayName("a null name and a null media type are rejected as IllegalArgumentException, not NullPointerException")
+    void nullNameAndMediaType_areRejectedWithTheSameContract() {
+        // The null half of each guard is a branch of its own: `name.isBlank()` on a null name would
+        // throw NullPointerException, so the `== null ||` prefix is what keeps the contract of this
+        // type one exception ("blank" covers absent) rather than two. Dropping either prefix turns
+        // these assertions red — which is the whole reason they exist.
+        assertThatThrownBy(() -> new Attachment(null, "text/plain", "x"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("attachment name must not be blank");
+        assertThatThrownBy(() -> new Attachment("body", null, "x"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("attachment mediaType must not be blank");
+
+        // The same two branches through the canonical four-argument constructor and through ofFile,
+        // so no entry point into the record reaches the guards with a different outcome.
+        assertThatThrownBy(() -> new Attachment(null, "image/png", null, Path.of("shot.png")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("attachment name must not be blank");
+        assertThatThrownBy(() -> Attachment.ofFile("shot", null, Path.of("shot.png")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("attachment mediaType must not be blank");
+    }
+
     // ADR-UI-005 (variant A): the record grew a `Path file` component. The four tests below pin the
     // invariant and the backward compatibility the decision promised.
 
