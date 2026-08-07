@@ -5,6 +5,7 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.function.UnaryOperator;
+import ru.alfa.stand.test.core.event.RunArtifacts;
 
 /**
  * How the browser is run: headed or headless, which engine, the bounds on a single action, and where the
@@ -54,8 +55,15 @@ public record UiRunSettings(
     /** System property bounding one navigation. */
     public static final String NAVIGATION_TIMEOUT_PROPERTY = "stand.test.ui.navigation.timeout.millis";
 
-    /** System property selecting the artefacts directory. */
-    public static final String ARTIFACTS_DIRECTORY_PROPERTY = "stand.test.ui.artifacts.dir";
+    /**
+     * System property selecting the artefacts directory.
+     *
+     * <p>Delegated to {@link RunArtifacts#DIRECTORY_PROPERTY} rather than spelled again here: the
+     * reporting sink has to resolve the same directory to prove a file attachment belongs to the run,
+     * and it cannot depend on this module. One constant, two readers — the drift this closes was real
+     * (see {@code RunArtifacts}).
+     */
+    public static final String ARTIFACTS_DIRECTORY_PROPERTY = RunArtifacts.DIRECTORY_PROPERTY;
 
     /** System property selecting how long a run's failure artefacts are kept (in days). */
     public static final String ARTIFACTS_RETENTION_DAYS_PROPERTY = "stand.test.ui.artifacts.retention.days";
@@ -64,7 +72,7 @@ public record UiRunSettings(
     public static final String DEFAULT_BROWSER = "chromium";
 
     /** The default artefacts directory, relative to the working directory of the build. */
-    public static final String DEFAULT_ARTIFACTS_DIRECTORY = "build/stand-test-ui";
+    public static final String DEFAULT_ARTIFACTS_DIRECTORY = RunArtifacts.DEFAULT_DIRECTORY;
 
     /** The default retention of failure artefacts: no longer than the CI report retention (SEC-09). */
     public static final Duration DEFAULT_ARTIFACT_RETENTION = Duration.ofDays(7);
@@ -130,14 +138,16 @@ public record UiRunSettings(
         Objects.requireNonNull(source, "source must not be null");
         String headless = source.apply(HEADLESS_PROPERTY);
         String browser = source.apply(BROWSER_PROPERTY);
-        String artifacts = source.apply(ARTIFACTS_DIRECTORY_PROPERTY);
         String retentionDays = source.apply(ARTIFACTS_RETENTION_DAYS_PROPERTY);
         return new UiRunSettings(
                 headless == null || Boolean.parseBoolean(headless),
                 (browser == null || browser.isBlank()) ? DEFAULT_BROWSER : browser.trim(),
                 Duration.ofMillis(positiveMillis(source.apply(ACTION_TIMEOUT_PROPERTY), ACTION_TIMEOUT_PROPERTY, UiStepParameters.DEFAULT_ACTION_TIMEOUT_MILLIS)),
                 Duration.ofMillis(positiveMillis(source.apply(NAVIGATION_TIMEOUT_PROPERTY), NAVIGATION_TIMEOUT_PROPERTY, UiStepParameters.DEFAULT_TIMEOUT_MILLIS)),
-                Paths.get((artifacts == null || artifacts.isBlank()) ? DEFAULT_ARTIFACTS_DIRECTORY : artifacts.trim()),
+                // Resolved by core, not here: the reporting sink resolves the same directory from the same
+                // source, and two spellings of "where do this run's artefacts live" is how the picture got
+                // lost the first time.
+                RunArtifacts.directory(source),
                 Duration.ofDays(positiveDays(retentionDays, ARTIFACTS_RETENTION_DAYS_PROPERTY, DEFAULT_ARTIFACT_RETENTION.toDays())));
     }
 

@@ -47,6 +47,20 @@ one of potentially several consumers of that contract. Keeping Allure out of cor
 does not use Allure (or uses a different reporter) never pays for it, and core stays a JDK-only
 dependency-graph sink.
 
+## Что потребитель обязан добавить рядом
+
+```kotlin
+testImplementation("ru.alfa.stand.test:stand-test-allure")
+testImplementation("io.qameta.allure:allure-junit5:2.29.1")   // ОБЯЗАТЕЛЬНО, см. ниже
+```
+
+Этот модуль тянет **`allure-java-commons`** — модель и жизненный цикл, — но **не** интеграцию с JUnit 5.
+Без `allure-junit5` на classpath потребителя жизненному циклу некуда складывать шаги: тест-кейс никто не
+открывает, `allure-results` остаётся пустым или лишённым шагов, а сообщения об ошибке при этом нет —
+отчёт просто ничего не показывает. Это уже стоило отладочной сессии на пилоте и подтверждено ручным
+прогоном `UITG-F003`. Отдельно проверьте, что расширение действительно включено: либо
+`junit.jupiter.extensions.autodetection.enabled=true`, либо явный `@ExtendWith(AllureJunit5.class)`.
+
 ## How the adapter connects to reporting events
 
 The runner publishes lifecycle events to whichever `ReportingEventPublisher` it was built with (the
@@ -124,6 +138,23 @@ Attachment.ofFile("screenshot", "image/png", pathToPng);    // файл — но
    это WARN и пропущенное вложение, никогда не исключение: отчётность side-channel и не меняет исход
    теста. Пропавший файл ведёт себя так же — прогон идёт дальше без картинки.
 
+#### Каталог артефактов (`UITG-F003`)
+
+Каталог, относительно которого проверяется путь, определён **в ядре** —
+`ru.alfa.stand.test.core.event.RunArtifacts`: имя системного свойства `stand.test.ui.artifacts.dir`,
+умолчание `build/stand-test-ui` и чистая функция разрешения. `AllureReportingEventPublisher` разрешает
+его тем же вызовом, что и производящий адаптер (`UiRunSettings`), и передаёт в
+`AllureAttachmentPublisher`; перегрузка `AllureReportingEventPublisher(lifecycle, artifactsRoot)`
+остаётся для потребителя, который держит артефакты в другом месте.
+
+Одно определение на двоих — не украшение, а починка. Каталог читают двое, не видящие друг друга:
+производитель в адаптере и сток здесь (ребра между ними нет и быть не должно). Пока каждый читал своё,
+сток строился **без** каталога и fail-closed отвергал каждое файловое вложение — молча, WARN'ом, ровно
+как обещает пункт 3 выше. Дефект нашёлся только ручным прогоном
+([отчёт `34`](../docs/ui-test-generation/planning/34-allure-manual-run-report.md)); пинится тестом
+`UiRunSettingsTest.artefactsDirectoryIsCoresSingleDefinition` — отдельное написание свойства в
+UI-модуле его роняет.
+
 Расширение для файла выводит `AttachmentType.extensionForBinaryMediaType`, а не текстовый маппер: у них
 **противоположный** fallback. Неизвестный media type у текста разумнее всего `txt`, у файла — `bin`;
 перепутать их значит предложить скриншот как текст. Известны `png`, `jpg`, `webm`, `zip`, `json`, `xml`
@@ -169,9 +200,10 @@ failed step green. The runner additionally swallows publisher exceptions — two
 - Rich diagnostics/attachments on **thrown** failures depend on adapters populating them on the failure
   path (a later phase); today the runner attaches the exception class on that path, and diagnostics/
   attachments flow fully on the success and returned-`TIMEOUT` paths.
-- Каталог артефактов прогона передаётся публикатору снаружи. Проводка его из
-  `UiRunSettings.artifactsDirectory()` — задача `UITG-T003`, и у неё пока нет вызывающего: артефакты
-  начинает снимать `UITG-S013`. До тех пор действует fail-closed: файловые вложения отвергаются.
+- ~~Каталог артефактов прогона передаётся публикатору снаружи, и у проводки пока нет вызывающего.~~
+  **Исправлено `UITG-F003` 2026-08-07 (см. ниже «Каталог артефактов»).** Пункт продержался дольше, чем
+  был верен, и стоил ровно того, о чём предупреждал: пока проводки не было, **каждое** файловое вложение
+  молча отвергалось у потребителя, и картинка не доходила до отчёта ни разу.
 - Само **снятие** артефактов (скриншот, консоль, сеть, трейс) в этот срез не входит — `UITG-S013`…`S016`.
   Здесь только канал.
 ```

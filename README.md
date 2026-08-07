@@ -49,6 +49,9 @@ testImplementation("ru.alfa.stand.test:stand-test-junit")
 testImplementation("ru.alfa.stand.test:stand-test-rest")    // + -kafka / -db / -grpc по необходимости
 testImplementation("ru.alfa.stand.test:stand-test-config")  // файловый реестр окружений
 testImplementation("ru.alfa.stand.test:stand-test-allure")  // опционально: отчётность в Allure
+// если берёте stand-test-allure — добавьте и интеграцию с JUnit 5: SDK тянет только allure-java-commons,
+// и без неё жизненному циклу некуда складывать шаги (отчёт выйдет пустым, без единого сообщения):
+testImplementation("io.qameta.allure:allure-junit5:2.29.1")
 ```
 
 **2. Опишите стенд** в `src/test/resources/stand-test-environments.yml`. Каждый `*-ref` — это **имя

@@ -3,10 +3,12 @@ package ru.alfa.stand.test.ui;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import ru.alfa.stand.test.core.event.RunArtifacts;
 
 class UiRunSettingsTest {
 
@@ -71,6 +73,22 @@ class UiRunSettingsTest {
                 Map.of(UiRunSettings.ARTIFACTS_RETENTION_DAYS_PROPERTY, "14")::get);
 
         assertThat(settings.artifactRetention()).isEqualTo(Duration.ofDays(14));
+    }
+
+    @Test
+    @DisplayName("the artefacts directory the producer writes to is the one core defines — the sink resolves the same value and cannot drift from it (UITG-F003)")
+    void artefactsDirectoryIsCoresSingleDefinition() {
+        // The reporting sink refuses any file it cannot prove belongs to the run, and it resolves the
+        // directory from RunArtifacts because it must not depend on this module. If this module ever
+        // spells the property or the default itself again, the picture is dropped and nothing else fails.
+        assertThat(UiRunSettings.ARTIFACTS_DIRECTORY_PROPERTY).isEqualTo(RunArtifacts.DIRECTORY_PROPERTY);
+        assertThat(UiRunSettings.DEFAULT_ARTIFACTS_DIRECTORY).isEqualTo(RunArtifacts.DEFAULT_DIRECTORY);
+
+        assertThat(UiRunSettings.fromProperties(property -> null).artifactsDirectory())
+                .isEqualTo(RunArtifacts.directory(property -> null));
+        assertThat(UiRunSettings.fromProperties(Map.of(UiRunSettings.ARTIFACTS_DIRECTORY_PROPERTY, " /tmp/artefacts ")::get).artifactsDirectory())
+                .isEqualTo(RunArtifacts.directory(Map.of(RunArtifacts.DIRECTORY_PROPERTY, " /tmp/artefacts ")::get))
+                .isEqualTo(Paths.get("/tmp/artefacts"));
     }
 
     @Test

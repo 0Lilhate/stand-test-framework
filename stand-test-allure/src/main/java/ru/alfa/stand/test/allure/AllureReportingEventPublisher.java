@@ -1,5 +1,6 @@
 package ru.alfa.stand.test.allure;
 
+import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Objects;
@@ -13,6 +14,7 @@ import ru.alfa.stand.test.allure.mapping.AllureStepMapper;
 import ru.alfa.stand.test.allure.masking.SecretMasker;
 import ru.alfa.stand.test.core.event.Attachment;
 import ru.alfa.stand.test.core.event.ReportingEventPublisher;
+import ru.alfa.stand.test.core.event.RunArtifacts;
 import ru.alfa.stand.test.core.event.ScenarioEvent;
 import ru.alfa.stand.test.core.event.ScenarioPhase;
 import ru.alfa.stand.test.core.event.StepEvent;
@@ -47,23 +49,43 @@ public final class AllureReportingEventPublisher implements ReportingEventPublis
     private final ThreadLocal<Deque<String>> stepUuids = ThreadLocal.withInitial(ArrayDeque::new);
 
     /**
-     * Creates a publisher writing to the global Allure lifecycle.
+     * Creates a publisher writing to the global Allure lifecycle. This is the constructor the
+     * {@code ServiceLoader} calls, so it is the wiring every consumer actually gets.
      */
     public AllureReportingEventPublisher() {
         this(new DefaultAllureLifecycleFacade());
     }
 
     /**
-     * Creates a publisher writing through the given lifecycle facade (the seam used by tests).
+     * Creates a publisher writing through the given lifecycle facade (the seam used by tests), resolving
+     * the run's artefacts directory exactly as the no-argument constructor does.
      *
      * @param lifecycle the Allure lifecycle facade
      */
     public AllureReportingEventPublisher(AllureLifecycleFacade lifecycle) {
+        this(lifecycle, RunArtifacts.directory(System::getProperty));
+    }
+
+    /**
+     * Creates a publisher reading file attachments from an explicitly given artefacts directory.
+     *
+     * <p>The directory is what makes the file channel usable at all: the attachment publisher refuses
+     * every file it cannot prove belongs to the run, so a publisher built without one silently drops every
+     * screenshot. That is not a hypothetical — it is what the SPI-constructed publisher did until
+     * UITG-F003's manual run, because the only production constructor passed no directory and no test
+     * covered the composition. Both other constructors now resolve it through {@link RunArtifacts}, the
+     * single definition the producing adapter reads too; this one exists for a consumer that keeps its
+     * artefacts somewhere else, and for tests that want a temporary directory.
+     *
+     * @param lifecycle the Allure lifecycle facade
+     * @param artifactsRoot the run's artefacts directory; null refuses every file attachment
+     */
+    public AllureReportingEventPublisher(AllureLifecycleFacade lifecycle, Path artifactsRoot) {
         this.lifecycle = Objects.requireNonNull(lifecycle, "lifecycle must not be null");
         SecretMasker secretMasker = new SecretMasker();
         this.stepMapper = new AllureStepMapper();
         this.metadataMapper = new AllureMetadataMapper(secretMasker);
-        this.attachmentPublisher = new AllureAttachmentPublisher(lifecycle, secretMasker);
+        this.attachmentPublisher = new AllureAttachmentPublisher(lifecycle, secretMasker, artifactsRoot);
     }
 
     @Override
