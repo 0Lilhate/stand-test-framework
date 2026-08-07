@@ -50,7 +50,7 @@ public final class EnvironmentUiApplicationResolver implements UiApplicationReso
                 .orElseThrow(() -> new StandTestException("Environment '" + environment + "' is not whitelisted"));
         UiApplicationDefinition application = definition.uiApplication(applicationAlias)
                 .orElseThrow(() -> new StandTestException("UI application '" + applicationAlias + "' is not whitelisted in environment '" + environment + "'"));
-        return new ResolvedUiApplication(applicationAlias, resolveBaseUrl(application), viewport(application), application.auth());
+        return new ResolvedUiApplication(applicationAlias, resolveBaseUrl(application), viewport(application), application.auth(), application.trace());
     }
 
     private String resolveBaseUrl(UiApplicationDefinition application) {

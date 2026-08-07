@@ -6,6 +6,7 @@ import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.UiApplicationDefinition;
+import ru.alfa.stand.test.core.environment.UiTraceMode;
 import ru.alfa.stand.test.core.event.NoOpReportingEventPublisher;
 import ru.alfa.stand.test.core.execution.ResourceScope;
 import ru.alfa.stand.test.core.execution.StepExecutionContext;
@@ -53,6 +54,11 @@ final class UiTestSupport {
 
     static ResolvedUiApplication resolved() {
         return new ResolvedUiApplication(APPLICATION, "http://localhost:8080", null);
+    }
+
+    /** A resolved application with an explicit trace mode, for the UITG-S016 failure-artefact tests. */
+    static ResolvedUiApplication resolved(UiTraceMode trace) {
+        return new ResolvedUiApplication(APPLICATION, "http://localhost:8080", null, null, trace);
     }
 
     static UiRunSettings settings() {

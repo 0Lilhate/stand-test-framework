@@ -95,6 +95,25 @@ class UiLoginStepExecutorTest {
     }
 
     @Test
+    @DisplayName("a failing ui.login masks the form's credential fields BEFORE the screenshot, so the typed password never reaches the artefact (UITG-S017)")
+    void failingLoginMasksTheCredentialFieldsBeforeCapture() {
+        // A driver that never shows the signed-in marker: the form is filled, the credentials typed, then
+        // the sign-in waits and fails. The screenshot of exactly that moment must not expose the password.
+        FakeUiDriverFactory factory = new FakeUiDriverFactory();
+        assertThatThrownBy(() -> execute(factory, new ResourceScope(), UiAuthScheme.FORM,
+                UiStep.login(UiTestSupport.APPLICATION).id("login").role("client").within(Duration.ofMillis(300)).build()))
+                .isInstanceOf(StandTestAssertionError.class);
+
+        FakeUiDriver driver = factory.only();
+        // The form's username and password fields are sensitive zones of the failing login step, so the
+        // capture must mask both before taking the screenshot (SEC-05, acceptance "поле пароля закрашенным").
+        assertThat(driver.maskCalls()).as("the login step's credential fields must be masked before capture").isNotEmpty();
+        assertThat(driver.maskCalls().get(0)).contains(UiLoginTestSupport.USERNAME.asSensitive(), UiLoginTestSupport.PASSWORD.asSensitive());
+        assertThat(driver.calls()).containsSubsequence("maskSensitive:2", "captureScreenshot");
+        assertThat(driver.screenshotFile()).as("the artefact is still produced after the fields were masked").isNotNull();
+    }
+
+    @Test
     @DisplayName("a STORAGE_STATE application with no saved session signs in by form and saves the session for the next run")
     void storageStateBootstrapsItselfThroughTheForm() {
         FakeUiDriverFactory factory = signingInFactory();

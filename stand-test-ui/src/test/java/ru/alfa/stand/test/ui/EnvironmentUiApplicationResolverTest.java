@@ -8,6 +8,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import ru.alfa.stand.test.core.environment.SecretReferences;
 import ru.alfa.stand.test.core.environment.UiApplicationDefinition;
+import ru.alfa.stand.test.core.environment.UiTraceMode;
 import ru.alfa.stand.test.core.environment.ViewportProfile;
 import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.execution.ResourceScope;
@@ -74,6 +75,27 @@ class EnvironmentUiApplicationResolverTest {
         assertThatThrownBy(() -> resolver(name -> "http://portal.ift:8080").resolve("", UiTestSupport.context()))
                 .isInstanceOf(StandTestException.class)
                 .hasMessageContaining("must not be blank");
+    }
+
+    @Test
+    @DisplayName("the trace mode is carried through from the registry, so the parsed field is actually consumed (UITG-S016)")
+    void traceModeComesFromTheRegistry() {
+        UiApplicationDefinition application = new UiApplicationDefinition(
+                UiTestSupport.APPLICATION, UiTestSupport.BASE_URL_REF, null, Map.of(), UiTraceMode.ON_FAILURE, null);
+
+        ResolvedUiApplication resolved = resolver(name -> "http://portal.ift:8080")
+                .resolve(UiTestSupport.APPLICATION, UiTestSupport.context(UiTestSupport.registry(application), new ResourceScope()));
+
+        assertThat(resolved.trace()).as("an on-failure registry declaration must reach the resolved application").isEqualTo(UiTraceMode.ON_FAILURE);
+    }
+
+    @Test
+    @DisplayName("a registry without a trace declaration resolves to the safe OFF default (UITG-S016)")
+    void absentTraceDefaultsToOff() {
+        ResolvedUiApplication resolved = resolver(name -> "http://portal.ift:8080")
+                .resolve(UiTestSupport.APPLICATION, UiTestSupport.context());
+
+        assertThat(resolved.trace()).as("an undeclared trace must default to OFF, never to recording").isEqualTo(UiTraceMode.OFF);
     }
 
     private static EnvironmentUiApplicationResolver resolver(java.util.function.UnaryOperator<String> lookup) {

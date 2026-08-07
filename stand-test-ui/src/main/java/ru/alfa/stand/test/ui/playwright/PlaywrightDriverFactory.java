@@ -5,9 +5,11 @@ import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.PlaywrightException;
+import com.microsoft.playwright.Tracing;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Objects;
+import ru.alfa.stand.test.core.environment.UiTraceMode;
 import ru.alfa.stand.test.core.environment.ViewportProfile;
 import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.ui.ResolvedUiApplication;
@@ -46,6 +48,18 @@ public final class PlaywrightDriverFactory implements UiDriverFactory {
                     .launch(new BrowserType.LaunchOptions().setHeadless(settings.headless()));
             BrowserContext context = browser.newContext(contextOptions(application.viewport(), storageState));
             context.setDefaultTimeout((double) settings.actionTimeout().toMillis());
+            if (application.trace() == UiTraceMode.ON_FAILURE) {
+                // Recording is enabled only when the application's registry declaration opts in: the trace is
+                // the heaviest failure artefact, so an application that never asked for it pays nothing — no
+                // tracing().start() (UITG-S016). Recording is deliberately lightweight about secrets (SEC-05):
+                // snapshots are OFF — a DOM snapshot taken by Playwright would capture whatever the frame
+                // showed the moment it was taken, including a typed password in a login form that the
+                // failure-path maskSensitive ("paint over the screenshot") never applied to, since the mask
+                // exists only for the next captureScreenshot(). The screen-video replay is out of scope for
+                // S016 anyway, and the network story of the trace is what a Trace Viewer read reproduces. So
+                // the ZIP keeps network/console actions and their timeline, but no screen clone.
+                context.tracing().start(new Tracing.StartOptions().setSnapshots(false).setScreenshots(false));
+            }
             return new PlaywrightUiDriver(playwright, browser, context, application);
         } catch (RuntimeException failure) {
             playwright.close();
@@ -72,6 +86,10 @@ public final class PlaywrightDriverFactory implements UiDriverFactory {
      * A saved session can only be applied when the context is created — Playwright has no supported way to
      * inject cookies into a live one. That is the whole reason the sign-in step opens the session itself
      * instead of reusing whichever context an earlier step happened to open.
+     *
+     * @param viewport the viewport profile, or null for the browser default
+     * @param storageState the restored session file, or null when the run signs in afresh
+     * @return the completed context options
      */
     private static Browser.NewContextOptions contextOptions(ViewportProfile viewport, Path storageState) {
         Browser.NewContextOptions options = new Browser.NewContextOptions();

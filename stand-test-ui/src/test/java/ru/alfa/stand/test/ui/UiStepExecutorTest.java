@@ -2,14 +2,22 @@ package ru.alfa.stand.test.ui;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import ru.alfa.stand.test.await.Awaiter;
+import ru.alfa.stand.test.core.environment.UiTraceMode;
+import ru.alfa.stand.test.core.event.Attachment;
 import ru.alfa.stand.test.core.exception.StandTestAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.execution.ResourceScope;
@@ -35,6 +43,9 @@ class UiStepExecutorTest {
                 return this.driver;
             },
             (alias, context) -> new ResolvedUiApplication(alias, "http://localhost:8080", null));
+
+    @TempDir
+    Path tempDir;
 
     @Test
     @DisplayName("it claims every ui.* step and nothing else")
@@ -354,6 +365,302 @@ class UiStepExecutorTest {
         return this.executor.execute(step, context);
     }
 
+    @Test
+    @DisplayName("a failing step captures a screenshot exactly once, and the PNG is written (UITG-S013)")
+    void failingStepCapturesAScreenshot() {
+        this.driver.present(STATUS, "Rejected");
+        UiStepExecutor uiExecutor = new UiStepExecutor(
+                (application, settings) -> this.driver,
+                (alias, context) -> UiTestSupport.resolved(),
+                Awaiter.create(),
+                () -> new UiRunSettings(true, UiRunSettings.DEFAULT_BROWSER, Duration.ofSeconds(2), Duration.ofSeconds(2), this.tempDir));
+
+        assertThatThrownBy(() -> uiExecutor.execute(
+                UiStep.expect(UiTestSupport.APPLICATION, STATUS).assertText("Accepted").build(),
+                UiTestSupport.context()))
+                .isInstanceOf(StandTestAssertionError.class);
+
+        assertThat(this.driver.screenshotCalls()).as("a failing UI step must request the screenshot exactly once").isEqualTo(1);
+        assertThat(this.driver.screenshotFile()).as("the artefact must have been written").isNotNull();
+        assertThat(Files.exists(this.driver.screenshotFile())).as("the screenshot file must exist on disk").isTrue();
+    }
+
+    @Test
+    @DisplayName("a green step never captures a screenshot — no artefact, no effort (UITG-S013)")
+    void successfulStepCapturesNothing() {
+        this.driver.present(STATUS, "Accepted");
+        UiStepExecutor uiExecutor = new UiStepExecutor(
+                (application, settings) -> this.driver,
+                (alias, context) -> UiTestSupport.resolved(),
+                Awaiter.create(),
+                () -> new UiRunSettings(true, UiRunSettings.DEFAULT_BROWSER, Duration.ofSeconds(2), Duration.ofSeconds(2), this.tempDir));
+
+        StepResult result = uiExecutor.execute(
+                UiStep.expect(UiTestSupport.APPLICATION, STATUS).assertText("Accepted").build(),
+                UiTestSupport.context());
+
+        assertThat(result.status()).isEqualTo(StepStatus.SUCCESS);
+        assertThat(this.driver.screenshotCalls()).as("a green step must not capture a screenshot").isZero();
+        assertThat(this.driver.screenshotFile()).as("no screenshot file may exist after a green step").isNull();
+        assertThat(this.driver.maskCalls()).as("a green step must not mask anything").isEmpty();
+    }
+
+    @Test
+    @DisplayName("a failing step on a sensitive locator masks it once, THEN captures, and records the masked-zone count (UITG-S017)")
+    void failingStepOnSensitiveLocatorMasksThenCaptures() {
+        UiLocator status = STATUS.asSensitive();
+        this.driver.present(status, "Rejected");
+        UiStepExecutor uiExecutor = newExecutorWithArtifacts();
+
+        try (LogCapture log = LogCapture.attached()) {
+            assertThatThrownBy(() -> uiExecutor.execute(
+                    UiStep.expect(UiTestSupport.APPLICATION, status).assertText("Accepted").build(),
+                    UiTestSupport.context()))
+                    .isInstanceOf(StandTestAssertionError.class);
+
+            // The masked-zone count is a diagnostic datum: the executor records how many it actually stopped,
+            // so observability (UITG-S017 acceptance #3) is asserted from the log, not merely returned.
+            assertThat(log.text()).as("the executor must record the masked-zone count into the diagnostics/log")
+                    .contains("Masked 1 of 1 sensitive zone(s)");
+        }
+
+        assertThat(this.driver.maskCalls()).as("the executor must mask the step's sensitive zone exactly once").hasSize(1);
+        assertThat(this.driver.maskCalls().get(0)).as("the masked zone must be the step's sensitive locator").containsExactly(status);
+        assertThat(this.driver.maskCounts()).containsExactly(1);
+        assertThat(this.driver.screenshotCalls()).as("the capture must happen after masking").isEqualTo(1);
+        int maskedIndex = this.driver.calls().indexOf("maskSensitive:1");
+        int snapshotIndex = this.driver.calls().indexOf("captureScreenshot");
+        assertThat(maskedIndex).as("maskSensitive must be issued before captureScreenshot").isLessThan(snapshotIndex);
+    }
+
+    @Test
+    @DisplayName("on a failing step whose locator is NOT sensitive, masking is skipped and the count is recorded as zero (UITG-S017)")
+    void failingStepOnPlainLocatorMakesNothingToMask() {
+        this.driver.present(STATUS, "Rejected");
+        UiStepExecutor uiExecutor = newExecutorWithArtifacts();
+
+        assertThatThrownBy(() -> uiExecutor.execute(
+                UiStep.expect(UiTestSupport.APPLICATION, STATUS).assertText("Accepted").build(),
+                UiTestSupport.context()))
+                .isInstanceOf(StandTestAssertionError.class);
+
+        assertThat(this.driver.maskCalls()).as("no sensitive zone -> no masking call").isEmpty();
+        assertThat(this.driver.calls()).as("the capture must not be preceded by any masking").doesNotContain("maskSensitive");
+        assertThat(this.driver.screenshotCalls()).as("no sensitive zone still means a capture of the screen").isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a driver that cannot mask aborts the capture — missing screenshot is safer than one leaking a secret (UITG-S017)")
+    void throwingMaskAbortsTheCapture() {
+        UiLocator status = UiLocator.testId("status").asSensitive();
+        this.driver.present(status, "Rejected");
+        this.driver.failMaskWith(new IllegalStateException("the browser went away"));
+        UiStepExecutor uiExecutor = newExecutorWithArtifacts();
+
+        assertThatThrownBy(() -> uiExecutor.execute(
+                UiStep.expect(UiTestSupport.APPLICATION, status).assertText("Accepted").build(),
+                UiTestSupport.context()))
+                .isInstanceOf(StandTestAssertionError.class);
+
+        assertThat(this.driver.maskCalls()).hasSize(1);
+        assertThat(this.driver.screenshotCalls()).as("a failed mask must prevent the screenshot, not best-effort it").isZero();
+        assertThat(this.driver.screenshotFile()).as("no artefact may exist when masking could not stop the secret").isNull();
+    }
+
+    @Test
+    @DisplayName("a masking failure is logged as a masking abort, not as a missed screenshot (UITG-S017 / MEDIUM-2)")
+    void maskFailureIsLoggedDistinctlyFromCaptureFailure() {
+        UiLocator status = UiLocator.testId("status").asSensitive();
+        this.driver.present(status, "Rejected").failMaskWith(new IllegalStateException("driver cannot close the zone"));
+        UiStepExecutor uiExecutor = newExecutorWithArtifacts();
+
+        try (LogCapture log = LogCapture.attached()) {
+            assertThatThrownBy(() -> uiExecutor.execute(
+                    UiStep.expect(UiTestSupport.APPLICATION, status).assertText("Accepted").build(),
+                    UiTestSupport.context()))
+                    .isInstanceOf(StandTestAssertionError.class);
+            assertThat(log.text())
+                    .as("a masking failure must name the masking and the abort, not blame the capture")
+                    .contains("Could not mask")
+                    .contains("aborted")
+                    .doesNotContain("Could not capture a failure screenshot");
+        }
+        assertThat(this.driver.screenshotCalls()).as("the masking abort must not even attempt the capture").isZero();
+    }
+
+    @Test
+    @DisplayName("a capture failure is logged as a capture failure, distinctly from a masking abort (UITG-S017 / MEDIUM-2)")
+    void captureFailureIsLoggedDistinctlyFromMaskingAbort() {
+        // NullSnapshotDriver's screenshot throws UnsupportedOperationException, and its snapshot returns null
+        // (a broken driver, an infrastructure failure in the executor's classification). No sensitive zone is
+        // declared, so masking is skipped and the failure lands on the capture itself.
+        UiStepExecutor nullSnapshots = new UiStepExecutor(
+                (application, settings) -> new NullSnapshotDriver(),
+                (alias, context) -> UiTestSupport.resolved(),
+                Awaiter.create(),
+                () -> new UiRunSettings(true, UiRunSettings.DEFAULT_BROWSER, Duration.ofSeconds(2), Duration.ofSeconds(2), this.tempDir));
+
+        try (LogCapture log = LogCapture.attached()) {
+            assertThatThrownBy(() -> nullSnapshots.execute(
+                    UiStep.expect(UiTestSupport.APPLICATION, STATUS).assertVisible().build(),
+                    UiTestSupport.context()))
+                    .isInstanceOf(StandTestException.class);
+            assertThat(log.text()).as("a capture failure must name the capture, not a masking run that never happened")
+                    .contains("Could not capture a failure screenshot")
+                    .doesNotContain("Could not mask");
+        }
+    }
+
+    @Test
+    @DisplayName("a failing step on an on-failure application captures a trace AFTER the screenshot, formatted right (UITG-S016)")
+    void failingStepWithTraceEnabledCapturesTraceAfterMask() {
+        UiLocator status = STATUS.asSensitive();
+        this.driver.present(status, "Rejected").withTrace();
+        UiStepExecutor uiExecutor = newExecutorWithArtifacts(UiTestSupport.resolved(UiTraceMode.ON_FAILURE));
+
+        assertThatThrownBy(() -> uiExecutor.execute(
+                UiStep.expect(UiTestSupport.APPLICATION, status).assertText("Accepted").build(),
+                UiTestSupport.context()))
+                .isInstanceOf(StandTestAssertionError.class);
+
+        assertThat(this.driver.screenshotCalls()).as("the screenshot must still be requested once").isEqualTo(1);
+        assertThat(this.driver.traceCalls()).as("a trace must be requested once on the failing, opted-in run").isEqualTo(1);
+
+        // The security ordering (UITG-S017/S016): the trace must be sealed strictly after the mask, so it can
+        // never outrun the maskSensitive it would argue with.
+        int masked = this.driver.calls().indexOf("maskSensitive:1");
+        int screenshot = this.driver.calls().indexOf("captureScreenshot");
+        int trace = this.driver.calls().indexOf("captureTrace");
+        assertThat(masked).as("maskSensitive must precede the screenshot").isLessThan(screenshot);
+        assertThat(screenshot).as("the screenshot must precede the trace").isLessThan(trace);
+    }
+
+    @Test
+    @DisplayName("a failing step on an OFF application records no trace — the flag gates it off (UITG-S016)")
+    void failingStepWithTraceOffCapturesScreenshotOnly() {
+        this.driver.present(STATUS, "Rejected");
+        UiStepExecutor uiExecutor = newExecutorWithArtifacts(UiTestSupport.resolved());
+
+        assertThatThrownBy(() -> uiExecutor.execute(
+                UiStep.expect(UiTestSupport.APPLICATION, STATUS).assertText("Accepted").build(),
+                UiTestSupport.context()))
+                .isInstanceOf(StandTestAssertionError.class);
+
+        assertThat(this.driver.screenshotCalls()).as("the screenshot is not gated by the trace flag").isEqualTo(1);
+        assertThat(this.driver.traceCalls()).as("an OFF application must never request a trace").isZero();
+    }
+
+    @Test
+    @DisplayName("a trace miss on the failure path is logged and never replaces the step's own failure (UITG-S016)")
+    void throwingTraceIsLoggedAndKeepsScreenshotAndStepFailure() {
+        UiLocator status = STATUS.asSensitive();
+        this.driver.present(status, "Rejected").withTrace().failTraceWith(new IllegalStateException("trace export failed"));
+        UiStepExecutor uiExecutor = newExecutorWithArtifacts(UiTestSupport.resolved(UiTraceMode.ON_FAILURE));
+
+        try (LogCapture log = LogCapture.attached()) {
+            assertThatThrownBy(() -> uiExecutor.execute(
+                    UiStep.expect(UiTestSupport.APPLICATION, status).assertText("Accepted").build(),
+                    UiTestSupport.context()))
+                    .as("a trace miss must never mask the step's own failure")
+                    .isInstanceOf(StandTestAssertionError.class);
+            assertThat(log.text()).as("the trace miss must be named in the log, not silently swallowed")
+                    .contains("Could not capture the trace");
+        }
+        assertThat(this.driver.screenshotFile()).as("the screenshot must survive a trace miss").isNotNull();
+    }
+
+    @Test
+    @DisplayName("a failing step carries the page's network as a TEXT attachment, beside the screenshot (UITG-S015)")
+    void failingStepCarriesNetworkOnItsStepEvent() {
+        // The network story is a textual artefact, exactly like the console (UITG-S014): it must ride the
+        // text channel, which the Allure sink runs through the secret masker (SEC-05). Whatever a body or
+        // header value still carried after the driver's own masking is redacted again in the sink.
+        UiStepExecutor uiExecutor = newExecutorWithArtifacts();
+        this.driver.present(STATUS, "Rejected")
+                .network("GET /api/status 200", "POST /api/submit 204", "GET /api/dashboard 500");
+
+        Throwable thrown = catchThrowable(() -> uiExecutor.execute(
+                UiStep.expect(UiTestSupport.APPLICATION, STATUS).assertText("Accepted").build(),
+                UiTestSupport.context()));
+
+        assertThat(thrown).isInstanceOf(UiAssertionFailure.class);
+        List<Attachment> attachments = ((UiAssertionFailure) thrown).failureAttachments();
+        assertThat(attachments).as("the failing step must attach the network story beside the screenshot")
+                .anySatisfy(attachment -> {
+                    assertThat(attachment.name()).isEqualTo("ui-network");
+                    assertThat(attachment.mediaType()).isEqualTo("text/plain");
+                    assertThat(attachment.isBinary()).isFalse();
+                    assertThat(attachment.content())
+                            .contains("POST /api/submit 204")
+                            .doesNotContain("Authorization")
+                            .doesNotContain("Cookie");
+                });
+    }
+
+    @Test
+    @DisplayName("a failing step whose page made no requests attaches no network block — empty is not an artefact (UITG-S015)")
+    void failingStepWithEmptyNetworkAttachesNothing() {
+        // The negative scenario: the driver observed no requests, so there is no network story to attach —
+        // the failing step carries exactly the screenshot, not an empty "ui-network" block.
+        this.driver.present(STATUS, "Rejected");
+
+        Throwable failure = catchThrowable(() -> newExecutorWithArtifacts().execute(
+                UiStep.expect(UiTestSupport.APPLICATION, STATUS).assertText("Accepted").build(),
+                UiTestSupport.context()));
+
+        assertThat(failure).isInstanceOf(UiAssertionFailure.class);
+        List<Attachment> attachments = ((UiAssertionFailure) failure).failureAttachments();
+        assertThat(attachments)
+                .as("without a network story the failing step carries only the screenshot")
+                .allMatch(attachment -> !"ui-network".equals(attachment.name()));
+    }
+
+    @Test
+    @DisplayName("a network read that fails is logged and never replaces the step's own failure (UITG-S015)")
+    void throwingNetworkIsLoggedAndKeepsScreenshotAndStepFailure() {
+        // A driver whose screen is fine but whose network log is gone: the executor must process the
+        // screenshot, note the missing network story at WARN and still surface the step's own failure.
+        UiStepExecutor uiExecutor = new UiStepExecutor(
+                (application, settings) -> new FailingNetworkDriver(new IllegalStateException("network log unavailable")),
+                (alias, context) -> UiTestSupport.resolved(),
+                Awaiter.create(),
+                () -> new UiRunSettings(true, UiRunSettings.DEFAULT_BROWSER, Duration.ofSeconds(2), Duration.ofSeconds(2), this.tempDir));
+
+        try (LogCapture log = LogCapture.attached()) {
+            assertThatThrownBy(() -> uiExecutor.execute(
+                    UiStep.expect(UiTestSupport.APPLICATION, STATUS).assertVisible().build(),
+                    UiTestSupport.context()))
+                    .as("a network miss must never mask the step's own failure")
+                    .isInstanceOf(StandTestException.class);
+            assertThat(log.text()).as("the network miss must be named in the log, not silently swallowed")
+                    .contains("Could not read the page's network requests");
+        }
+    }
+
+    /**
+     * An executor whose run settings put artefacts under this test's {@code tempDir}, and which resolves the
+     * application to the given one — used by the UITG-S013/016/017 failure-path tests.
+     */
+    private UiStepExecutor newExecutorWithArtifacts(ResolvedUiApplication resolved) {
+        return new UiStepExecutor(
+                (application, settings) -> this.driver,
+                (alias, context) -> resolved,
+                Awaiter.create(),
+                () -> new UiRunSettings(true, UiRunSettings.DEFAULT_BROWSER, Duration.ofSeconds(2), Duration.ofSeconds(2), this.tempDir));
+    }
+
+    /**
+     * An executor whose run settings put artefacts under this test's {@code tempDir}, so the UITG-S013/017
+     * failure-path tests can assert on what was actually written.
+     */
+    private UiStepExecutor newExecutorWithArtifacts() {
+        return new UiStepExecutor(
+                (application, settings) -> this.driver,
+                (alias, context) -> UiTestSupport.resolved(),
+                Awaiter.create(),
+                () -> new UiRunSettings(true, UiRunSettings.DEFAULT_BROWSER, Duration.ofSeconds(2), Duration.ofSeconds(2), this.tempDir));
+    }
+
     /** A driver whose probe throws, to pin how the executor classifies it. */
     private static final class FailingSnapshotDriver extends NullSnapshotDriver {
 
@@ -401,6 +708,111 @@ class UiStepExecutorTest {
         @Override
         public String currentUrl() {
             return "http://localhost/";
+        }
+
+        @Override
+        public Path captureScreenshot(Path directory, Duration timeout) {
+            throw new UnsupportedOperationException("this test driver never captures a screenshot");
+        }
+
+        @Override
+        public int maskSensitive(java.util.Collection<UiLocator> sensitiveLocators, Duration timeout) {
+            throw new UnsupportedOperationException("this test driver never masks");
+        }
+
+        @Override
+        public Path captureTrace(Path directory, Duration timeout) {
+            return null;
+        }
+
+        @Override
+        public List<String> consoleMessages() {
+            return List.of();
+        }
+
+        @Override
+        public List<String> networkRequests() {
+            return List.of();
+        }
+
+        @Override
+        public void close() {
+        }
+    }
+
+    /**
+     * A driver whose screenshot works but whose {@link #networkRequests()} throws — the seam for proving that
+     * a network-log miss on the failure path is a best-effort artefact, keeps the screenshot and never
+     * replaces the step's own failure.
+     */
+    private static final class FailingNetworkDriver implements UiDriver {
+
+        private final RuntimeException failure;
+
+        FailingNetworkDriver(RuntimeException failure) {
+            this.failure = failure;
+        }
+
+        @Override
+        public void navigate(String relativePath, Duration timeout) {
+        }
+
+        @Override
+        public ElementSnapshot snapshot(UiLocator locator, java.util.Collection<String> attributes, Duration probeTimeout) {
+            return null;
+        }
+
+        @Override
+        public void click(UiLocator locator, Duration timeout) {
+        }
+
+        @Override
+        public void fill(UiLocator locator, String value, Duration timeout) {
+        }
+
+        @Override
+        public void setExtraHeader(String name, String value) {
+        }
+
+        @Override
+        public void saveStorageState(java.nio.file.Path target) {
+            throw new UnsupportedOperationException("this driver never signs in");
+        }
+
+        @Override
+        public String currentUrl() {
+            return "http://localhost/";
+        }
+
+        @Override
+        public Path captureScreenshot(Path directory, Duration timeout) {
+            try {
+                Path target = directory.resolve("fake-screenshot-" + System.nanoTime() + ".png");
+                Files.write(target, new byte[]{(byte) 0x89, 'P', 'N', 'G'});
+                return target;
+            } catch (java.io.IOException failure) {
+                throw new IllegalStateException("could not write the fake screenshot", failure);
+            }
+        }
+
+        @Override
+        public int maskSensitive(java.util.Collection<UiLocator> sensitiveLocators, Duration timeout) {
+            return 0;
+        }
+
+        @Override
+        public Path captureTrace(Path directory, Duration timeout) {
+            return null;
+        }
+
+        @Override
+        public List<String> consoleMessages() {
+            return List.of();
+        }
+
+        @Override
+        public List<String> networkRequests() {
+            throw this.failure;
         }
 
         @Override

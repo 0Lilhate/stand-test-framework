@@ -1,7 +1,9 @@
 package ru.alfa.stand.test.ui;
 
 import java.util.Objects;
+import ru.alfa.stand.test.core.environment.UiApplicationDefinition;
 import ru.alfa.stand.test.core.environment.UiAuthConfig;
+import ru.alfa.stand.test.core.environment.UiTraceMode;
 import ru.alfa.stand.test.core.environment.ViewportProfile;
 
 /**
@@ -15,12 +17,19 @@ import ru.alfa.stand.test.core.environment.ViewportProfile;
  * second time by the sign-in step: one lookup, one answer, and no way for the step and the session to
  * disagree about which application they are talking about. It carries references only, never a credential.
  *
- * @param alias the logical alias, kept for diagnostics
+ * <p>The {@code trace} mode rides along for the same reason the sign-in config does: it is declared in the
+ * registry ({@link UiApplicationDefinition#trace}) and consumed at the driver boundary, so carrying it
+ * resolved keeps the run and its registry declaration in one place and stops the field from being parsed
+ * and then ignored.
+ *
+ * @param alias the resolved application alias, kept for diagnostics
  * @param baseUrl the resolved base URL
  * @param viewport the viewport to open at, or null for the browser default
  * @param auth how a test signs in, or null when the application declares no sign-in
+ * @param trace whether a browser trace / video may be recorded for a failing run (never null; defaults to
+ *     {@link UiTraceMode#OFF})
  */
-public record ResolvedUiApplication(String alias, String baseUrl, ViewportProfile viewport, UiAuthConfig auth) {
+public record ResolvedUiApplication(String alias, String baseUrl, ViewportProfile viewport, UiAuthConfig auth, UiTraceMode trace) {
 
     /**
      * Validates the resolved application.
@@ -32,17 +41,18 @@ public record ResolvedUiApplication(String alias, String baseUrl, ViewportProfil
         if (baseUrl == null || baseUrl.isBlank()) {
             throw new IllegalArgumentException("baseUrl must not be blank");
         }
+        trace = (trace == null) ? UiTraceMode.OFF : trace;
     }
 
     /**
-     * Creates a resolved application that declares no sign-in.
+     * Creates a resolved application that declares no sign-in and no trace recording.
      *
-     * @param alias the logical alias, kept for diagnostics
+     * @param alias the resolved application alias, kept for diagnostics
      * @param baseUrl the resolved base URL
      * @param viewport the viewport to open at, or null for the browser default
      */
     public ResolvedUiApplication(String alias, String baseUrl, ViewportProfile viewport) {
-        this(alias, baseUrl, viewport, null);
+        this(alias, baseUrl, viewport, null, UiTraceMode.OFF);
     }
 
     /**

@@ -75,6 +75,14 @@ tasks.named<Test>("test") {
     }
     // Same rule as browserTest: the account pool is per JVM, so parallelism must be threads in one fork.
     maxParallelForks = 1
+
+    // UiDuplicateDomParityTest (UITG-S023) reads the evaluation corpus's six seeded discovery reports, which
+    // live outside this module (docs/agent-evaluation/dataset/cases — ADR-UI-011 §3). Declare them as test
+    // inputs so editing a report re-runs the parity gate instead of leaving it UP-TO-DATE, exactly as
+    // stand-test-ai-schema does for its document-borne tests; and hand the resolved absolute dir to the JVM
+    // so the test is not tied to the project's working directory.
+    inputs.dir(rootDir.resolve("docs/agent-evaluation")).withPropertyName("standTestAnalysisDataset")
+    systemProperty("stand.test.dataset.dir", rootDir.resolve("docs/agent-evaluation").absolutePath)
 }
 
 // Downloads the browser binaries the `browserTest` task needs (one-off; Playwright caches them under

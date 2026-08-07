@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -19,6 +20,7 @@ import ru.alfa.stand.test.core.context.ScenarioContext;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
 import ru.alfa.stand.test.core.event.Attachment;
+import ru.alfa.stand.test.core.event.FailureAttachments;
 import ru.alfa.stand.test.core.event.NoOpReportingEventPublisher;
 import ru.alfa.stand.test.core.event.ReportingEventPublisher;
 import ru.alfa.stand.test.core.event.ScenarioEvent;
@@ -437,10 +439,32 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
             StepStatus status,
             Throwable cause) {
         String message = safeMessage(cause);
-        Map<String, Object> diagnostics = Map.of("exception.class", cause.getClass().getName());
-        StepResult failed = new StepResult(step.id(), step.type(), status, start, clock.instant(), message, diagnostics);
+        Map<String, Object> diagnostics = new LinkedHashMap<>();
+        diagnostics.put("exception.class", cause.getClass().getName());
+        if (cause instanceof FailureAttachments withEvidence) {
+            // A failing step can add its own picture of what happened (masked zones, element state) without
+            // reaching for the runner; the runner is transport-agnostic and must not invent a vocabulary.
+            diagnostics.putAll(withEvidence.failureDiagnostics());
+        }
+        List<Attachment> attachments = failureAttachments(cause);
+        StepResult failed = new StepResult(step.id(), step.type(), status, start, clock.instant(), message, diagnostics, attachments);
         stepResults.add(failed);
         publishStep(context, step, StepPhase.FINISHED, failed.status(), failed.errorMessage(), failed.diagnostics(), failed.attachments());
+    }
+
+    /**
+     * Reads the evidence a failing step opted to carry ({@link FailureAttachments}): a screenshot and
+     * console log on a broken UI step must reach the report rather than die with the thrown failure.
+     * A failure that does not implement the marker carries nothing — the pre-existing behaviour.
+     *
+     * @param cause the thrown failure of the step
+     * @return the attachments the failure opted in to carry, or an empty list
+     */
+    private static List<Attachment> failureAttachments(Throwable cause) {
+        if (cause instanceof FailureAttachments withEvidence) {
+            return withEvidence.failureAttachments();
+        }
+        return List.of();
     }
 
     private StepExecutor resolveExecutor(ScenarioStep step) {

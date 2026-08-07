@@ -56,4 +56,31 @@ class UiRunSettingsTest {
     void systemPropertiesAreRead() {
         assertThat(UiRunSettings.fromSystemProperties().browser()).isEqualTo(System.getProperty(UiRunSettings.BROWSER_PROPERTY, UiRunSettings.DEFAULT_BROWSER));
     }
+
+    @Test
+    @DisplayName("artefact retention defaults to a week, no longer than the CI report retention")
+    void retentionDefaultsToAWeek() {
+        UiRunSettings settings = UiRunSettings.fromProperties(property -> null);
+        assertThat(settings.artifactRetention()).isEqualTo(UiRunSettings.DEFAULT_ARTIFACT_RETENTION);
+    }
+
+    @Test
+    @DisplayName("retention is configurable by system property in whole days")
+    void retentionIsOneProperty() {
+        UiRunSettings settings = UiRunSettings.fromProperties(
+                Map.of(UiRunSettings.ARTIFACTS_RETENTION_DAYS_PROPERTY, "14")::get);
+
+        assertThat(settings.artifactRetention()).isEqualTo(Duration.ofDays(14));
+    }
+
+    @Test
+    @DisplayName("a misconfigured retention is refused loudly rather than silently falling back")
+    void malformedRetentionIsRefused() {
+        assertThatThrownBy(() -> UiRunSettings.fromProperties(Map.of(UiRunSettings.ARTIFACTS_RETENTION_DAYS_PROPERTY, "soon")::get))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("days");
+        assertThatThrownBy(() -> UiRunSettings.fromProperties(Map.of(UiRunSettings.ARTIFACTS_RETENTION_DAYS_PROPERTY, "0")::get))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("strictly positive");
+    }
 }

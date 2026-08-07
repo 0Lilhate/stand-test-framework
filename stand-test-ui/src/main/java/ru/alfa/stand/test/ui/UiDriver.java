@@ -84,6 +84,122 @@ public interface UiDriver extends AutoCloseable {
      */
     String currentUrl();
 
+    /**
+     * Masks the given sensitive zones in the current DOM, so a subsequent screenshot does not expose them.
+     *
+     * <p>Called by the {@code UiStepExecutor} immediately before {@link #captureScreenshot} on a failing
+     * step: the order is the whole point (more visible with a leaky driver), and a driver that cannot mask —
+     * or refuses to, because the browser is already gone — must say so by throwing, so the executor then
+     * <em>aborts</em> the capture rather than produce an artefact that leaks a secret (UITG-S017, SEC-05).
+     *
+     * <p>The binding is declarative, not destructive: the mask is remembered by the driver and applied to
+     * the screenshot the next {@link #captureScreenshot} takes, without altering the live DOM. The
+     * locators passed are already reduced to the failing step's sensitive zone.
+     *
+     * @param sensitiveLocators the {@link UiLocator#sensitive() sensitive} locators of the elements to mask
+     * @param timeout the bound on the masking
+     * @return the number of zones actually masked; an element that has vanished since it was observed is not
+     *     counted, and that is a diagnostics datum, not a failure
+     */
+    int maskSensitive(java.util.Collection<UiLocator> sensitiveLocators, java.time.Duration timeout);
+
+    /**
+     * Captures a screenshot of the current page into the given directory, as the <em>failure
+     * artefact</em> of a broken UI step.
+     *
+     * <p>The screenshot is taken exactly once on a failing step and never on a green one (plan/ADR-UI-005:
+     * "на зелёном прогоне артефакты не снимаются"). The directory is the run's artefacts directory and is
+     * already known to exist; the driver picks a unique file name inside it, writes the PNG and returns its
+     * path. Nothing here touches a report — the driver only produces the file; deciding whether and how to
+     * attach it belongs to the {@code UiStepExecutor}.
+     *
+     * <p>Declared rather than defaulted on purpose: a driver that cannot screenshot — or refuses to at the
+     * moment it is asked (the browser already closed) — must say so by throwing, so the failure path is
+     * honest and the executor can log the miss and keep the original step failure. The caller must not
+     * treat a thrown capture as a substitute for the step's own failure.
+     *
+     * @param directory the artefacts directory to write the PNG into (already exists)
+     * @param timeout the bound on the capture
+     * @return the path of the written PNG
+     */
+    Path captureScreenshot(Path directory, Duration timeout);
+
     @Override
     void close();
+
+/**
+     * Captures the browser <em>trace</em> of the failing run into the given directory, as a second failure
+     * artifact alongside the screenshot.
+     *
+     * <p>A trace replays the run's network and console timeline in the Trace Viewer, so it is the heaviest
+     * of the failure artefacts and is recorded only when the application's registry declaration opts in
+     * ({@code trace: on-failure}). Called by the {@code UiStepExecutor} on a failing step, strictly after
+     * the screenshot: the ordering "mask the sensitive zones, capture" (UITG-S17, SEC-05) holds for the
+     * screenshot before the trace is sealed.
+     *
+     * <p><strong>SEC-05 bound:</strong> a trace is <em>not</em> covered by {@link #maskSensitive} — the mask
+     * exists only for the screenshot that follows it, and the ZIP's bytes never pass through the report's
+     * text masker. For that reason the recording is started with snapshots disabled (see
+     * {@code PlaywrightDriverFactory}), so the trace never carries a DOM clone of a frame that held a typed
+     * password or other rendered secret; it carries the network/console story, not the screen. This bound is
+     * load-bearing, not editorial — a driver that opts into screen snapshots here would reopen SEC-05.
+     *
+     * <p>Unlike {@link #captureScreenshot}, returning {@code null} is <em>not</em> a fault: it is the driver
+     * saying it had no recording enabled for this run, and the executor must not treat it as an error any
+     * more than it treats "the browser was already gone" as one. A real failure to write the ZIP, once
+     * recording was enabled, still throws, so the executor can log the miss and keep the step's own failure.
+     *
+     * @param directory the artefacts directory to write the {@code .zip} into (already exists)
+     * @param timeout the bound on the capture
+     * @return the path of the written trace ZIP, or {@code null} when this driver recorded no trace
+     */
+    Path captureTrace(Path directory, Duration timeout);
+
+    /**
+     * The console messages the page has surfed since the browsing context was opened, as a textual
+     * failure artefact.
+     *
+     * <p>A frontend error is often visible first in the console, before it does anything wrong on the
+     * screen, so a failing step attaches what the page logged (UITG-S014). The driver records every
+     * {@code console} message — from error to log — while it is open and hands them back as text
+     * (never {@code null}); the caller decides whether there is anything worth attaching. Exactly because
+     * this is a <em>textual</em> artefact it rides the text attachment channel, which the Allure sink runs
+     * through the secret masker — the same mask that guards an exception message keeps a secret that a
+     * page accidentally logged out of a report (SEC-05, UITG-S015's sibling for the console).
+     *
+     * <p>Read-copy semantics: the returned list is a snapshot, so a test can assert it without racing the
+     * listener that keeps appending. A driver must never return {@code null} — an empty log is the honest
+     * "the page logged nothing". A page that could not be probed (the browser already closed) is an empty
+     * log, not an error: the executor treats it as a missed artefact, like a screenshot the browser could
+     * no longer grab.
+     *
+     * @return the console lines observed so far, newest-last, possibly empty
+     */
+    java.util.List<String> consoleMessages();
+
+    /**
+     * The page's network requests observed since the browsing context was opened, as a textual
+     * failure artefact.
+     *
+     * <p>Whether a request reached the backend, and with what code, is the first thing a red UI run's
+     * report should be able to answer (UITG-S015). The driver records the <em>method, path and status</em>
+     * of every request the page makes while it is open — observation only, never interception or
+     * re-routing, which stays out of scope (BR-33) — and hands them back as text (never {@code null});
+     * the caller decides whether there is anything worth attaching.
+     *
+     * <p>SEC-05: the request bodies and response bodies are <strong>never</strong> recorded — a body may
+     * carry personal data, and in wave 1 the artefact deliberately keeps to method/path/status — and the
+     * credential-equivalent {@code Authorization} and {@code Cookie} headers are masked at the point of a
+     * record, on the driver, so they never reach a report even before the text channel runs through the
+     * secret masker.
+     *
+     * <p>Read-copy semantics: the returned list is a snapshot, so a test can assert it without racing the
+     * listener that keeps appending. A driver must never return {@code null} — the page that made no
+     * requests is the honest empty list. A page that could not be probed (the browser already closed) is
+     * an empty list, not an error: the executor treats it as a missed artefact, like a screenshot the
+     * browser could no longer grab.
+     *
+     * @return the observed requests, in the order the responses arrived, possibly empty
+     */
+    java.util.List<String> networkRequests();
 }
