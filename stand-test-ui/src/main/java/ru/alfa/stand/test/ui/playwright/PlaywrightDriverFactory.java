@@ -61,8 +61,12 @@ public final class PlaywrightDriverFactory implements UiDriverFactory {
                 // showed the moment it was taken, including a typed password in a login form that the
                 // failure-path maskSensitive ("paint over the screenshot") never applied to, since the mask
                 // exists only for the next captureScreenshot(). The screen-video replay is out of scope for
-                // S016 anyway, and the network story of the trace is what a Trace Viewer read reproduces. So
-                // the ZIP keeps network/console actions and their timeline, but no screen clone.
+                // S016 anyway. What the option costs was measured on the artefact by the manual run of
+                // UITG-F004 and must not be guessed at again: snapshots off also empties the Trace Viewer's
+                // Network tab, because the network entries live in the same snapshot stream. So the ZIP keeps
+                // the action timeline, the call log and the console — not the network story and no DOM clone.
+                // The network story of a failing step is the ui-network TEXT attachment (UITG-S015), which is
+                // why the two artefacts are not redundant. Pinned by exportedTraceCarriesNoDomCloneAndNoNetworkStory.
                 context.tracing().start(new Tracing.StartOptions().setSnapshots(false).setScreenshots(false));
             }
             return new PlaywrightUiDriver(playwright, browser, context, application);

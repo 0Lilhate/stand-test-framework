@@ -8,6 +8,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -76,6 +78,43 @@ class PlaywrightUiDriverTraceBrowserTest {
         assertThat(trace.getFileName().toString()).endsWith(".zip");
         assertThat(readFirstBytes(trace, 4)).as("a Playwright trace must start with the ZIP local-file-header magic")
                 .containsExactly((byte) 'P', (byte) 'K', 0x03, 0x04);
+    }
+
+    @Test
+    @DisplayName("the exported trace carries no DOM clone and no network story — the price of snapshots=false, measured on the artefact (UITG-F004)")
+    void exportedTraceCarriesNoDomCloneAndNoNetworkStory() throws Exception {
+        // What a trace CONTAINS was never measured: UITG-S016 pinned that a ZIP is written and that a
+        // credential is not in it, and the manual run of UITG-F004 then found that the recording options the
+        // factory chose for SEC-05 (snapshots=false) also empty the Trace Viewer's Network tab. Both halves
+        // are asserted here on the artefact itself, because the two are the same decision seen from two
+        // sides: no DOM clone is the security property, no network story is what it costs.
+        ResolvedUiApplication optedIn = new ResolvedUiApplication(
+                "client-portal", this.application.baseUrl(), null, null, UiTraceMode.ON_FAILURE);
+        this.driver = new PlaywrightDriverFactory().open(optedIn, runSettings());
+
+        this.driver.navigate("/applications/new", TIMEOUT);
+        this.driver.fill(UiLocator.testId("amount"), "100000", TIMEOUT);
+        this.driver.click(UiLocator.testId("submit"), TIMEOUT);
+        waitWhilePending();
+
+        // Non-vacuity: the run really did talk to the backend, so an empty trace.network below is a property
+        // of the trace and not of an idle page. This is also the positive half of the statement the README
+        // makes — the network story of a failing step travels in the ui-network TEXT attachment (UITG-S015).
+        assertThat(this.driver.networkRequests()).as("the run must have observed network exchanges").isNotEmpty();
+
+        Path trace = this.driver.captureTrace(this.tempDir, Duration.ofSeconds(20));
+        assertThat(trace).as("an on-failure run must export its trace").isNotNull();
+        try (ZipFile zip = new ZipFile(trace.toFile())) {
+            List<String> entries = zip.stream().map(ZipEntry::getName).toList();
+            assertThat(entries).as("the trace must carry its action timeline").contains("trace.trace");
+            assertThat(entries)
+                    .as("a resource entry is a DOM/asset clone of what the frame showed — exactly what snapshots=false exists to keep out of the artefact (SEC-05)")
+                    .noneMatch(name -> name.startsWith("resources/"));
+            ZipEntry network = zip.getEntry("trace.network");
+            assertThat(network == null || network.getSize() == 0L)
+                    .as("with snapshots off the Trace Viewer's Network tab stays empty — the trace is not the network artefact")
+                    .isTrue();
+        }
     }
 
     @Test

@@ -202,6 +202,10 @@ tasks:
       сеть, трейс), а ВИДЕО сознательно вынесено в out_of_scope S016 — перевод в IMPLEMENTED требует решения
       человека о видео, а не работы. BR-35 — PARTIALLY_IMPLEMENTED по остаточному риску растровых ПД вне
       размеченных зон (OCR вне области по BRD §6.2). Оба перехода — решения владельца требования.
+      || 2026-08-07: первый acceptance_criteria эпика («в Allure на упавшем UI-шаге видны четыре артефакта»)
+      закрыт в исполнимой части — вторая его половина, трейс, проверена ручным прогоном с trace: on-failure
+      (отчёт 35-allure-trace-run-report.md, подробности в status_reason F004). Незакрытым остаётся ровно
+      видео, то есть тот же вопрос к владельцу требования, что и у BR-21, — не работа.
     priority: P0
     size: L
     uncertainty: MEDIUM
@@ -682,8 +686,27 @@ tasks:
       закрыты две вещи, обе названы явно: трейс в том прогоне не снимался (реестр объявлял trace: off,
       умолчание — проверка потребовала бы отдельного прогона с on-failure), а ВИДЕО не снимается вовсе,
       будучи вынесено в out_of_scope S016. Прогон нашёл и починил дефект, из-за которого скриншот не
-      доходил до отчёта НИ РАЗУ, — подробности в status_reason F003. DONE не ставлю: ревью человеком не
-      проводилось.
+      доходил до отчёта НИ РАЗУ, — подробности в status_reason F003. || ВТОРАЯ ПОЛОВИНА ЗАКРЫТА
+      2026-08-07 отдельным ручным прогоном с trace: on-failure (отчёт 35-allure-trace-run-report.md):
+      на упавшем шаге ПЯТЬ вложений — diagnostics, ui-screenshot, ui-trace (application/zip, 1.8 KiB),
+      ui-console, ui-network; ZIP, скачанный из сгенерированного отчёта, побитно совпал с файлом на диске
+      (SHA-256 b6fad94a...) и открылся Playwright Trace Viewer'ом — видны действия шага, их call log,
+      Errors 1 и Console 2. Правок в проводке не потребовалось: канал, починенный F003, работает и для
+      второго бинарного типа. Второй acceptance_criteria перепроверен в конфигурации, в которой его ещё
+      не проверяли — при РАБОТАЮЩЕЙ записи трейса: зелёный прогон f004-trace-green-run не создаёт даже
+      каталог артефактов. Прогон нашёл дефект ДОКУМЕНТАЦИИ, и не косметический: комментарий
+      PlaywrightDriverFactory, javadoc UiDriver.captureTrace и раздел «Трейс» в stand-test-ui/README.md
+      утверждали, что в ZIP лежит «DOM/network-история». Сетевой истории там НЕТ — вкладка Network Trace
+      Viewer'а пуста, trace.network 0 байт; замерено двумя трейсами одной страницы (snapshots=false ->
+      trace.network 0 B, без resources/; snapshots=true -> 3705 B и HTML-клон кадра). Это цена решения
+      SEC-05, а не ошибка: сетевую историю несёт ui-network (S015), и потому артефакты не дублируют друг
+      друга. Читатель, поверивший документам, снял бы ui-network как избыточный. Три места приведены к
+      фактам, поведение НЕ менялось; закреплено браузерным тестом
+      exportedTraceCarriesNoDomCloneAndNoNetworkStory (нет записей resources/ + пустой trace.network +
+      непустой networkRequests() как защита от вакуумного прохода). ПРОВЕРЕНО МУТАЦИЕЙ: setSnapshots(true)
+      роняет два теста из 41 — новый и PlaywrightUiDriverTraceSecretBrowserTest (в DOM-клоне оказывается
+      введённый пароль). Остаток первого acceptance_criteria — только ВИДЕО, оно в out_of_scope S016.
+      DONE не ставлю: ревью человеком не проводилось.
     priority: P1
     size: L
     uncertainty: MEDIUM
@@ -2675,7 +2698,7 @@ tasks:
       которое было распарсено и не потреблялось, теперь читается сквозной цепочкой:
       EnvironmentUiApplicationResolver переносит application.trace() в ResolvedUiApplication (новый компонент
       UiTraceMode trace с дефолтом OFF), PlaywrightDriverFactory по ON_FAILURE вызывает
-      tracing().start(snapshots:true, screenshots:false), а ветка отказа UiStepExecutor ПОСЛЕ maskSensitive
+      tracing().start(snapshots:false, screenshots:false), а ветка отказа UiStepExecutor ПОСЛЕ maskSensitive
       снимает трейс (ZIP) и прикладывает его файловым Attachment (application/zip) к упавшему шагу. По
       умолчанию OFF: tracing().start не запускается, captureTrace возвращает null (тест OFF это доказывает на
       реальном Chromium). Критерии приёмки: №1 (по умолчанию ничего) — unit
@@ -2695,7 +2718,11 @@ tasks:
       человеческое, выполнено по прямому указанию владельца: карточка разобрана, DoD подтверждён фактами
       (прогоны, а не чтение). build 1566 тестов / 0 падений / 1 намеренный пропуск, browserTest 40/40.
       Дефекты, найденные этим ревью, исправлены коммитами ee49f51, 0f3635e, 8fb9bb5, a08587e. Граница метода —
-      23-execution-queue.md.
+      23-execution-queue.md. || ПОПРАВКА 2026-08-07 (сессия F004): фраза выше читалась «snapshots:true» и
+      расходилась с кодом, где снапшоты выключены с самого начала — приведена к факту. Тем же прогоном
+      измерено, чего эта опция стоит: с выключенными снапшотами вкладка Network Trace Viewer'а пуста, то
+      есть трейс не является сетевым артефактом (отчёт 35-allure-trace-run-report.md). Сам артефакт S016 при
+      этом доходит до отчёта Allure — проверено прогоном, а не чтением.
     priority: P1
     size: M
     uncertainty: MEDIUM

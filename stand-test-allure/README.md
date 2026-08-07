@@ -155,6 +155,12 @@ Attachment.ofFile("screenshot", "image/png", pathToPng);    // файл — но
 `UiRunSettingsTest.artefactsDirectoryIsCoresSingleDefinition` — отдельное написание свойства в
 UI-модуле его роняет.
 
+Оба бинарных типа, которые производит волна 1, проверены **прогоном у потребителя**, а не чтением:
+`image/png` — [отчёт `34`](../docs/ui-test-generation/planning/34-allure-manual-run-report.md), и
+`application/zip` (Playwright-трейс при `trace: on-failure`) —
+[отчёт `35`](../docs/ui-test-generation/planning/35-allure-trace-run-report.md); ZIP, скачанный из
+сгенерированного отчёта, побитно совпал с файлом на диске.
+
 Расширение для файла выводит `AttachmentType.extensionForBinaryMediaType`, а не текстовый маппер: у них
 **противоположный** fallback. Неизвестный media type у текста разумнее всего `txt`, у файла — `bin`;
 перепутать их значит предложить скриншот как текст. Известны `png`, `jpg`, `webm`, `zip`, `json`, `xml`

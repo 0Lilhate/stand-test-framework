@@ -167,8 +167,8 @@ public interface UiDriver extends AutoCloseable {
      * Captures the browser <em>trace</em> of the failing run into the given directory, as a second failure
      * artifact alongside the screenshot.
      *
-     * <p>A trace replays the run's network and console timeline in the Trace Viewer, so it is the heaviest
-     * of the failure artefacts and is recorded only when the application's registry declaration opts in
+     * <p>A trace replays the run's actions, their call log and the page's console in the Trace Viewer, so it
+     * is the heaviest of the failure artefacts and is recorded only when the application's registry opts in
      * ({@code trace: on-failure}). Called by the {@code UiStepExecutor} on a failing step, strictly after
      * the screenshot: the ordering "mask the sensitive zones, capture" (UITG-S17, SEC-05) holds for the
      * screenshot before the trace is sealed.
@@ -177,8 +177,10 @@ public interface UiDriver extends AutoCloseable {
      * exists only for the screenshot that follows it, and the ZIP's bytes never pass through the report's
      * text masker. For that reason the recording is started with snapshots disabled (see
      * {@code PlaywrightDriverFactory}), so the trace never carries a DOM clone of a frame that held a typed
-     * password or other rendered secret; it carries the network/console story, not the screen. This bound is
-     * load-bearing, not editorial — a driver that opts into screen snapshots here would reopen SEC-05.
+     * password or other rendered secret. That has a measured price, and it is not a detail: with snapshots
+     * off the Trace Viewer's <em>Network</em> tab stays empty, so the trace is not the network artefact —
+     * the network story of a failing step is the {@code ui-network} text attachment (UITG-S015). This bound
+     * is load-bearing, not editorial — a driver that opts into screen snapshots here would reopen SEC-05.
      *
      * <p>Unlike {@link #captureScreenshot}, returning {@code null} is <em>not</em> a fault: it is the driver
      * saying it had no recording enabled for this run, and the executor must not treat it as an error any
