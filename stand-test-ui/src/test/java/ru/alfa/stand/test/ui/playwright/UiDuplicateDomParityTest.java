@@ -46,6 +46,16 @@ class UiDuplicateDomParityTest {
         return Path.of(dir).resolve("dataset/cases");
     }
 
+    /**
+     * How many Chosen locators the four {@code /requests/new} reports record between them, and the two
+     * {@code /requests} ones. Measured from the corpus, not chosen: they are what makes an empty or
+     * half-parsed run distinguishable from a real one. A deliberate change to the seeded reports updates
+     * these numbers; an accidental one fails here, which is the whole point.
+     */
+    private static final int REQUESTS_NEW_LOCATORS = 19;
+
+    private static final int REQUESTS_LIST_LOCATORS = 10;
+
     private static final Pattern CHOSEN_LOCATOR =
             Pattern.compile("^(label|testId|css)=(.+?)\\s*$|^role=(button):(.+?)\\s*$");
 
@@ -72,28 +82,52 @@ class UiDuplicateDomParityTest {
     @Test
     @DisplayName("each seeded report whose observed screen is /requests/new resolves on the served DOM")
     void requestsNewMatchesEverySeededReport() throws IOException {
+        int asserted = 0;
         for (Path report : seededReports()) {
             String text = Files.readString(report, StandardCharsets.UTF_8);
             if (text.contains("/requests/new")) {
-                for (Map<String, String> row : elementsTable(text)) {
-                    assertLocator(row, requestsNew, report);
-                }
+                asserted += assertEveryLocatorOf(report, text, requestsNew);
             }
         }
+        // ADR-UI-011 §3 makes this parity the condition of variant A, so it must fail loudly rather than
+        // quietly check nothing: `elementsTable` locates its column by header, and a template whose heading
+        // changed would parse to zero rows and leave both loops asserting nothing at all.
+        assertThat(asserted).as("the /requests/new parity must have compared the locators the corpus records")
+                .isEqualTo(REQUESTS_NEW_LOCATORS);
     }
 
     @Test
     @DisplayName("each seeded report whose observed screen is /requests resolves on the served DOM")
     void requestsListMatchesEverySeededReport() throws IOException {
+        int asserted = 0;
         for (Path report : seededReports()) {
             String text = Files.readString(report, StandardCharsets.UTF_8);
             // Only the two reports that visited the list screen: they name /requests but never /requests/new.
             if (text.contains("/requests") && !text.contains("/requests/new")) {
-                for (Map<String, String> row : elementsTable(text)) {
-                    assertLocator(row, requests, report);
-                }
+                asserted += assertEveryLocatorOf(report, text, requests);
             }
         }
+        assertThat(asserted).as("the /requests parity must have compared the locators the corpus records")
+                .isEqualTo(REQUESTS_LIST_LOCATORS);
+    }
+
+    /**
+     * Asserts every Chosen locator of one report against one screen's DOM, and returns how many it compared.
+     *
+     * <p>The count is the point as much as the assertions are. A report whose table parses to nothing is not
+     * a report with no locators — it is a parser that stopped matching the template, and the caller turns
+     * that into a failure instead of a silent pass.
+     */
+    private static int assertEveryLocatorOf(Path report, String text, String html) {
+        List<Map<String, String>> rows = elementsTable(text);
+        assertThat(rows)
+                .as("%s: the «Elements observed» table must parse to at least one row; an empty parse is drift "
+                        + "between the report template and this test, not a report without locators", report.getFileName())
+                .isNotEmpty();
+        for (Map<String, String> row : rows) {
+            assertLocator(row, html, report);
+        }
+        return rows.size();
     }
 
     @Test

@@ -20,7 +20,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ru.alfa.stand.test.core.exception.StandTestException;
@@ -30,6 +29,7 @@ import ru.alfa.stand.test.ui.ResolvedUiApplication;
 import ru.alfa.stand.test.ui.UiDriver;
 import ru.alfa.stand.test.ui.UiElementNotActionableException;
 import ru.alfa.stand.test.ui.UiLocator;
+import ru.alfa.stand.test.ui.UiRunArtifacts;
 
 /**
  * The Playwright-backed {@link UiDriver}: one {@link Playwright} instance, one {@link Browser}, one
@@ -279,10 +279,10 @@ final class PlaywrightUiDriver implements UiDriver {
 
     @Override
     public Path captureScreenshot(Path directory, Duration timeout) {
-        // UUID, not System.nanoTime(): several runs may fail at the same instant in parallel within one
-        // JVM (the module runs classes concurrently on a single pool), and a nanoTime collision would make
-        // the second screenshot silently overwrite the first — one failure's artefact lost without an error.
-        String name = "screenshot-" + UUID.randomUUID() + ".png";
+        // Named through UiRunArtifacts, which is also what the retention recognises: a name invented here
+        // would be an artefact the sweep does not own and therefore never cleans (SEC-09). The uniqueness
+        // rationale lives there too — several runs of one JVM can fail at the same instant.
+        String name = UiRunArtifacts.screenshotName();
         Path target = directory.resolve(name);
         try {
             // Playwright's screenshot has no per-call timeout of its own: it is a synchronous grab of the
@@ -368,7 +368,7 @@ final class PlaywrightUiDriver implements UiDriver {
             return null;
         }
         this.traceStopped = true;
-        String name = "trace-" + UUID.randomUUID() + ".zip";
+        String name = UiRunArtifacts.traceName();
         try {
             this.context.tracing().stop(new Tracing.StopOptions().setPath(directory.resolve(name)));
             return directory.resolve(name);

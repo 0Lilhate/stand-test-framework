@@ -1,15 +1,12 @@
 package ru.alfa.stand.test.ui;
 
 import java.io.IOException;
-import java.nio.file.FileVisitResult;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,12 +15,29 @@ import org.slf4j.LoggerFactory;
  * it deletes the failure artefacts that are older than the configured retention, so they do not pile up on
  * a shared runner or on a developer's machine.
  *
- * <p>The sweep is deliberately <em>shallow about semantics and flat about structure</em>: failure artefacts
- * (screenshot, trace) are plain files written directly under the artefacts root, so the sweep deletes
- * regular files by their last-modified time and nothing else. It never touches the {@code storage-state}
- * subtree — those session files are secrets that live by their own rule and must not be recycled by the
- * artefact retention, however old they age (card negative: "удаление затрагивает каталог storage-state —
- * запрещено").
+ * <p>The sweep deletes <strong>only what this SDK wrote, and only where it wrote it</strong>: regular files
+ * directly under the artefacts root whose names {@link UiRunArtifacts#isRunArtifact} recognises. Both halves
+ * of that are load-bearing, and both were once missing.
+ *
+ * <ul>
+ *   <li><em>Only its own files.</em> The directory is consumer-configured
+ *       ({@code stand.test.ui.artifacts.dir}). Deleting every regular file older than the retention meant
+ *       that a consumer who pointed it at a shared location — a reports directory, a build output — lost
+ *       unrelated files by age alone, silently. A retention that cannot name what it owns owns nothing.
+ *   <li><em>Only the top level.</em> Artefacts are written flat into the root, so a single directory read
+ *       finds all of them; descending gained nothing and put every nested tree under the same blanket rule.
+ * </ul>
+ *
+ * <p>The {@code storage-state} subtree is therefore protected twice over: it is a directory, so a top-level
+ * sweep of regular files never enters it, and its session files would not be recognised as artefacts anyway.
+ * Those files are secrets living by their own lifecycle and must not be recycled by the artefact retention,
+ * however old they age (card negative: "удаление затрагивает каталог storage-state — запрещено"). The
+ * explicit test for that boundary stays, because protection that is only incidental is protection nobody
+ * notices losing.
+ *
+ * <p>The trade this makes is deliberate and points the safe way: an artefact written under a name
+ * {@link UiRunArtifacts} does not know — by a driver implemented outside this module — is never swept rather
+ * than swept by accident. Leaving a stray file costs disk; deleting somebody else's costs their data.
  *
  * <p>Best-effort on the same principle as every other artefact capture (plan §17): a directory that is
  * missing or unreadable, a file that cannot be deleted — each is a WARN and never an error. A run that
@@ -45,9 +59,9 @@ final class RunArtifactRetention {
     }
 
     /**
-     * Deletes the artefacts under the root that are older than the retention, returning how many were
-     * removed. The {@code storage-state} subtree is never entered. Missing or unwritable roots delete
-     * nothing and are logged, never thrown.
+     * Deletes this SDK's own artefacts directly under the root that are older than the retention, returning
+     * how many were removed. Files it does not recognise, anything nested (including {@code storage-state})
+     * and unreadable roots are left alone and logged, never thrown.
      *
      * @param artifactsDirectory the run's artefacts root
      * @return the number of files deleted
@@ -60,71 +74,54 @@ final class RunArtifactRetention {
             return 0;
         }
         Instant cutoff = Instant.now().minus(retention);
-        AtomicInteger deleted = new AtomicInteger();
-        try {
-            Files.walkFileTree(artifactsDirectory, java.util.EnumSet.noneOf(java.nio.file.FileVisitOption.class), Integer.MAX_VALUE,
-                    new Sweeper(artifactsDirectory, cutoff, deleted));
+        int deleted = 0;
+        // A directory read rather than a tree walk: artefacts are flat, and this is what keeps a nested tree
+        // the consumer put beside them outside the sweep's reach entirely.
+        try (DirectoryStream<Path> entries = Files.newDirectoryStream(artifactsDirectory)) {
+            for (Path entry : entries) {
+                if (sweepable(entry, cutoff)) {
+                    deleted += delete(entry);
+                }
+            }
         } catch (IOException failure) {
-            // A sweep that throws on the way is still partially done; report what it did reach and move on —
+            // A sweep that threw on the way is still partially done; report what it did reach and move on —
             // the run must start regardless of the housekeeping around it.
             LOG.warn("Artefact retention sweep over {} aborted: {}", artifactsDirectory, failure.toString());
         }
-        int count = deleted.get();
-        if (count > 0) {
-            LOG.info("Deleted {} artefact(s) older than {} under {}", count, retention, artifactsDirectory);
+        if (deleted > 0) {
+            LOG.info("Deleted {} artefact(s) older than {} under {}", deleted, retention, artifactsDirectory);
         }
-        return count;
+        return deleted;
     }
 
-    private final class Sweeper extends SimpleFileVisitor<Path> {
-
-        private static final String STORAGE_STATE = StorageStateStore.DIRECTORY;
-
-        private final Path root;
-
-        private final Instant cutoff;
-
-        private final AtomicInteger deleted;
-
-        private Sweeper(Path root, Instant cutoff, AtomicInteger deleted) {
-            this.root = root;
-            this.cutoff = cutoff;
-            this.deleted = deleted;
+    /** Whether one directory entry is an artefact of this SDK that has outlived the retention. */
+    private static boolean sweepable(Path entry, Instant cutoff) {
+        Path name = entry.getFileName();
+        if (name == null || !UiRunArtifacts.isRunArtifact(name.toString())) {
+            return false;
         }
-
-        @Override
-        public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-            // The storage-state subtree is not an artefact and never subject to the retention: it holds
-            // session cookies that live by their own lifecycle. Skipping the whole subtree (without visiting
-            // it) is also the only reason the walk stays flat about secrets — not one of its files is ever
-            // named or aged by the retention.
-            Path relative = root.relativize(dir);
-            if (relative.getNameCount() >= 1 && STORAGE_STATE.equals(relative.getName(0).toString())) {
-                return FileVisitResult.SKIP_SUBTREE;
+        try {
+            // Not a symlink target, and not a directory wearing an artefact's name: only a real file goes.
+            if (!Files.isRegularFile(entry, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                return false;
             }
-            return FileVisitResult.CONTINUE;
+            return !Files.getLastModifiedTime(entry).toInstant().isAfter(cutoff);
+        } catch (IOException unreadable) {
+            LOG.warn("Could not read the age of {}; leaving it alone: {}", entry, unreadable.toString());
+            return false;
         }
+    }
 
-        @Override
-        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-            if (!attrs.isRegularFile()) {
-                return FileVisitResult.CONTINUE;
-            }
-            Instant modified = attrs.lastModifiedTime().toInstant();
-            if (modified.isAfter(cutoff)) {
-                return FileVisitResult.CONTINUE;
-            }
-            try {
-                Files.deleteIfExists(file);
-            } catch (IOException cannotDelete) {
-                // Best-effort identical to the capture side: one artefact that refuses to go must not rob
-                // the run of a valid start, and the next sweep will retry it.
-                LOG.warn("Could not delete aged artefact {}: {}", file, cannotDelete.toString());
-                return FileVisitResult.CONTINUE;
-            }
-            deleted.incrementAndGet();
-            LOG.debug("Deleted aged artefact {}", file);
-            return FileVisitResult.CONTINUE;
+    private static int delete(Path artefact) {
+        try {
+            Files.deleteIfExists(artefact);
+        } catch (IOException cannotDelete) {
+            // Best-effort identical to the capture side: one artefact that refuses to go must not rob the run
+            // of a valid start, and the next sweep will retry it.
+            LOG.warn("Could not delete aged artefact {}: {}", artefact, cannotDelete.toString());
+            return 0;
         }
+        LOG.debug("Deleted aged artefact {}", artefact);
+        return 1;
     }
 }
