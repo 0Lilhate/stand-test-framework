@@ -22,6 +22,7 @@
 | [ADR-UI-005](ADR-UI-005-reporting-and-artifacts.md) | `Attachment` + компонент `Path file`; артефакты только на отказе; маскирование в DOM; **трейс запрещён при объявленных чувствительных зонах** | **Accepted 2026-08-04** | **да — `Attachment`, самое рискованное изменение волны 1** |
 | [ADR-UI-006](ADR-UI-006-authentication-and-account-pool.md) | `FORM` + `STORAGE_STATE` в волне 1, `SSO` — волна 2; `AccountPool` за интерфейсом; `storageState` на учётку; ограниченный таймаут аренды | Accepted, реализован | да — `UiAuthScheme`, поля приложения |
 | [ADR-UI-007](ADR-UI-007-non-db-compensations.md) | Волна 1 берёт только компенсатор адаптера (правки core **ноль**); сценарные cleanup-шаги — волна 2 | Proposed | **нет — и это главное следствие** |
+| [ADR-UI-011](ADR-UI-011-browser-duplicate-measurement.md) | Стратегия измерения набора: вариант А — DOM локального приложения свести к DOM UI-кейсов; `S023` разблокирована | **Accepted 2026-08-06** | нет |
 
 ## Сквозные выводы
 
