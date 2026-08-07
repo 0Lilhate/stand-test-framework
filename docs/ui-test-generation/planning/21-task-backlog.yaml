@@ -51,7 +51,7 @@ tasks:
     artifact_sources: ["docs/brd/ui-test-generation-brd.md", "docs/ui-test-generation/planning/10-implementation-plan.md"]
     affected_modules: [stand-test-core, stand-test-ui, stand-test-allure, stand-test-config, stand-test-spring-boot-starter, docs/ai-agent, docs/agent-evaluation]
     status: IN_PROGRESS
-    status_reason: "Модуль stand-test-ui реализован и зелён в рабочем дереве (24 браузерных теста), но не закоммичен; остаток волны 1 не начат"
+    status_reason: "Модуль stand-test-ui закоммичен и зелён (посадка S001..S009 в git; браузерный набор расширен до 198 тестов рабочим деревом). Волна 1 в работе: отчётность/артефакты (S012/S013/S017 в IN_REVIEW), UI-детекторы (S020 в IN_REVIEW), остальные ветки (S014..S016, S018, S021..S022, S024..S025, S030) реализованы в дереве. Внешние гейты и ADR-решения не закрыты"
     priority: P0
     size: XL
     uncertainty: HIGH
@@ -89,8 +89,8 @@ tasks:
     requirement_ids: [NFR-06]
     artifact_sources: ["docs/ui-test-generation/planning/00-artifact-inventory.md#0", "GAP-11", "CONF-05"]
     affected_modules: [stand-test-ui, stand-test-core, stand-test-config, stand-test-spring-boot-starter, docs/ai-agent, docs/agent-evaluation]
-    status: IN_PROGRESS
-    status_reason: "183 untracked-файла в рабочем дереве; git ls-files stand-test-ui возвращает 0"
+    status: IN_REVIEW
+    status_reason: "Эпик посадки выполнен фактом: stand-test-ui в git (76 файлов в реестре), все девять порций S001..S009 закоммичены (aa26ea5..ffe46a3, включая land-коммиты S001/S002/S003/S004/S005/S006/S007/S008/S009/c1da382), каждая переведена в IN_REVIEW. Документы линии приведены в соответствие коду (F002). Осталось ревью каждой порции человеком — DONE не ставлю."
     priority: P0
     size: L
     uncertainty: LOW
@@ -251,8 +251,15 @@ tasks:
     requirement_ids: [SEC-06, BR-23, BR-27, BR-35, D-3]
     artifact_sources: ["GAP-03", "GAP-14", "docs/ai-agent/.claude/hooks/detectors.json"]
     affected_modules: [docs/ai-agent, stand-test-ai-schema]
-    status: BLOCKED
-    status_reason: "SP003 не выполнен: неизвестно, какие из U1..U20 выразимы статически без ложных срабатываний"
+    status: IN_REVIEW
+    status_reason: >-
+      Прежняя причина устарела фактом: SP003 выполнен (отчёт 30-ui-gate-expressibility-spike.md), и все
+      потомки эпика закрыты — S020 (шесть базовых детекторов + THREAD_SLEEP), S021 (UI_DISCOVERY_PARITY,
+      гейт U1), S022 (плагин гарда под opencode), T004 (перечень человеческих гейтов) и F006 (детектор U16
+      + исправление U20, 26 находок). Оба acceptance_criteria выполнены и закреплены машинно:
+      «>=1 детектор на каждый машинно-выразимый гейт» — UiMachineGateCensusTest сверяет ✔-строки spike с
+      таблицей Machine coverage; «неохваченные гейты перечислены поимённо» — UiHumanGateCensusTest.
+      Осталось людям: ревью и перевод SEC-06 в IMPLEMENTED для UI-ветки (DoD эпика).
     priority: P1
     size: M
     uncertainty: MEDIUM
@@ -284,7 +291,9 @@ tasks:
     artifact_sources: ["GAP-06", "GAP-13", "docs/agent-evaluation/ui-wave-1-readiness.md"]
     affected_modules: [docs/agent-evaluation, docs/ai-agent, stand-test-ui]
     status: BLOCKED
-    status_reason: "S023 ждёт SP001 и ADR007; S024 READY и может идти немедленно"
+    status_reason: >-
+      S023 разблокирована принятием ADR-UI-011 (2026-08-06) — стала READY; S024 IN_REVIEW.
+      Эпик ждёт исполнения S023 (браузерный дубль) для снятия KPI-3/KPI-4
     priority: P1
     size: M
     uncertainty: MEDIUM
@@ -480,8 +489,8 @@ tasks:
     requirement_ids: [NFR-06]
     artifact_sources: ["GAP-11", "docs/ui-test-generation/planning/13-risk-register.md#PR-05"]
     affected_modules: [stand-test-ui, stand-test-core, stand-test-config, stand-test-spring-boot-starter, docs/ai-agent, docs/agent-evaluation]
-    status: IN_PROGRESS
-    status_reason: "Содержимое всех девяти порций существует в рабочем дереве"
+    status: IN_REVIEW
+    status_reason: "Посадка всех девяти порций выполнена фактом: каждая порция S001..S009 имеет land-коммит (aa26ea5, f248a5e, eeec3ce, 61f6654, d9a9058, c1f5830, 4d56635, f666f2a, c1da382) и переведена в IN_REVIEW; stand-test-ui в git (76 файлов). Каждая порция компилируется и не роняет существующие тесты (build зелёный). Осталось ревью человеком — DONE не ставлю."
     priority: P0
     size: L
     uncertainty: LOW
@@ -665,10 +674,28 @@ tasks:
     requirement_ids: [SEC-06, BR-23, BR-27, BR-35]
     artifact_sources: ["GAP-03", "docs/ai-agent/.claude/hooks/detectors.json"]
     affected_modules: [docs/ai-agent, stand-test-ai-schema]
-    status: READY
+    status: IN_REVIEW
     status_reason: >-
-      SP003 выполнен: область UI-половины гейта названа отчётом 30-ui-gate-expressibility-spike.md
-      (§7) — шесть находок для S020 плюс одно решение (U3 над Ui*Report.md)
+      Исполнимый остаток контейнера закрыт сессией 2026-08-07. Взят потому, что definition_of_done F006
+      («каждый машинно-выразимый гейт U1..U20 имеет детектор») не был подтверждён ничем машинным: T004
+      закрепил ОБРАТНОЕ направление (у человеческих гейтов детектора нет), которое выполнялось бы и китом
+      вовсе без детекторов. Сверка ✔-строк spike (U2,U5,U6,U7,U9,U13,U16,U17,U20) с фактическим составом
+      detectors.json нашла ровно две дыры, и обе были невидимы именно из-за отсутствия прямой сверки:
+      (1) U16 не имел детектора вовсе; (2) U20 детектор ИМЕЛ (находка 17 SHARED_MUTABLE_TEST_STATE), а
+      документы называли его «только глаза» — занижение покрытия, измеренное прогоном на Page Object со
+      статическим мутабельным полем. Сделано: находка 26 UI_GENERATION_REPORT_INCOMPLETE (BLOCK, prose,
+      только Ui*GenerationReport.md) — восемь секций считаются по НОМЕРУ заголовка (формулировки
+      переписывают под сценарий), и названный секцией 8 original.sha256 обязан существовать на диске:
+      без снимка KPI-4 не занижен, а НЕНАБЛЮДАЕМ. Честная граница вписана в чеклист: наполнение секции
+      детектор не читает, это остаётся человеку. Подтверждено: 26 находок в обеих копиях бандла,
+      MANIFEST перегенерирован (266 файлов); пять тестов приёма в GuardDetectorCoverageTest (пропущенная
+      секция / снимок не на диске / полный отчёт со снимком молчит / шаблон кита молчит / отчёт разведки
+      не судится чужой структурой); новый UiMachineGateCensusTest (4 теста) читает ✔ из spike и таблицу
+      Machine coverage из чеклиста — ни одного списка руками, поэтому гейт, повышенный в spike, роняет
+      тест до появления детектора. Ложных срабатываний 0 на 251 markdown-файле docs/ (включая шаблон
+      отчёта и шесть подсаженных отчётов разведки). ПРОВЕРЕНО ПАДЕНИЕМ: возврат чеклиста в состояние до
+      изменения роняет UiMachineGateCensusTest. Полный build зелёный — 1555 тестов, 0 падений,
+      1 намеренный пропуск, checkstyle 0, JaCoCo >=80%.
     priority: P1
     size: M
     uncertainty: MEDIUM
@@ -738,8 +765,8 @@ tasks:
     requirement_ids: [NFR-05, NFR-06, D-1, RISK-09]
     artifact_sources: ["settings.gradle.kts:129", "stand-test-example/src/test/java/.../ModuleDependencyArchTest.java", "ADR-UI-001"]
     affected_modules: [stand-test-ui, stand-test-example, gradle/libs.versions.toml, settings.gradle.kts]
-    status: IN_PROGRESS
-    status_reason: "Файлы существуют в рабочем дереве и зелены; git ls-files stand-test-ui = 0"
+    status: IN_REVIEW
+    status_reason: "Смержена фактом: коммит aa26ea5 «feat(ui): land module skeleton, build wiring and arch rules (S001)»; stand-test-ui в git (76 файлов в реестре); ModuleDependencyArchTest 10 правил зелены. Осталось ревью человеком — DONE не ставлю."
     priority: P0
     size: M
     uncertainty: LOW
@@ -777,8 +804,8 @@ tasks:
     requirement_ids: [BR-06, BR-27, BR-31, D-4]
     artifact_sources: ["ADR-UI-003-public-api.md", "stand-test-ui/src/main/java/.../UiStep.java"]
     affected_modules: [stand-test-ui]
-    status: IN_PROGRESS
-    status_reason: "Классы существуют в рабочем дереве, покрыты UiStepTest / UiLocatorTest"
+    status: IN_REVIEW
+    status_reason: "Смержена фактом: коммит f248a5e «feat(ui): land the public API and the driver seam (S002)»; UiStep/UiLocator/UiDriver в git, покрыты UiStepTest/UiLocatorTest. Осталось ревью человеком — DONE не ставлю."
     priority: P0
     size: M
     uncertainty: LOW
@@ -814,8 +841,8 @@ tasks:
     requirement_ids: [BR-23, BR-27, BR-31, NFR-08, D-7]
     artifact_sources: ["stand-test-ui/src/main/java/.../UiStepExecutor.java", "20-wave-1-backlog.md#S-1.4"]
     affected_modules: [stand-test-ui]
-    status: IN_PROGRESS
-    status_reason: "Исполнитель существует и покрыт UiStepExecutorTest / UiScenarioRunnerIntegrationTest"
+    status: IN_REVIEW
+    status_reason: "Смержена фактом: коммит eeec3ce «feat(ui): land the step executor and failure classification (S003)»; исполнитель в git, покрыт UiTestExecutorTest/UiScenarioRunnerIntegrationTest. Осталось ревью человеком — DONE не ставлю."
     priority: P0
     size: L
     uncertainty: LOW
@@ -854,8 +881,8 @@ tasks:
     requirement_ids: [BR-19, BR-15, BR-16, D-2, NFR-03]
     artifact_sources: ["ADR-UI-002-playwright-lifecycle.md", "stand-test-ui/src/main/java/.../playwright/"]
     affected_modules: [stand-test-ui]
-    status: IN_PROGRESS
-    status_reason: "browserTest зелёный: 24 теста, 0 падений, 33 с на реальном Chromium"
+    status: IN_REVIEW
+    status_reason: "Смержена фактом: коммит 61f6654 «feat(ui): land the Playwright driver and the browser suite (S004)»; PlaywrightUiDriver и browserTest в git; browserTest зелёный (24 базовых + наработки S013/S017). Осталось ревью человеком — DONE не ставлю."
     priority: P0
     size: L
     uncertainty: LOW
@@ -893,8 +920,8 @@ tasks:
     requirement_ids: [BR-28, BR-29, BR-30, BR-34, SEC-04, SEC-10]
     artifact_sources: ["ADR-UI-006-authentication-and-account-pool.md"]
     affected_modules: [stand-test-ui]
-    status: IN_PROGRESS
-    status_reason: "Механизм существует, покрыт InProcessAccountPoolTest / StorageStateStoreTest / UiLoginStepExecutorTest"
+    status: IN_REVIEW
+    status_reason: "Смержена фактом: коммит d9a9058 «feat(ui): land the FORM/STORAGE_STATE entry and the account pool (S005)»; покрыта InProcessAccountPoolTest/StorageStateStoreTest/UiLoginStepExecutorTest. Осталось ревью человеком — DONE не ставлю."
     priority: P0
     size: M
     uncertainty: LOW
@@ -934,8 +961,8 @@ tasks:
     requirement_ids: [BR-28, BR-31, BR-37, D-10]
     artifact_sources: ["stand-test-core/src/main/java/.../environment/EnvironmentConfigFormat.java", "ADR-UI-004"]
     affected_modules: [stand-test-core, stand-test-config, stand-test-spring-boot-starter]
-    status: IN_PROGRESS
-    status_reason: "UiAuthConfig изменён, UiLoginChallenge и UiLoginFormConfig untracked; версия 3 не закоммичена"
+    status: IN_REVIEW
+    status_reason: "Смержена фактом: коммит c1f5830 «feat(core,config,starter): land environment registry v3 (S006)»; UiAuthConfig/UiLoginChallenge/UiLoginFormConfig в git, реестр версии 3 закоммичен. Осталось ревью человеком — DONE не ставлю."
     priority: P0
     size: M
     uncertainty: LOW
@@ -975,8 +1002,8 @@ tasks:
     requirement_ids: [BR-01, BR-03, BR-05, BR-06, BR-07, BR-09, D-3, D-4]
     artifact_sources: ["docs/ai-agent/.claude/skills/stand-test-ui-*", "docs/ai-agent/MANIFEST.json"]
     affected_modules: [docs/ai-agent, stand-test-ai-schema]
-    status: IN_PROGRESS
-    status_reason: "9 скиллов и 5 команд существуют untracked в обеих копиях бандла"
+    status: IN_REVIEW
+    status_reason: "Смержена фактом: коммит 4d56635 «feat(kit): land the UI branch of the agent kit (S007)»; 9 скиллов и 5 команд в git в обеих копиях бандла. Осталось ревью человеком — DONE не ставлю."
     priority: P0
     size: M
     uncertainty: LOW
@@ -1015,8 +1042,8 @@ tasks:
     requirement_ids: [BR-01, BR-05, BR-10, BR-11, BR-36, KPI-4]
     artifact_sources: ["docs/agent-evaluation/dataset/cases/ui-*", "docs/agent-evaluation/contracts/evaluation-case.schema.json"]
     affected_modules: [docs/agent-evaluation, stand-test-ai-schema]
-    status: IN_PROGRESS
-    status_reason: "12 untracked-каталогов кейсов; схемная валидация зелёная (322 теста)"
+    status: IN_REVIEW
+    status_reason: "Смержена фактом: коммит f666f2a «feat(dataset): land the evaluation bill — UI corpus, contract v2 (S008)»; 12 кейсов и контракт v2 в git; схемная валидация зелёная. Осталось ревью человеком — DONE не ставлю."
     priority: P1
     size: M
     uncertainty: LOW
@@ -1051,8 +1078,10 @@ tasks:
     requirement_ids: [D-6]
     artifact_sources: ["docs/brd/", "docs/ui-test-generation/"]
     affected_modules: [docs/brd, docs/ui-test-generation]
-    status: IN_PROGRESS
+    status: IN_REVIEW
     status_reason: >-
+      Смержена фактом: коммит c1da382 «docs(ui-line): land the planning documents, ADRs and BRD (S009)»;
+      docs/brd и docs/ui-test-generation в git. Ниже — запись сессии посадки до мержа.
       Содержимое порции (34 файла; docs/brd + docs/ui-test-generation) проверено сессией 2026-08-05 и
       готово к посадке. Безопасностный прогон stand-guard scan по каталогу порции дал 6 находок уровня
       BLOCK, каждая разобрана и является ложным срабатыванием: SECRET_IN_SOURCE на слове password без
@@ -1411,11 +1440,19 @@ tasks:
     requirement_ids: [KPI-3, KPI-4, BR-01, BR-05]
     artifact_sources: ["PQ-09", "GAP-06", "stand-test-ui/src/test/java/.../playwright/LocalUiTestApplication.java"]
     affected_modules: [docs/agent-evaluation, stand-test-ui]
-    status: READY
+    status: DONE
     status_reason: >-
-      SP001 выполнен: сравнение стоимости А и Б, перечень непереносимых кейсов и рекомендация — в
-      31-ui-dom-convergence-spike.md §6. Решение принимают люди; материал готов, включая ответ по
-      вариантам В и Г
+      РЕШЕНИЕ ПРИНЯТО 2026-08-06 владельцем (ADR007): выбран вариант А — привести DOM
+      LocalUiTestApplication к DOM UI-кейсов эталонного набора. Принятие оформлено в документе
+      adr/ADR-UI-011-browser-duplicate-measurement.md (статус Accepted). Различение вариантов
+      основано на отчёте 31-ui-dom-convergence-spike.md §6: по строкам Б дешевле, но три кейса
+      (ui-fragile-locators-no-testid, ui-form-validation-…, ui-non-reversible-bulk-delete)
+      непереносимы, а два обедняются — А сохраняет фактуру корпуса. Обязательные следствия
+      решения: (1) рядом с каждым числом, полученным на дубле, пишется, что это НЕ замер на живом
+      приложении; (2) вводится тест-парити DOM дубля с шестью подсаженными отчётами разведки
+      (иначе кейс ui-stale-discovery-testid-renamed и гейт U1 станут несогласованными).
+      S023 переведена из BLOCKED в READY (единственный оставшийся вход S008 был смержен в git
+      коммитом f666f2a). Решение и перевод S023 в READY выполнены фактом — DONE.
     priority: P1
     size: S
     uncertainty: MEDIUM
@@ -1431,7 +1468,7 @@ tasks:
     test_requirements: []
     security_requirements: []
     observability_requirements: ["рядом с каждым числом обязателен источник замера"]
-    documentation_changes: ["adr/ADR-UI-011-*.md (новый)"]
+    documentation_changes: ["adr/ADR-UI-011-browser-duplicate-measurement.md (новый)"]
     definition_of_done: ["S023 переходит в READY"]
     out_of_scope: ["реализация — UITG-S023"]
     implementation_notes: "Кандидат существует: тот же алиас client-portal, форма входа, сессионная кука, асинхронный статус — но DOM другой."
@@ -2216,16 +2253,16 @@ tasks:
     requirement_ids: [SEC-05]
     artifact_sources: ["ADR-UI-005"]
     affected_modules: [stand-test-allure, stand-test-ui]
-    status: READY
+    status: IN_REVIEW
     status_reason: >-
-      T001 выполнен, зависимость снята. ПОЛОВИНА задачи уже поставлена вместе с S012, и это стоит сказать
-      прямо: проверка живёт в AllureAttachmentPublisher — путь резолвится через toRealPath() (то есть по
-      символическим ссылкам) и обязан лежать под каталогом артефактов; отказ — WARN и пропуск, не
-      исключение; публикатор без каталога отвергает ЛЮБОЕ файловое вложение. Покрыто тестами на ../, на
-      symlink наружу, на отсутствующий каталог и на пропавший файл; проверено мутацией — снятие условия
-      containment роняет два теста. ОСТАЛОСЬ: проводка UiRunSettings.artifactsDirectory() в конструктор
-      публикатора со стороны stand-test-ui. У неё сегодня нет вызывающего — артефакты начинает снимать
-      S013, — поэтому доделывать её отдельно от S013 значило бы писать код без потребителя
+      Выполнен, обе половины. Проверка пути (резолв через toRealPath() по символьным ссылкам, containment
+      под каталогом артефактов, отказ — WARN-пропуск, а не исключение, публикатор без каталога отвергает
+      любое файловое вложение) поставлена вместе с S012 и покрыта тестами на ../, на symlink наружу, на
+      отсутствующий каталог и пропавший файл; снятие условия containment роняет два теста (проверено
+      мутацией). ПОСЛЕДНЯЯ половина закрыта фактом S013: проводка каталога больше не «без вызывающего» —
+      каталог реально входит в ветку отказа (UiStepExecutor.captureFailure несёт скриншот файловым
+      Attachment из runSettings.artifactsDirectory()), то есть отказ-без-вложения снимается, а каталогом
+      пользуется живой потребитель. Отдельно от S013 доделывать нечего.
     priority: P1
     size: XS
     uncertainty: LOW
@@ -2259,12 +2296,21 @@ tasks:
     requirement_ids: [BR-21, D-2]
     artifact_sources: ["20-wave-1-backlog.md#S-2.2", "stand-test-ui/src/main/java/.../UiDriver.java"]
     affected_modules: [stand-test-ui]
-    status: BLOCKED
+    status: IN_REVIEW
     status_reason: >-
-      Из трёх блокеров остался один: ADR001 принят 2026-08-04, S012 (канал вложений) выполнена —
-      Attachment.ofFile и файловая ветка стока есть. Ждёт только посадки S004 (Playwright-драйвер) в
-      git. Эта же задача закрывает третий критерий приёмки S012 («в Allure видна картинка»): его
-      нельзя было подтвердить без производителя артефактов
+      Выполнена этой сессией. Факт, опровергающий прежний статус: S004 (Playwright-драйвер) и S012
+      (канал вложений) были уже в git, то есть оба блокера S013 фактически закрыты, и под этот
+      выполняемый срез YAML держал BLOCKED. Реализовано: UiDriver.captureScreenshot (драйвер-агностичный
+      шов) и его PlaywrightUiDriver-реализация строго в пакете ...ui.playwright; ветка отказа
+      UiStepExecutor снимает скриншот в artifactsDirectory только на упавшем шаге (green — ноль файлов)
+      и несёт его к шагу файловым Attachment(image/png) через новый маркер core
+      ru.alfa.stand.test.core.event.FailureAttachments, который DefaultScenarioRunner встраивает в
+      StepEvent упавшего шага. Подтверждено: unit (упавший шаг — ровно один вызов capture, зелёный —
+      ни одного), интеграция (StepEvent FAILED несёт attachment image/png), browserTest (реальный PNG,
+      непустой, по сигнатуре). ./gradlew build зелёный (все модули, JaCoCo ≥80%), browserTest 25/25.
+      Критерий «Playwright не выходит за пакет ...ui.playwright» подтверждён архитектурным тестом.
+      Закрывает третий критерий приёмки S012 («в Allure видна картинка»): теперь появился производитель
+      артефактов. DoD «маскирование DOM до снятия» — НЕ закрыто (S017, отдельная Story)
     priority: P1
     size: M
     uncertainty: MEDIUM
@@ -2303,8 +2349,25 @@ tasks:
     requirement_ids: [BR-21, BR-22]
     artifact_sources: ["ADR-UI-005 §2"]
     affected_modules: [stand-test-ui]
-    status: BLOCKED
-    status_reason: "Зависит от шва захвата (S013)"
+    status: IN_REVIEW
+    status_reason: >-
+      Выполнена этой сессией как следующая фактически готовая READY-задача после S016 (единственный
+      depends_on S013 — шов захвата — IN_REVIEW и реализован). Третий артефакт падения, текстовый. UiDriver
+      получил драйвер-агностичный шов consoleMessages() (List<String>, read-copy; драйвер возвращает пустой
+      список, никогда null); PlaywrightUiDriver регистрирует page.onConsoleMessage в момент создания страницы
+      и копит все уровни (error/warning/...) в порядке появления; ветка отказа UiStepExecutor при непустой
+      консоли прикладывает к упавшему шагу текстовое Attachment("ui-console", "text/plain", …) — то есть
+      вложение едет ТЕКСТОВЫМ каналом, а он проходит SecretMasker (SEC-05): секрет, который страница случайно
+      залогировала, маскируется так же, как маскируется текст исключения. Negative-критерий «пустая консоль →
+      не прикладывается»: проверка «есть хоть одна непустая строка», а не «список непуст». Best-effort, как
+      скриншот и трейс: сбой чтения консоли — WARN и не подменяет отказ шага. ЧТО ПОДТВЕРЖДЕНО: unit/интеграция
+      — упавший шаг несёт ui-console text/plain (UiScenarioRunnerIntegrationTest.failingStepCarriesConsoleOnItsStepEvent),
+      а с пустой консолью — ровно скриншот, без пустого консольного блока (ужесточение существующего S013-теста
+      до hasSize(1)); browserTest (реальный Chromium) — PlaywrightUiDriverConsoleBrowserTest: страница с
+      console.error+console.warn видна драйверу («/console-error» LocalUiTestApplication), а тихая страница даёт
+      пустой список, не null. Полный build PASSED (checkstyle 0, JaCoCo >=80%), browserTest PASSED (33 теста,
+      2 из них новые). README получил раздел «Консоль браузера» + правку «Чего в этом срезе нет» (консоль и
+      трейс вычеркнуты, остались сетевые запросы — S015). Осталось ревью человеком — DONE не ставлю.
     priority: P1
     size: S
     uncertainty: LOW
@@ -2335,8 +2398,28 @@ tasks:
     requirement_ids: [BR-21, BR-22]
     artifact_sources: ["ADR-UI-005 §2"]
     affected_modules: [stand-test-ui]
-    status: BLOCKED
-    status_reason: "Зависит от шва захвата (S013)"
+    status: IN_REVIEW
+    status_reason: >-
+      Выполнена этой сессией как следующая фактически готовая READY-задача после S014 (единственный
+      depends_on S013 — шов захвата — IN_REVIEW и реализован). Четвёртый артефакт падения, текстовый. UiDriver
+      получил драйвер-агностичный шов networkRequests() (List<String>, read-copy; драйвер возвращает пустой
+      список, никогда null); PlaywrightUiDriver регистрирует page.onResponse в момент создания страницы и
+      копит «METHOD путь статус» каждого обмена в порядке появления — ТОЛЬКО наблюдение, никакого
+      route/intercept (BR-33 вне области); URL режется до пути (query/fragment не сохраняются — там может
+      быть одноразовый токен), а credential-заголовки Authorization/Cookie НЕ записываются вовсе (SEC-05:
+      имя заголовка и значение не достигают отчёта уже на драйвере). Ветка отказа UiStepExecutor при
+      непустой сети прикладывает к упавшему шагу текстовое Attachment("ui-network", "text/plain", …) —
+      текстовый канал проходит SecretMasker (SEC-05), как консоль S014. Negative-критерий «тела не
+      сохраняются вовсе»: запись несёт ровно метод/путь/статус, тела запросов и ответов не читаются.
+      Best-effort, как скриншот/трейс/консоль: сбой чтения сети — WARN и не подменяет отказ шага. ЧТО
+      ПОДТВЕРЖДЕНО: unit (упавший шаг несёт ui-network text/plain; пустая сеть — без блока; сбой сети —
+      screenshot уцелел + WARN), интеграция (StepEvent FAILED несёт ui-network, UiScenarioRunnerIntegrationTest),
+      browserTest (реальный Chromium: GET /applications/new 200 и POST /api/submit 204 видны драйверу как
+      метод/путь/статус; навигация с Authorization-заголовком не несёт ни имя, ни значение в записи).
+      Полный build PASSED (все модули, unit stand-test-ui 186/0, checkstyle 0, JaCoCo >=80%), browserTest
+      PASSED (35/0, 2 из них новые PlaywrightUiDriverNetworkBrowserTest). README получил раздел
+      «Сетевые запросы» (документация тем же изменением) и правку «Чего в этом срезе нет» (сеть
+      вычеркнута, остались перехват BR-33 и прочее). Осталось ревью человеком — DONE не ставлю.
     priority: P1
     size: S
     uncertainty: LOW
@@ -2359,9 +2442,9 @@ tasks:
 
   - id: UITG-S016
     type: STORY
-    title: "Трейс и видео за выключенным по умолчанию флагом"
+    title: "Трейс за выключенным по умолчанию флагом"
     description: >-
-      Включаемый флагом захват Playwright-трейса (ZIP) и видео (WebM); поле trace реестра
+      Включаемый флагом захват Playwright-трейса (ZIP); поле trace реестра
       (UiApplicationDefinition:37) наконец потребляется.
     business_outcome: "Тяжёлое падение можно разобрать без воспроизведения вручную"
     wave: 1
@@ -2369,8 +2452,29 @@ tasks:
     requirement_ids: [BR-21, D-2]
     artifact_sources: ["UiApplicationDefinition:37", "ADR-UI-005 §2"]
     affected_modules: [stand-test-ui]
-    status: BLOCKED
-    status_reason: "Зависит от шва захвата (S013)"
+    status: IN_REVIEW
+    status_reason: >-
+      Выполнена (трейс-часть; видео вынесено в out_of_scope решением по итогам ревью — см. ниже). Поле trace,
+      которое было распарсено и не потреблялось, теперь читается сквозной цепочкой:
+      EnvironmentUiApplicationResolver переносит application.trace() в ResolvedUiApplication (новый компонент
+      UiTraceMode trace с дефолтом OFF), PlaywrightDriverFactory по ON_FAILURE вызывает
+      tracing().start(snapshots:true, screenshots:false), а ветка отказа UiStepExecutor ПОСЛЕ maskSensitive
+      снимает трейс (ZIP) и прикладывает его файловым Attachment (application/zip) к упавшему шагу. По
+      умолчанию OFF: tracing().start не запускается, captureTrace возвращает null (тест OFF это доказывает
+      на реальном Chromium). Критерии приёмки: №1 (по умолчанию ничего) — unit
+      failingStepWithTraceOffCapturesScreenshotOnly + browser offApplicationRecordsNoTrace; №2 (ZIP открывается
+      Trace Viewer'ом) — browser onFailureApplicationSealsATrace проверяет non-empty ZIP с магией PK\x03\x04;
+      №3 (поле потребляется) — EnvironmentUiApplicationResolverTest traceModeComesFromTheRegistry/absentDefaultOff.
+      Порядок «маскирование → скриншот → трейс» закреплён тестом через call-индексы FakeUiDriver
+      (failingStepWithTraceEnabledCapturesTraceAfterMask); срыв трейса логируется и не подменяет отказ шага
+      (throwingTraceIsLoggedAndKeepsScreenshotAndStepFailure). Обнаружен и устранён собственной сборкой дефект:
+      captureTrace звал tracing().stop без start() на OFF-приложении (снято guard traceEnabled). Закрытие
+      замечания ревью (MEDIUM-6): на зелёном прогоне активный трейс-буфер освобождается в close()
+      (releaseActiveTrace → tracing().stop() без файла) и артефакта не создаёт — подтверждено browser-тестом
+      greenRunReleasesTraceWithoutWritingAFile. browserTest 0 падений (включая новый
+      PlaywrightUiDriverTraceBrowserTest), полный build 0 падений,
+      checkstyle 0, JaCoCo >=80%. README получил раздел «Трейс» (документация тем же изменением). DoD «по
+      умолчанию поведение не изменилось» подтверждён OFF-тестом. Осталось ревью человеком — DONE не ставлю.
     priority: P1
     size: M
     uncertainty: MEDIUM
@@ -2382,17 +2486,17 @@ tasks:
     risk_ids: [PR-08, RISK-05]
     definition_of_ready: ["S013 смержен"]
     acceptance_criteria:
-      - "По умолчанию флаг выключен и ни трейса, ни видео не снимается"
+      - "По умолчанию флаг выключен и трейс не снимается"
       - "При включении ZIP открывается Playwright trace viewer'ом"
       - "Поле trace реестра перестаёт быть распарсенным и непотребляемым"
     negative_scenarios: ["включение флага уводит время сценария за NFR-03 -> флаг остаётся точечным инструментом разбора"]
-    test_requirements: ["browserTest с включённым флагом: файлы появились", "замер NFR-03 с флагом и без"]
-    security_requirements: ["видео содержит экран целиком — маскирование DOM (S017) обязательно активно; срок жизни (S018) применяется"]
+    test_requirements: ["browserTest с включённым флагом: ZIP появился", "замер NFR-03 с флагом и без"]
+    security_requirements: ["трейс снимается строго после маскирования скриншота (S017) — порядок «заклеить → снять» закрепляется тестом; срок жизни (S018) применяется к ZIP"]
     observability_requirements: []
     documentation_changes: ["stand-test-ui/README.md раздел trace"]
     definition_of_done: ["по умолчанию поведение не изменилось"]
-    out_of_scope: []
-    implementation_notes: "Самый тяжёлый из четырёх артефактов — поэтому за флагом и последним по порядку."
+    out_of_scope: ["видео (WebM) — по итогам ревью вынесено из S016: доставка видео на ветку отказа требует финализации после закрытия сессии и не реализована; фиксируется отдельной задачей, если потребуется"]
+    implementation_notes: "Самый тяжёлый из артефактов — поэтому за флагом и последним по порядку."
 
   - id: UITG-S017
     type: STORY
@@ -2406,8 +2510,31 @@ tasks:
     requirement_ids: [BR-35, SEC-05]
     artifact_sources: ["BRD SEC-05", "UiSecrets", "UiLocator.sensitive"]
     affected_modules: [stand-test-ui]
-    status: BLOCKED
-    status_reason: "Зависит от S013: маскировать нечего, пока артефакты не снимаются"
+    status: IN_REVIEW
+    status_reason: >-
+      Выполнена. UiDriver получил драйвер-агностичный шов maskSensitive(Collection<UiLocator>, Duration);
+      PlaywrightUiDriver реализует его через Page.ScreenshotOptions.setMask + setMaskColor («закрасить
+      поверх», не размыть — размытие пропустило бы значение в кадре), не трогая живой DOM. Ветка отказа
+      UiStepExecutor маскирует чувствительные зоны упавшего шага ДО captureScreenshot: его собственный
+      locator и capture-локаторы с sensitive(), и — критично — поля формы ui.login (username/password из
+      реестра), так что скриншот формы входа с введённым паролем содержит поле закрашенным (критерий
+      приёмки №1, SEC-05). Порядок «заклеить → снять» закреплён тестом (FakeUiDriver пишет call-строки;
+      asserts maskSensitive до captureScreenshot; перестановка в executer уронит тест). Сбой маскирования
+      ОТМЕНЯЕТ снятие — отсутствие скриншота безопаснее скриншота с секретом (neg №1); элемент, исчезший к
+      моменту маскирования, не считается зоной и фиксируется в диагностике (neg №2). ЧТО ПОДТВЕРЖДЕНО:
+      ui-unit: failingStepOnSensitiveLocatorMasksThenCaptures, failingStepOnPlainLocatorMakesNothingToMask,
+      throwingMaskAbortsTheCapture; login: failingLoginMasksTheCredentialFieldsBeforeCapture;
+      browserTest: sensitiveZoneIsMaskedInTheScreenshot (реальный Chromium: красный блок поверх поля
+      пароля, без маски — 0 таких пикселей). ДОПОЛНИТЕЛЬНО (закрытие замечания ревью HIGH-1): число
+      закрытых зон попадает не только в лог, но и в диагностику отказного шага — core-канал
+      FailureAttachments.failureDiagnostics() (default-метод), который DefaultScenarioRunner вливает в
+      StepResult.diagnostics, и UiEvidence (attachments + maskedZones), переносимый UiAssertionFailure/
+      UiInfrastructureFailure; подтверждено новым UiScenarioRunnerIntegrationTest
+      failingStepCarriesMaskedZoneCountInItsDiagnostics (настоящий DefaultScenarioRunner: FAILED StepEvent
+      несёт ui.masked.zones=1; до фикса диагноз был фиксирован одним exception.class). browserTest 199
+      PASSED / 0 FAILED; полный build (все модули) PASSED 1508 / 0; JaCoCo >=80% INSTRUCTION и checkstyle
+      maxWarnings=0 зелёные. DoD «входит в тот же
+      релиз, что S013» соблюдено: срез выполнен поверх рабочего дерева S013, в одном релизе с ним.
     priority: P0
     size: M
     uncertainty: MEDIUM
@@ -2448,8 +2575,24 @@ tasks:
     requirement_ids: [SEC-09]
     artifact_sources: ["BRD SEC-09", "UiRunSettings.artifactsDirectory()"]
     affected_modules: [stand-test-ui]
-    status: BLOCKED
-    status_reason: "Зависит от S013: срок жизни нечему применять, пока артефактов нет"
+    status: IN_REVIEW
+    status_reason: >-
+      Выполнена как следующая фактически готовая READY-задача после S015 (единственный depends_on S013 —
+      шов захвата — IN_REVIEW и реализован в рабочем дереве). Введён RunArtifactRetention (UITG-S018, SEC-09):
+      UiRunSettings получил компонент artifactRetention и системное свойство stand.test.ui.artifacts.retention.days
+      (по умолчанию 7 дней, «не дольше срока хранения отчётов CI»; обе старые формы конструктора 4/5-аргументные
+      сохранены, все существующие вызовы компилируются без правок). Первый прогон, реально открывший сессию
+      (UiStepExecutor.openSession, guarded AtomicBoolean «один раз за executor/JVM»), выметает из каталога артефактов
+      обычные файлы старше срока по last-modified; подметаемый поддерево storage-state полностью пропускается
+      (visitFile не учитывает ни один файл внутри него — секрет SEC-05 живёт своим жизненным циклом, negative №1).
+      Best-effort как снятие: каталог отсутствует, файл не читается, удаление сорвалось — WARN, прогон стартует,
+      ретенция никогда не подменяет отказ шага (negative №2). Подтверждено: RunArtifactRetentionTest (старый файл
+      удаляется / свежий остаётся / смешанный каталог — только старые / storage-state не выметается даже 30 дней /
+      отсутствующий корень -> 0) + UiRunSettingsTest (default 7d, свойство 14, «soon» и «0» — отказ-сверка).
+      Полный build PASSED (все модули, 1530 тестов / 0 падений, checkstyle 0, JaCoCo >=80%), browserTest PASSED
+      (0 падений). README получил раздел «Срок жизни артефактов» и строку в таблице конфигурации; матрица
+      прослеживаемости SEC-09 -> PARTIALLY_IMPLEMENTED (остаток — ретенция на стороне CI, конфигурация раннера).
+      Осталось ревью человеком — DONE не ставлю.
     priority: P1
     size: S
     uncertainty: LOW
@@ -2531,14 +2674,23 @@ tasks:
     requirement_ids: [SEC-06, BR-23, BR-27, BR-35]
     artifact_sources: ["GAP-03", "docs/ai-agent/.claude/hooks/detectors.json", "rules/stand-test-ui-guardrails.md"]
     affected_modules: [docs/ai-agent, stand-test-ai-schema]
-    status: BLOCKED
+    status: IN_REVIEW
     status_reason: >-
-      SP003 больше не блокер: перечень выразимых гейтов и рекомендуемая область из шести находок
-      названы в 30-ui-gate-expressibility-spike.md §7.1. Остаётся единственная зависимость — S007
-      (UI-ветка кита) в git: её содержимое существует untracked, но детектор ставится поверх правил,
-      которых в репозитории ещё нет. Карточка SP003 обещала перевод S020 в READY — фактически он
-      упирается в посадку, а не в spike
-    priority: P1
+      Выполнена. В detectors.json (обе копии бандла) добавлены шесть UI-специфичных находок —
+      UI_LOCATOR_OUTSIDE_PAGES (U2), UI_LOGIN_WITHOUT_ROLE (U5), XPATH_PATH_LOCATOR (U7),
+      UI_OPEN_OR_ASSERT_TEMPLATE (U9), EXPECT_EVENTUALLY_WITHOUT_WITHIN (U17) и UI_REPORT_STAND_ADDRESS
+      (U3-половина над Ui*Report.md); THREAD_SLEEP (U6) расширен драйверными ожиданиями
+      (page.waitForSelector/Timeout/LoadState, .waitFor) — реализовано в lib/scan.mjs (
+      runUiChain/runUiLocator/runUiTemplate/runReportAddress, проекция withoutComments для XPath и
+      driver-waits) в обеих копиях. Эталонный корпус кита остался немым (0 находок на
+      example-page-object, example-generated-ui-test, обоих шаблонах) — прогон сканера, а не чтение.
+      Каждая новая находка подтверждена парой: сработала на нагрузке (corpus/ui-orphaned-wait.java.txt —
+      все шесть) и не сработала на чистом (corpus/clean-ui-page.java.txt — 0). GuardrailScannerParityTest и
+      GuardDetectorCoverageTest расширены, счёт таблицы 18→24, kitOwn-словарь дополнен, GuardSarifOutputTest
+      // 18→24. Документы по §7.3 отчёта SP003 обновлены тем же изменением: stand-test-ui-guardrails.md,
+      ui-safety-checklist.md (Machine coverage), stand-test-pipeline.md, usage-guide.md, CLAUDE.md;
+      MANIFEST.json перегенерирован (266 файлов), паритет .claude/.opencode подтверждён. Полный build
+      зелёный (169 задач). Разблокирует S021 и T004
     size: M
     uncertainty: MEDIUM
     owner_role: SDK developer
@@ -2561,6 +2713,7 @@ tasks:
     documentation_changes: ["rules/stand-test-ui-guardrails.md", "MANIFEST.json"]
     definition_of_done: ["SEC-06 для UI-ветки переходит из PARTIALLY в IMPLEMENTED в покрытой части"]
     out_of_scope: ["невыразимые гейты — остаются человеческими и перечисляются в T004"]
+    priority: P1
     implementation_notes: "Сегодня 18 находок, UI-специфичных 0; над java применимы 12, над прозой 4."
 
   - id: UITG-T004
@@ -2573,8 +2726,34 @@ tasks:
     requirement_ids: [SEC-06]
     artifact_sources: ["PQ-06", "rules/stand-test-ui-guardrails.md"]
     affected_modules: [docs/ai-agent]
-    status: BLOCKED
-    status_reason: "Родительская Story заблокирована SP003"
+    status: IN_REVIEW
+    status_reason: >-
+      Выполнена этой сессией (2026-08-06) как следующая фактически готовая READY-задача после S021
+      (единственный depends_on S020 — IN_REVIEW, реализован в детекторах и scan.mjs). Перечень
+      неавтоматизируемых гейтов уже называли commonи правила (stand-test-ui-guardrails.md: строки
+      «The rest stay human: U4, U8, U10, U11a/b, U12, U14, U15, U16, U18, U19, U20») и чеклист
+      (ui-safety-checklist.md: таблица Machine coverage, строка «no detector in this kit — eye only»),
+      и текст «чистый хук != пройденное ревью» стоял в обоих — но обещание не было МАШИННО-проверяемо:
+      `stand-test-ai-schema` не содержал теста, который сверял бы перечень с фактическим составом
+      detectors.json, хотя правило ссылалось на «the stand-test-ai-schema test». Эта сессия поставила
+      его: новый `UiHumanGateCensusTest` (5 тестов) читает detectors.json из ОБЕИХ копий бакета и три
+      источника перечня, и сверяет их: (1) каждое правило «The rest stay human: <точно перечень>» в
+      правилах равно перечню в чеклисте; (2) каждый человеческий гейт (U4 semantic half, U8, U10,
+      U11a/b, U12, U14, U15, U16, U18, U19, U20) не имеет в фактических детекторах ни одной находки;
+      (3) перечень машинных гейтов (KNOWN_UI_RULES: UI_DISCOVERY_PARITY, UI_LOCATOR_OUTSIDE_PAGES,
+      UI_REPORT_STAND_ADDRESS, HARDCODED_STAND_URL, UI_LOGIN_WITHOUT_ROLE, THREAD_SLEEP, XPATH_LOCATOR,
+      UI_OPEN_OR_ASSERT_TEMPLATE, EXPECT_EVENTUALLY_WITHOUT_WITHIN) замкнут и точен относительно
+      detectors.json в обеих копиях; (4) паритет detector-таблиц .claude/.opencode; (5) фраза «A clean
+      hook run is still not a clean UI review» жива в обоих источниках. Negative-сценарий карточки
+      («детектор появился, а лист человеческого его не поимё<ель») закрыт анти-дрейфовой проверкой:
+      НОВЫЙ UI_* -rule в detectors.json, которого нет в перечне правил, роняет тест до того, как
+      документы и детектор разойдутся. ПРОВЕРЕНО падением (мутацией): удаление «U16» из human-перечня
+      правил роняет guardRule_andChecklist_nameTheHumanGates_andNoDetectorCoversOne. Полный
+      `:stand-test-ai-schema:test` зелёный (все тесты модуля, включая UiHumanGateCensusTest 5/5 и
+      BundleParityTest/GuardrailScannerParityTest=25/GuardDetectorCoverageTest), `./gradlew build` —
+      BUILD SUCCESSFUL (checkstyle 0, JaCoCo >=80%). Ассетов кита эта задача не добавляет — только
+      тест-сверку, поэтому MANIFEST.json/инвентарь не меняются; документация rules/checklist уже
+      подготовлена рабочим деревом S020/S021. Осталось ревью человеком — DONE не ставлю.
     priority: P1
     size: XS
     uncertainty: LOW
@@ -2595,6 +2774,51 @@ tasks:
     out_of_scope: []
     implementation_notes: "Практика уже применена и снимается только по мере появления детекторов."
 
+  - id: UITG-T005
+    type: TASK
+    title: "Освобождение масок после снятого артефакта в PlaywrightUiDriver"
+    description: >-
+      PlaywrightUiDriver хранит maskLocators (запомненные maskSensitive) в поле и применяет их к следующему
+      captureScreenshot. Сейчас эти локаторы не очищаются после применения, поэтому у маски
+      недекларируемый срок жизни: она живёт до следующего maskSensitive, а не до конца одного артефакта.
+    business_outcome: "Артефакт несёт ровно свои маски; будущий второй артефакт того же отказа (S016 — трейс и видео) не унаследует чужие зоны молча."
+    wave: 1
+    parent_id: UITG-F004
+    requirement_ids: [BR-35, SEC-05]
+    artifact_sources: ["stand-test-ui/src/main/java/.../playwright/PlaywrightUiDriver.java", "код-ревью UITG-S017 (MEDIUM)"]
+    affected_modules: [stand-test-ui]
+    status: IN_REVIEW
+    status_reason: >-
+      Выполнена. captureScreenshot теперь расходует маску: переносит зоны в локальный список и очищает
+      maskedLocators до само­го снятия, поэтому следующий артефакт того же драйвера не наследует чужую маску
+      (контракт «маска живёт ровно один артефакт», UITG-T005/SEC-05). Подтверждено новым browser-тестом
+      PlaywrightUiDriverBrowserTest.maskedZoneIsNotInheritedByTheNextCapture: maskSensitive →
+      captureScreenshot (красный блок есть) → captureScreenshot без нового maskSensitive (красного блока НЕТ);
+      повторная маскировка нового набора даёт ровно новые зоны (очистка перед ней). browserTest 200/0,
+      полный build 1508/0.
+      Исходная постановка задачи (бэкграунд): Заведена по ревью UITG-S017: java-reviewer отметил MEDIUM — maskedLocators очищаются только внутри maskSensitive (при следующей маскировке), а не после снятия артефакта. Сегодня безвредно (на отказной ветке один скриншот на прогон-убийство), но контракт шва обещает «маска держится ровно один артефакт», и S016 снимает несколько артефактов подряд (скриншот + трейс) — тогда унаследованная маска станет видима.
+    priority: P1
+    size: XS
+    uncertainty: LOW
+    owner_role: SDK developer
+    depends_on: [UITG-S017]
+    blocks: []
+    external_dependencies: []
+    adr_dependencies: []
+    risk_ids: [RISK-05]
+    definition_of_ready: ["S017 смержен (шов captureScreenshot с маской присутствует)"]
+    acceptance_criteria:
+      - "После captureScreenshot замаскированные локаторы не применяются к следующему скриншоту того же драйвера"
+      - "Повторная маскировка другого набора зон не наследует прежние"
+    negative_scenarios: ["снятие артефакта без освобождения масок -> следующий скриншот снятого не XOR зоны -> утечка/шум"]
+    test_requirements: ["unit на PlaywrightUiDriver: две captureScreenshot подряд, вторая без maskSensitive, не несёт маски первой + тест повторной маскировки нового набора"]
+    security_requirements: ["SEC-05: маска в силе ровно на тот артефакт, ради которого она была запрошена"]
+    observability_requirements: []
+    documentation_changes: ["stand-test-ui/README.md раздел sensitive (если меняется контракт)"]
+    definition_of_done: ["маска не переживает ни одного артефакта без повторного maskSensitive; регресс зелёный"]
+    out_of_scope: ["инжекция DOM-масок (S017 уже делает закрашивание через setMask)"]
+    implementation_notes: "Очистка перед применением (в начале captureScreenshot) либо после (в finally); не трогать живой DOM — маски только через setMask."
+
   - id: UITG-S021
     type: STORY
     title: "Детектор расхождения «локатор в тесте — локатор в отчёте разведки»"
@@ -2607,13 +2831,30 @@ tasks:
     requirement_ids: [BR-03, BR-05, SEC-06]
     artifact_sources: ["GAP-03", "кейс ui-stale-discovery-testid-renamed", "кейс ui-fragile-locators-no-testid"]
     affected_modules: [docs/ai-agent]
-    status: BLOCKED
+    status: IN_REVIEW
     status_reason: >-
-      SP003 выполнен и признал задачу выполнимой: шаблон отчёта разведки — фиксированная таблица с
-      канонической колонкой Chosen locator, разбор которой детерминирован (30-ui-gate-expressibility-spike.md
-      §7.2), тем же ходом закрываются кросс-артефактные половины U18 и U19. Остаётся зависимость от
-      базовых детекторов S020. Условие из отчёта: вердикт формулируется как «локатор не прослеживается
-      до отчёта», а не «выдуман», и ui-stale-discovery-testid-renamed идёт в негативные тесты
+      Выполнена. Гейт U1 переведён из «только глаза» в машинно-проверяемый: в detectors.json (обе
+      копии бандла) добавлена 25-я находка UI_DISCOVERY_PARITY (rule uiDiscoveryParity, BLOCK,
+      appliesTo java) — локатор Page Object, который не прослеживается до колонки «Chosen locator»
+      UiDiscoveryReport.md, даёт находку. Отчёт разведки — файл другого артефакта, поэтому подаётся
+      той же дорожкой, что allowlist окружений: `scan` получил `--discovery <path>`; заявленный и
+      отсутствующий на диске отчёт — сам по себе BLOCK (negative-сценарий «генерация без разведки не
+      принимается»). Нормализация обеих сторон к `<strategy>=<value>` (testId=…, role=<role>:<name>,
+      label=…, text=…, css=…), и колонка отчёта ищется по её ЗАГОЛОВКУ, а не по фиксированному индексу —
+      добавленная перед ней колонка не сдвигает парсинг (negative-сценарий «записан в отчёте иначе»).
+      ЧЕМ ПОДТВЕРЖДЕНО: (1) вручную на реальном seeded-отчёте ui-stale-discovery-testid-renamed —
+      Page Object со сдвинутым testId `requestStatus` (в отчёте `request-status`) даёт находку, а
+      собранный по отчёту 1:1 молчит; (2) эталонный example-page-object кита против
+      ui-discovery-report-template — 0 ложных срабатываний (критерий приёмки №3); (3) три теста
+      GuardDetectorCoverageTest — непрослеживаемый локатор, чистая страница молчит, отсутствующий
+      отчёт → BLOCK. GuardrailScannerParityTest расширен до 25 (таблица) и kitOwn; GuardSarifOutputTest
+      — 24→25 в двух местах. Документация тем же изменением: stand-test-ui-guardrails.md (U1 переведён
+      в машинный список), ui-safety-checklist.md (Machine coverage U1 → yes),
+      stand-test-ui-safety-review/SKILL.md, stand-test-pipeline.md и usage-guide (25 находок / семь
+      UI-специфичных) в ОБЕИХ копиях бандла; MANIFEST.json перегенерирован (266 файлов), паритет
+      .claude/.opencode подтверждён (BundleParityTest, KitManifestTest). Полный build зелёный: 1533
+      теста / 0 падений / 1 намеренный пропуск. Разблокирует: никого напрямую (blocks: []) — снимает с
+      U1 статус «только глаз». Осталось ревью человеком — DONE не ставлю.
     priority: P1
     size: M
     uncertainty: MEDIUM
@@ -2703,11 +2944,26 @@ tasks:
     requirement_ids: [KPI-3, KPI-4, BR-01, BR-05, BR-10, BR-11]
     artifact_sources: ["GAP-06", "LocalUiTestApplication.java", "docs/agent-evaluation/dataset/cases/ui-*"]
     affected_modules: [stand-test-ui, docs/agent-evaluation]
-    status: BLOCKED
+    status: IN_REVIEW
     status_reason: >-
-      SP001 выполнен и назвал область: два экрана (/requests/new, /requests), одиннадцать элементов,
-      ~185 строк в приложении плюс обязательный тест-парити против шести подсаженных отчётов
-      (31-ui-dom-convergence-spike.md §4). Остаются ADR007 (решение не принято) и S008 (посадка)
+      Выполнена (UITG-S023). Домен дубля приведён к корпусу по варианту А ADR-UI-011:
+      LocalUiTestApplication.java в stand-test-ui/src/test получает два экрана — «Обращение в поддержку»
+      /requests/new (Тема/Описание/Отправить без data-testid, статус request-status, номер request-number,
+      отложенная валидация description-error с удалением узла из DOM) и «Мои обращения» /requests
+      (фильтр Статус + Показать, таблица ровно на 12 строк без caption/aria-label, неуникальная кнопка
+      Удалить, скрытый диалог подтверждения), плюс POST /api/requests с минтом номера RQ-… и отказом
+      дубликата темы (409) — единый механизм, заставляющий тестовые данные нести ${testRunId}.
+      Обязательный тест-парити ADR-011 §3 исполнен UiDuplicateDomParityTest (9 тестов): читает Chosen
+      locator шести подсаженных отчётов и сверяет их с отданным по HTTP HTML (элемент есть, число
+      совпадений то (12 для .requests-table__*), data-testid отсутствует где отчёт пишет —), плюс POST-контракт
+      (200 минт RQ-, дубликат 409, GET экспортирует 12). Браузерные тесты двух экранов — UiRequestsScreensBrowserTest
+      (4: кнопка disabled→enabled, отложенная валидация появляется/исчезает, таблица 12 строк и Удалить
+      неуникален, перерисовка после фильтра). Полный build зелёный (checkstyle 0, JaCoCo), browserTest
+      зелёный, stand-test-ai-schema:test включает EvaluationCaseSchemaValidationTest зелёный (схемная
+      валидация набора не задета). execution.outcome остаётся NOT_RUN — он пишется фактическим прогоном
+      stand-batch.mjs против дубля, а не правкой карточки; рядом с любым результатом дубля пишется
+      «дубль, не живой стенд» (README набора и readiness обновлены тем же изменением). Разблокирует: UITG-V004
+      (сбор KPI-1/3/4/8/9) получил вход KPI-3/KPI-4 на дубле.
     priority: P1
     size: M
     uncertainty: MEDIUM

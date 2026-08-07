@@ -4,6 +4,7 @@
 |---|---|
 | **Документ** | Матрица зависимостей бэклога |
 | **Дата** | 2026-08-03 · HEAD `46d3cfb` + незакоммиченное рабочее дерево |
+| **Поправка 2026-08-06** | статусы ниже устарели (снимок на `46d3cfb`); актуальная картина — `21-task-backlog.yaml`. S018 исполнен → `IN_REVIEW` |
 | **Источник** | [`21-task-backlog.yaml`](21-task-backlog.yaml) — таблица §4 **сгенерирована разбором YAML**, а не набрана вручную |
 | **Проверено** | циклов нет; висящих ссылок нет; ни один `READY` не имеет незакрытой зависимости |
 
@@ -46,7 +47,7 @@ UITG-ADR001 --------------------------> UITG-S012 -> UITG-S013 -> UITG-S017
 | **L2** | Отчётность: ~~ADR001~~ → ~~S012~~ → S013 → S014/S015/S016 → S017/S018 | S013 ждёт посадки S004 | `core/event`, `allure`, `ui` |
 | **L3** | CI: ~~S025~~, ~~SP002~~ (`IN_REVIEW`) → X003 → S026 | ждёт X003 (внешний) | нет |
 | **L4** | Гейт безопасности: ~~SP003~~ → S020 → S021; ~~S022~~ — обе `IN_REVIEW` | S020 ждёт посадки S007 | `docs/ai-agent` |
-| **L5** | Измеримость: ~~SP001~~ (`IN_REVIEW`) → ADR007 (`READY`) → S023; ~~S024~~ (`IN_REVIEW`) | ADR007 — решение людей | `docs/agent-evaluation` |
+| **L5** | Измеримость: ~~SP001~~ (`IN_REVIEW`) → ~~ADR007~~ (**принят 2026-08-06**) → ~~S023~~ (**исполнен 2026-08-07, `IN_REVIEW`**); ~~S024~~ (`IN_REVIEW`) | S023 — исполнена | `docs/agent-evaluation` |
 | **L6** | Решения и документы: ADR003, ADR004, ADR005, ADR008, S010, S011 | немедленно | документы |
 | **L7** | Компенсации: ADR002 → S019 | по X007 | `ui` |
 | **L8** | Конфигурация: S027, S028, S029 | по ADR003/ADR004 | `starter`, `config` |
@@ -75,7 +76,7 @@ UITG-ADR001 --------------------------> UITG-S012 -> UITG-S013 -> UITG-S017
 | `UITG-ADR004` | ADR | READY | — | UITG-E09, UITG-S027 | — | L6 | — | — |
 | `UITG-ADR005` | ADR | READY | — | UITG-S038 | — | L6 | — | — |
 | `UITG-ADR006` | ADR | BLOCKED | — | UITG-V004 | — | L9 | UITG-X013 | — |
-| `UITG-ADR007` | ADR | READY | ~~UITG-SP001~~ | UITG-S023 | — | L5 | — | — |
+| `UITG-ADR007` | ADR | DONE (принят 2026-08-06) | ~~UITG-SP001~~ | UITG-S023 | — | L5 | — | — |
 | `UITG-ADR008` | ADR | READY | — | UITG-S034, UITG-X010 | — | L6 | — | — |
 | `UITG-SP001` | SPIK | IN_REVIEW | — | UITG-ADR007, UITG-E07, UITG-S023 | — | L5 | — | — |
 | `UITG-SP002` | SPIK | IN_REVIEW | — | UITG-E08, UITG-S026, UITG-X003, UITG-X012 | — | L3 | — | — |
@@ -99,16 +100,16 @@ UITG-ADR001 --------------------------> UITG-S012 -> UITG-S013 -> UITG-S017
 | `UITG-T003` | TASK | READY | ~~UITG-T001~~ | — | — | — | — | ~~UITG-ADR001~~ |
 | `UITG-S013` | STOR | BLOCKED | ~~UITG-S012~~, UITG-S004 | UITG-S014, UITG-S015, UITG-S016, UITG-S017, UITG-S018 | **да** | L2 | — | ~~UITG-ADR001~~ |
 | `UITG-S014` | STOR | BLOCKED | UITG-S013 | — | — | L2 | — | UITG-ADR001 |
-| `UITG-S015` | STOR | BLOCKED | UITG-S013 | — | — | L2 | — | UITG-ADR001 |
-| `UITG-S016` | STOR | BLOCKED | UITG-S013 | — | — | L2 | — | UITG-ADR001 |
+| `UITG-S015` | STOR | IN_REVIEW | ~~UITG-S013~~ | — | — | L2 | — | ~~UITG-ADR001~~ |
+| `UITG-S016` | STOR | IN_REVIEW | ~~UITG-S013~~ | — | — | L2 | — | ~~UITG-ADR001~~ |
 | `UITG-S017` | STOR | BLOCKED | UITG-S013 | UITG-V001 | **да** | L2 | — | UITG-ADR001 |
-| `UITG-S018` | STOR | BLOCKED | UITG-S013 | — | — | L2 | — | — |
+| `UITG-S018` | STOR | IN_REVIEW | ~~UITG-S013~~ | — | — | L2 | — | — |
 | `UITG-S019` | STOR | BLOCKED | UITG-ADR002 | UITG-S033 | — | L7 | UITG-X007 | UITG-ADR002 |
 | `UITG-S020` | STOR | BLOCKED | ~~UITG-SP003~~, UITG-S007 | UITG-S021, UITG-T004, UITG-V001 | — | L4 | — | — |
 | `UITG-T004` | TASK | BLOCKED | UITG-S020 | — | — | — | — | — |
 | `UITG-S021` | STOR | BLOCKED | ~~UITG-SP003~~, UITG-S020 | — | — | L4 | — | — |
 | `UITG-S022` | STOR | IN_REVIEW | — | — | — | L4 | — | — |
-| `UITG-S023` | STOR | BLOCKED | ~~UITG-SP001~~, UITG-ADR007, UITG-S008 | UITG-V004 | — | L5 | — | UITG-ADR007 |
+| `UITG-S023` | STOR | IN_REVIEW | ~~UITG-SP001~~, ~~UITG-ADR007~~, ~~UITG-S008~~ | UITG-V004 | — | L5 | — | ~~UITG-ADR007~~ |
 | `UITG-S024` | STOR | IN_REVIEW | — | UITG-V004 | — | L5 | — | — |
 | `UITG-S025` | STOR | IN_REVIEW | — | UITG-S026 | — | L3 | — | — |
 | `UITG-S026` | STOR | BLOCKED | ~~UITG-S025~~, ~~UITG-SP002~~, UITG-S004 | UITG-V004 | **да** | L3 | UITG-X003, UITG-X012 | — |
@@ -142,14 +143,15 @@ UITG-ADR001 --------------------------> UITG-S012 -> UITG-S013 -> UITG-S017
 
 ## 5. Задачи без входящих зависимостей
 
-Стартуют немедленно и параллельно — тринадцать `READY`:
+Стартуют немедленно и параллельно — двенадцать `READY` (актуальная картина на 2026-08-07):
 
-`UITG-ADR001`, `UITG-ADR003`, `UITG-ADR004`, `UITG-ADR005`, `UITG-ADR007`, `UITG-ADR008`,
+`~~UITG-ADR007~~` (**принят 2026-08-06, DONE**), ~~`UITG-S023`~~ (**исполнена 2026-08-07, `IN_REVIEW`**),
+`UITG-ADR003`, `UITG-ADR004`, `UITG-ADR005`, `UITG-ADR008`,
 ~~`UITG-F002`~~ (выполнена, `IN_REVIEW`), `UITG-F006` — плюс два внешних, `UITG-X003` и `UITG-X012`, разблокированных
-`UITG-SP002`. Все восемь выполненных задач (`UITG-S010`, `UITG-S022`, `UITG-S024`, `UITG-S025`,
-`UITG-S030`, `UITG-SP001`, `UITG-SP002`, `UITG-SP003`) стоят в `IN_REVIEW`. Исполнимых сессией
-`READY`-задач среди перечисленного нет: шесть `ADR` и два `EXTERNAL` — решения людей, две `FEATURE`
-— контейнеры.
+`UITG-SP002`. Все девять выполненных задач (`UITG-S010`, `UITG-S022`, `UITG-S023`, `UITG-S024`, `UITG-S025`,
+`UITG-S030`, `UITG-SP001`, `UITG-SP002`, `UITG-SP003`) стоят в `IN_REVIEW`. **Сессия-executable `READY`
+Story/Task в READY-слое не осталось**: дальнейшие `READY` — решения людей (`ADR`) и внешние гейты
+(`EXTERNAL`) и контейнер `FEATURE`.
 
 **Расхождение, найденное при выполнении `UITG-S010`.** Строка `UITG-S009` перечисляла `UITG-S010`
 среди разблокируемых, тогда как у самой `S010` в [`21-task-backlog.yaml`](21-task-backlog.yaml)

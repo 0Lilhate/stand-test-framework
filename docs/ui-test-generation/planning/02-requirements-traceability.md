@@ -68,6 +68,11 @@
 | BR-19 | Локальный headed-прогон | M | `IMPLEMENTED` | `UiRunSettings.HEADLESS_PROPERTY`; `stand-test-ui/build.gradle.kts:48` пробрасывает `-Dstand.test.ui.headless=false` | — |
 | BR-20 | Grid/Selenoid | S | `NOT_IMPLEMENTED` | упоминания только в комментариях `UiDriverFactory:10`, `UiDriver:11` («a connection to a remote grid — each is a different factory») | новая реализация `UiDriverFactory` |
 | BR-21 | Артефакты падения: скриншот, трейс/видео, консоль, сеть | M | `NOT_IMPLEMENTED` + `ARCHITECTURAL_CONFLICT` | `core/event/Attachment.java:26` — `record Attachment(String name, String mediaType, String content)`; **бинарного канала нет**. `trace` в реестре парсится (`UiApplicationDefinition:37`) и ничем не потребляется | расширение контракта `Attachment` в `core` + снятие артефактов + сток в Allure. ADR-UI-005 Proposed; форма — Q-01 |
+
+> **Помітка (сессии S012/S013/S016).** Бинарный канал вложений (`Attachment#file` + сток), скриншот и трейс
+> уже реализованы; колонка `NOT_IMPLEMENTED` здесь отвечает оставшимся артефактам (консоль `S014`, сеть
+> `S015`) и полному объёму BR-21. `trace` реестра теперь потребляется (S016); **видео вынесено из S016 в
+> `out_of_scope`** (см. `21-task-backlog.yaml`).
 | BR-22 | Отчёт: ids, шаги, слой отказа | M | `PARTIALLY_IMPLEMENTED` | MDC несёт `scenarioId`/`testRunId`/`correlationId`/`environment` (`DefaultScenarioRunner:543–546`) и `stepId`/`stepType`/`stepIndex` (551–553); сообщение об отказе — `Step [i/total] 'id' (type)` | явного поля «слой» нет — выводится из префикса типа; отчётная часть зависит от BR-21 |
 | BR-23 | Только единый await; `Thread.sleep` отсекается гейтом | M | `PARTIALLY_IMPLEMENTED` | SDK не предоставляет иного ожидания: `UiStepExecutor:19,66` — `Awaiter`; `ForbiddenOperation.THREAD_SLEEP` существует; детектор 6 кита отвергает запись файла с `Thread.sleep` | рантайм-валидатор кода не видит: `Thread.sleep` в теле теста ловится **только** хуком кита; под opencode хук не привязан к событиям |
 | BR-24 | Идентификация и вычистка UI-данных, политика `ALWAYS` | M | `NOT_IMPLEMENTED` | компенсации регистрирует только БД (`DbStepExecutor:191`); `CleanupPolicy` содержит `ALWAYS`, но для UI регистрировать нечего | D-9; ADR-UI-007; способ удаления по приложениям — OQ-06 |
@@ -115,7 +120,7 @@
 | SEC-06 | Гейт безопасности после генерации | `PARTIALLY_IMPLEMENTED` | `record-gate` перезапускает детерминированную половину и не пишет `PASS` поверх блокирующей находки; субагент-ревьюер объявлен | **в `detectors.json` 0 UI-специфичных находок** (18 всего, над java применимы 12), поэтому сегодня все 20 гейтов U1…U20 проверяются глазами. Сколько из них выразимо — измерено spike `UITG-SP003` ([`30-ui-gate-expressibility-spike.md`](30-ui-gate-expressibility-spike.md)): 9 выразимы, 11 частично, 1 невыразим |
 | SEC-07 | Техучётка агента с минимальными правами | `EXTERNAL_DEPENDENCY` | — | владельцы стендов |
 | SEC-08 | Синтетические ПД | `PARTIALLY_IMPLEMENTED` | детектор 14 (ПД в фикстуре), работает и над прозой | подтверждение ИБ — G-4 |
-| SEC-09 | Срок жизни артефактов | `NOT_IMPLEMENTED` | артефактов нет | зависит от BR-21 |
+| SEC-09 | Срок жизни артефактов | `PARTIALLY_IMPLEMENTED` | `RunArtifactRetention` чистит каталог артефактов по настраиваемому сроку (`stand.test.ui.artifacts.retention.days`, по умолчанию 7 дней) первым открывшим сессию прогоном; под метлой не «выметается» каталог `storage-state` (сессии живут своим правилом); best-effort, WARN — см. `UITG-S018` | хранение и вычистка отчётов **на стороне CI** — конфигурация раннера (`X003`/`UITG-S026`) |
 | SEC-10 | Разведка под учёткой без необратимых прав | `PARTIALLY_IMPLEMENTED` | поле есть: `UiAuthConfig.discoveryAccountRef` (строки 30, 43, 52) | **машинной проверки на стадии разведки нет** — сами правила это фиксируют: разведка не выполняет `ui.login`, поэтому сверка ростера не запускается; выделение учётки — G-5 |
 
 ## 5. Гейты старта G-1…G-6

@@ -222,9 +222,13 @@ cannot, so it carries a *discovery* stage against the live DEV/IFT UI (registry 
 `discovery-account-ref`, no irreversible action) and a source order of KB → discovery → question.
 Locators live in Page Objects, `ui.*` is Java-only (no declarative surface), and every generation ends
 in the eight-section BR-07 report plus a preserved snapshot of the original generation — the diff base
-without which KPI-4 is unobservable. Not done and deliberately so: **`detectors.json` carries no
-UI-specific detector** (backlog S-5.4), so the UI half of the safety gate is eye-only and every asset
-says so; UI entries in the knowledge base are S-5.3.
+without which KPI-4 is unobservable. `UITG-S020` (backlog S-5.4) shipped the UI half of the safety
+gate: `detectors.json` now carries six UI-specific detectors — `UI_LOCATOR_OUTSIDE_PAGES`,
+`UI_LOGIN_WITHOUT_ROLE`, `XPATH_LOCATOR`, `UI_OPEN_OR_ASSERT_TEMPLATE`,
+`EXPECT_EVENTUALLY_WITHOUT_WITHIN`, `UI_REPORT_STAND_ADDRESS` — and `THREAD_SLEEP` is extended to
+driver-level waits; the gates that stay eye-only (U1, U4 (semantic half), U8, U10, U11a/b, U12, U14,
+U15, U16, U18, U19, U20) are enumerated in `ui-safety-checklist.md`, and every asset still says that
+a clean hook run is not a clean UI review; UI entries in the knowledge base remain S-5.3.
 
 Three artefacts of that effort survive because they were written before it and do not depend on it:
 `docs/agent-analysis/current-state-analysis.md` (findings A-01…A-17 about the kit, the SDK and this
