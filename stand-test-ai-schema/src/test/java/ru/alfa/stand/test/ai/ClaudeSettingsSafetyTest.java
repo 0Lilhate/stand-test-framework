@@ -75,6 +75,62 @@ class ClaudeSettingsSafetyTest {
     private static final List<String> REQUIRED_DENY_SUBJECTS = List.of(
             "settings.json", "rules", "hooks", "agents", "rm -rf", "git push");
 
+    /**
+     * Tool wrappers the host does not apply to a path rule, and therefore may not appear in one.
+     *
+     * <p>Both were shipped for months and both were inert. {@code MultiEdit} names a tool that no
+     * longer exists at all; {@code Write(path)} names one that does, but file permissions are matched
+     * on {@code Edit(path)} alone — an {@code Edit} rule already governs every file-editing tool,
+     * {@code Write} included. The kit carried nine of each, so every session opened with a screenful
+     * of the host saying so before its first useful line.
+     *
+     * <p>Nothing was unprotected by this: each dead rule sat beside an {@code Edit} rule on the same
+     * path, which is why the perimeter tests stayed green and nobody looked. That is the trap worth
+     * naming — an ineffective rule reads exactly like protection, so the next path added with only a
+     * {@code Write} spelling would have been genuinely unguarded and equally invisible.
+     *
+     * <p>The host's wording is deliberately NOT asserted anywhere: it belongs to the host and changes
+     * with its version. What is pinned is the spelling in our file.
+     */
+    private static final List<String> INEFFECTIVE_SPELLINGS = List.of("Write(", "MultiEdit(");
+
+    /**
+     * Every path the shipped policy guards, as the host actually reads it.
+     *
+     * <p>Pinned as a set rather than a count so that removing a protection fails loudly and states
+     * which one. This is what makes "the dead spellings were removed without narrowing anything"
+     * checkable rather than asserted: the set is unchanged by that removal, and any later edit that
+     * does narrow it lands here.
+     */
+    private static final Set<String> PROTECTED_DENY_PATHS = new TreeSet<>(List.of(
+            "./**/.editorconfig",
+            "./**/.env*",
+            "./**/.gitignore",
+            "./**/checkstyle.xml",
+            "./**/detekt-config.yml",
+            "./**/detekt.yml",
+            "./**/pmd-ruleset.xml",
+            "./**/pmd.xml",
+            "./**/spotbugs-exclude.xml",
+            "./**/spotbugs-include.xml",
+            "./**/tomcat/conf/context.xml",
+            "./**/tomcat/conf/server.xml",
+            "./**/tomcat/conf/web.xml",
+            "./.claude/agents/**",
+            "./.claude/commands/**",
+            "./.claude/hooks/**",
+            "./.claude/rules/**",
+            "./.claude/settings.json",
+            "./.claude/skills/**",
+            "./.claude/workflows/**",
+            "./knowledge-base/schema/**"));
+
+    /** The same, for the paths the policy stops to ask about. */
+    private static final Set<String> PROTECTED_ASK_PATHS = new TreeSet<>(List.of(
+            "./**/application*.yml",
+            "./knowledge-base/**",
+            "./stand-test-environments.yml"));
+
     private static Path repositoryRoot() {
         Path current = Paths.get("").toAbsolutePath();
         for (int depth = 0; depth < 5 && current != null; depth++) {
@@ -194,6 +250,39 @@ class ClaudeSettingsSafetyTest {
                 .toList();
 
         assertThat(found).as("the bundle is copied into other repositories; a rule naming this machine is at best inert there and at worst a leak").isEmpty();
+    }
+
+    @Test
+    @DisplayName("no permission rule is written in a spelling the host does not apply")
+    void permissionRules_useOnlySpellingsTheHostApplies() {
+        List<String> ineffective = new ArrayList<>();
+        for (String section : List.of("deny", "ask", "allow")) {
+            rules(section).stream()
+                    .filter(rule -> INEFFECTIVE_SPELLINGS.stream().anyMatch(rule::startsWith))
+                    .forEach(rule -> ineffective.add(section + ": " + rule));
+        }
+
+        assertThat(ineffective)
+                .as("a rule the host does not apply is worse than no rule: it reads as protection, so the next path added with only this spelling is unguarded and nobody notices — use Edit(path), which governs every file-editing tool")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("the set of guarded paths is exactly the pinned one — no removal passes as a spelling cleanup")
+    void guardedPaths_areExactlyThePinnedSet() {
+        Set<String> denied = new TreeSet<>();
+        rules("deny").stream().filter(rule -> rule.startsWith("Edit(")).forEach(rule -> denied.add(inner(rule)));
+        Set<String> asked = new TreeSet<>();
+        rules("ask").stream().filter(rule -> rule.startsWith("Edit(")).forEach(rule -> asked.add(inner(rule)));
+
+        assertThat(denied).as("the deny perimeter must be parsed, not empty — a vacuous set would agree with anything").isNotEmpty();
+        assertThat(denied).as("a path left the deny perimeter; removing an ineffective SPELLING must never remove a protection").isEqualTo(PROTECTED_DENY_PATHS);
+        assertThat(asked).as("a path left the ask perimeter").isEqualTo(PROTECTED_ASK_PATHS);
+    }
+
+    /** The argument of a rule, with the tool wrapper stripped but the path left as written. */
+    private static String inner(String rule) {
+        return rule.substring(rule.indexOf('(') + 1, rule.lastIndexOf(')'));
     }
 
     @Test

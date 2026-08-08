@@ -57,7 +57,7 @@
     ".claude/rules/stand-test-guardrails.md": "sha256:ecf229d76457ae3c97c07a30e5946e14d01eb73dfad7f06722daa51218c7e5df",
     ".claude/rules/stand-test-pipeline.md": "sha256:d112513a5e6d4bbca1af443ce7bd7c083900e9946b6630fa57e13200c8ebd521",
     ".claude/rules/stand-test-ui-guardrails.md": "sha256:dca99f074a39a1ad24292713ffb3e1df4bd97aeb68fc8e5a9e6bba451e7d9489",
-    ".claude/settings.json": "sha256:83de360b8121c9637a35d88fef8beb6a5b8da4321d84ee835be6b0ec48d9ec44",
+    ".claude/settings.json": "sha256:f56f29ab0d18119c795095b7be5a2fc3e9c7bc365fab93ded4655ca473d36d4d",
     ".claude/skills/stand-test-case-analysis/SKILL.md": "sha256:505dc97b87415649937c8ea2b2a3f4a1b7cd4b90bfd073d7a1cf385d3d61acd5",
     ".claude/skills/stand-test-case-analysis/example-text-case.md": "sha256:8e0f2f9330159f5065d5930595f8ce985b197509c1637913e967938aa1c4814d",
     ".claude/skills/stand-test-case-analysis/test-case-analysis-template.md": "sha256:ca90e79850cf094dba2951213de0d972f26d1ce53d36f5c44eeb65b24541c9df",
