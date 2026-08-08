@@ -1,6 +1,7 @@
 package ru.alfa.stand.test.starter;
 
 import java.util.List;
+import org.springframework.beans.factory.BeanClassLoaderAware;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -57,7 +58,22 @@ import ru.alfa.stand.test.rest.RestStepExecutor;
 @AutoConfiguration
 @EnableConfigurationProperties(StandTestProperties.class)
 @ConditionalOnProperty(prefix = "stand.test", name = "enabled", havingValue = "true", matchIfMissing = true)
-public class StandTestAutoConfiguration {
+public class StandTestAutoConfiguration implements BeanClassLoaderAware {
+
+    /**
+     * The context's class loader, used to discover step executors registered through the SPI.
+     *
+     * <p>Taken through {@link BeanClassLoaderAware} rather than as a parameter of the runner
+     * {@code @Bean} method, so that method's public signature stays exactly as consumers have always
+     * seen it. Anyone who calls it directly — the starter cannot know whether someone does — keeps
+     * compiling, and the discovery added by ADR-UI-008 costs them nothing.
+     */
+    private ClassLoader beanClassLoader;
+
+    @Override
+    public void setBeanClassLoader(ClassLoader classLoader) {
+        this.beanClassLoader = classLoader;
+    }
 
     /**
      * Structural + guardrail validator (empty-registry, destructive-SQL, whitelist checks).
@@ -97,10 +113,16 @@ public class StandTestAutoConfiguration {
     }
 
     /**
-     * Scenario runner over every registered {@link StepExecutor} (an empty list when no adapter is
-     * present) plus the validator, registry and publisher.
+     * Scenario runner over every registered {@link StepExecutor} plus the validator, registry and
+     * publisher.
      *
-     * @param executors all step executors on the context
+     * <p>The executor list is the declared beans <em>and</em> whatever the context's class loader
+     * registers through {@code META-INF/services} — see {@link StepExecutorDiscovery} for why, and for
+     * the rule that a declared bean always wins. This is what lets an adapter that ships only an SPI
+     * registration, {@code stand-test-ui} being the one that prompted it, work on the Spring path with
+     * no bean of its own, exactly as it already did on plain JUnit (ADR-UI-008).
+     *
+     * @param executors all step executors declared as beans on the context (empty when no adapter is present)
      * @param validator the scenario validator
      * @param environmentRegistry the environment registry
      * @param reportingEventPublisher the reporting publisher
@@ -113,7 +135,8 @@ public class StandTestAutoConfiguration {
             ScenarioValidator validator,
             EnvironmentRegistry environmentRegistry,
             ReportingEventPublisher reportingEventPublisher) {
-        return new DefaultScenarioRunner(executors, validator, environmentRegistry, reportingEventPublisher);
+        List<StepExecutor> merged = StepExecutorDiscovery.merge(executors, beanClassLoader);
+        return new DefaultScenarioRunner(merged, validator, environmentRegistry, reportingEventPublisher);
     }
 
     /**

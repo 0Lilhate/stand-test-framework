@@ -97,10 +97,21 @@ with the unhelpful `Unknown field '<section>'`. The rules (shared with the Sprin
 
 | Declared | Behaviour |
 |---|---|
-| absent | read as `1` — every file written before versioning existed loads unchanged |
-| ≤ supported | read |
+| absent | read as `1` — every file written before versioning existed loads unchanged; warned about, because 1 is behind |
+| < supported | read, plus one `WARN` per document load |
+| = supported | read, silently |
 | > supported | refused with a message naming the file's version, the supported one and the action (upgrade `stand-test-*`) |
 | not a whole number, or ≤ 0 | configuration error (fail-closed) |
+
+**There is no compatibility window** (ADR-UI-004). Every version from `1` up to the supported one is
+read indefinitely, and this SDK does not acquire the right to stop reading a file because it lagged.
+The `WARN` therefore reports a fact and says outright that the file stays readable — it is not notice
+of a future refusal, and it must never be written as one: a warning that threatens a removal which
+never comes teaches the reader to ignore warnings from this SDK, including the ones that matter. The
+one refusal is the opposite case, a file *newer* than the SDK understands.
+
+The warning is attached to the parse of the document — once per load, per surface — rather than to
+alias resolution, so a scenario touching a dozen aliases does not print a dozen copies.
 
 A section introduced after version 1 requires the document to declare at least the version it arrived
 in — `ui-applications` requires `version: 2`, and the `auth.login` / `auth.challenge` keys inside it

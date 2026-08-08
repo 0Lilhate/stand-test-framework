@@ -136,13 +136,28 @@ class AdrWorklistCensusTest {
         return token.group();
     }
 
-    /** The ADRs the worklist declares settled and closed to reopening. */
+    /**
+     * The ADRs the worklist declares settled and closed to reopening.
+     *
+     * <p>Bounded to the paragraph, not to the end of the file. It used to run to EOF, and that was a
+     * false pass waiting to happen: any later section mentioning an ADR — the revision log added right
+     * below it does exactly that — counted as "named among the settled". The first ADR accepted after
+     * the census existed, {@code ADR-UI-004}, was duly reported as settled while the list did not
+     * mention it. A census that reads more than the list it checks is not a census.
+     */
     private static Set<String> settled() {
         String text = worklist();
         int start = text.indexOf(SETTLED_MARKER);
         assertThat(start).as("the worklist carries its «%s» paragraph", SETTLED_MARKER).isNotNegative();
+        int end = text.length();
+        for (String terminator : new String[] {"\n\n", "\n---", "\n## "}) {
+            int found = text.indexOf(terminator, start);
+            if (found >= 0 && found < end) {
+                end = found;
+            }
+        }
         Set<String> named = new TreeSet<>();
-        Matcher ref = ADR_REF.matcher(text.substring(start));
+        Matcher ref = ADR_REF.matcher(text.substring(start, end));
         while (ref.find()) {
             named.add(ref.group());
         }

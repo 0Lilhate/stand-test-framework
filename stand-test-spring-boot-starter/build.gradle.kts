@@ -36,9 +36,17 @@ dependencies {
     api(libs.spring.boot)
     annotationProcessor(libs.spring.boot.configuration.processor)
 
+    // The logging FACADE only, exactly as core and every adapter declare it: StepExecutorDiscovery
+    // announces what it picked up off the classpath (ADR-UI-008). No binding ships from here — a Boot
+    // application already has one, and choosing it is the consumer's business.
+    implementation(libs.slf4j.api)
+
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
+    // The deprecation channel of the registry format (ADR-UI-004) is observable only as a log line, so
+    // the surface test needs a binding to capture it. Test-only: the SDK ships the facade, never a binding.
+    testImplementation(libs.logback.classic)
     testImplementation(libs.spring.boot.test)
     testImplementation(project(":stand-test-await"))
     testImplementation(project(":stand-test-allure"))

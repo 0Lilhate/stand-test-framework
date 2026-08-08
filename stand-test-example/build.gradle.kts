@@ -62,7 +62,10 @@ dependencies {
     // The SDK ships only the SLF4J facade; the CONSUMER supplies a binding. The example plays the
     // consumer: Logback (test-only) turns the SDK's scenario/step/adapter logs and MDC correlation
     // (scenarioId/testRunId/correlationId/stepId) into visible console output — see logback-test.xml.
-    testRuntimeOnly(libs.logback.classic)
+    // Compile scope rather than runtime-only since UITG-S027: StarterDiscoversUiExecutorTest reads the
+    // discovery announcement back out of the log, because that line is how "the auto-configuration
+    // really called discovery" is observable from outside. Still test-only — the SDK ships no binding.
+    testImplementation(libs.logback.classic)
 }
 
 // env-ref wiring for the doubles. DB: DbStepExecutor's no-arg form resolves datasource refs from the

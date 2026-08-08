@@ -21,5 +21,8 @@ dependencies {
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
+    // The deprecation channel of the registry format (ADR-UI-004) is observable only as a log line, so
+    // the surface test needs a binding to capture it. Test-only: the SDK ships the facade, never a binding.
+    testImplementation(libs.logback.classic)
     testRuntimeOnly(libs.junit.platform.launcher)
 }

@@ -25,10 +25,43 @@ configuration is gated by `stand.test.enabled` (default `true`).
 | `DbStepExecutor` | `stand-test-db` on classpath | collected into the runner |
 | `GrpcStepExecutor` | `stand-test-grpc` on classpath | collected into the runner |
 | `ReportingEventPublisher` | Allure on classpath & `reporting.allure.enabled` | else the no-op publisher |
-| `ScenarioRunner` | always | `DefaultScenarioRunner` over all `StepExecutor` beans |
+| `ScenarioRunner` | always | `DefaultScenarioRunner` over all `StepExecutor` beans **and over the executors discovered on the classpath** — see below |
 | `StandClient` | always | `DefaultStandClient` facade |
 | `Awaiter` | `stand-test-await` on classpath | fresh system-backed awaiter |
 | `AwaitPolicy` | `stand-test-await` on classpath | reusable default from `stand.test.await.*` |
+
+## Adapters discovered on the classpath
+
+An adapter that registers a `StepExecutor` through `META-INF/services` is picked up **without a bean of
+its own**. `stand-test-ui` is the one that prompted this: it ships an SPI registration and no bean, so
+before ADR-UI-008 a Spring consumer with the UI module on the classpath met
+
+```
+StandTestException: No step executor registered for step type 'ui.open' (stepId=…)
+```
+
+while the same scenario ran fine on plain JUnit, whose extension has always loaded executors through the
+SPI. The two paths now agree; nothing needs declaring.
+
+**A declared bean always wins.** If you declare your own executor for a step type, it takes precedence
+over anything discovered — beans are placed first, and the runner uses the first executor that supports
+the type. An SPI provider of a class you already declare as a bean is skipped outright, so the common
+case (the starter declares `RestStepExecutor` while `stand-test-rest` also registers it) yields one
+instance, not two.
+
+The rule is general, not UI-specific: an adapter you build yourself is discovered the same way.
+
+Discovery announces itself once at context start, naming the executor classes it added:
+
+```
+INFO  … Step executors discovered on the classpath (no bean declared): [ru.alfa.stand.test.ui.UiStepExecutor].
+      A declared bean always takes precedence over a discovered executor.
+```
+
+Two consequences worth knowing. Discovery uses the **context's** class loader, so an adapter you
+deliberately keep off the classpath is not brought back. And a service entry naming a class that will
+not load is a `WARN`, not a failure — one stale entry in an unrelated jar must not stop your
+application context; steps of that type then report the usual "no executor registered".
 
 ## What it does **not** do
 

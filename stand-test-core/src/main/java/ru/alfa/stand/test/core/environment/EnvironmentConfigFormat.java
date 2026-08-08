@@ -1,5 +1,7 @@
 package ru.alfa.stand.test.core.environment;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ru.alfa.stand.test.core.exception.StandTestException;
 
 /**
@@ -17,8 +19,9 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  * <table border="1">
  *   <caption>Version handling</caption>
  *   <tr><th>Declared</th><th>Result</th></tr>
- *   <tr><td>absent</td><td>read as {@link #INITIAL_VERSION} — existing files stay valid unchanged</td></tr>
- *   <tr><td>{@code <= }{@link #SUPPORTED_VERSION}</td><td>read</td></tr>
+ *   <tr><td>absent</td><td>read as {@link #INITIAL_VERSION} — existing files stay valid unchanged; warned about, because version 1 is behind</td></tr>
+ *   <tr><td>{@code < }{@link #SUPPORTED_VERSION}</td><td>read, with one {@code WARN} naming both versions</td></tr>
+ *   <tr><td>{@code == }{@link #SUPPORTED_VERSION}</td><td>read, silently</td></tr>
  *   <tr><td>{@code > }{@link #SUPPORTED_VERSION}</td><td>rejected with a message naming both versions and the action</td></tr>
  *   <tr><td>not a whole number, or {@code <= 0}</td><td>rejected as a configuration error (fail-closed)</td></tr>
  * </table>
@@ -33,6 +36,8 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  * wording here is what stops the two hand-maintained mappers from disagreeing about what they can read.
  */
 public final class EnvironmentConfigFormat {
+
+    private static final Logger LOG = LoggerFactory.getLogger(EnvironmentConfigFormat.class);
 
     /** Configuration key carrying the format version (root of the file; {@code stand.test.version} on the starter). */
     public static final String VERSION_FIELD = "version";
@@ -73,6 +78,7 @@ public final class EnvironmentConfigFormat {
      */
     public static int requireSupported(Object declared, String location) {
         if (declared == null) {
+            warnIfBehind(INITIAL_VERSION, location);
             return INITIAL_VERSION;
         }
         long version = wholeNumber(declared, location);
@@ -86,7 +92,41 @@ public final class EnvironmentConfigFormat {
                     + ") — upgrade the stand-test-* dependencies to a version that reads registry format " + version
                     + ", or remove the newer sections and declare version " + SUPPORTED_VERSION + ".");
         }
+        warnIfBehind((int) version, location);
         return (int) version;
+    }
+
+    /**
+     * Reports a document that is behind the format this SDK reads — and says, in the same breath, that
+     * nothing is going to happen to it.
+     *
+     * <p>ADR-UI-004 accepted <strong>no compatibility window</strong>: every version from
+     * {@link #INITIAL_VERSION} is read indefinitely. That decision constrains this message more than it
+     * constrains the code. A warning is cheap to ignore, so the failure mode here is not silence but a
+     * lie — "your file will stop working" would be false, and a threat that never arrives teaches the
+     * reader to skip warnings from this SDK, including the ones that mean something. So the line states
+     * the fact and states the reassurance, and {@code EnvironmentConfigFormatLoggingTest} pins both: the
+     * vocabulary of removal is forbidden, the word {@code readable} is required.
+     *
+     * <p>A document declaring no version is version 1, which is behind — so it is reported, at the same
+     * level and in the same words. Absence is a lagging version, not a mistake.
+     *
+     * <p>The call sits on the parse of the document, which happens once per surface per load, rather
+     * than on alias resolution — otherwise a scenario touching a dozen aliases would print a dozen
+     * copies and the channel would become the noise it exists to avoid. Nothing but the two version
+     * numbers and the configuration location can reach the text: those are the only things in scope.
+     *
+     * @param effective the version the document is being read as
+     * @param location the configuration location (for example {@code <document>} or {@code stand.test})
+     */
+    private static void warnIfBehind(int effective, String location) {
+        if (effective >= SUPPORTED_VERSION) {
+            return;
+        }
+        LOG.warn("Environment registry format version {} at {} — this SDK reads up to {}."
+                        + " The file stays readable: there is no compatibility window, and every version from {} is read indefinitely."
+                        + " Declare a newer version when you want the sections added since it.",
+                effective, location, SUPPORTED_VERSION, INITIAL_VERSION);
     }
 
     /**
