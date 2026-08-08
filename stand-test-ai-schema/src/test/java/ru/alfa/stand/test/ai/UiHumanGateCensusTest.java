@@ -2,15 +2,6 @@ package ru.alfa.stand.test.ai;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.TreeSet;
 import org.junit.jupiter.api.DisplayName;
@@ -39,8 +30,6 @@ import org.junit.jupiter.api.Test;
  */
 class UiHumanGateCensusTest {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
-
     /** Every {@code UI_*} / driver-wait rule, pinned to its gate in {@code §2 Hard constraints} of the guard rule. */
     private static final Set<String> KNOWN_UI_RULES = new TreeSet<>(Set.of(
             "UI_DISCOVERY_PARITY",        // U1
@@ -58,39 +47,6 @@ class UiHumanGateCensusTest {
     /** The gates the guard rule must list as staying human — the exact census this test pins. */
     private static final String HUMAN_GATES_SENTENCE = "U4, U8, U10, U11a/b, U12, U14, U15, U18, U19";
 
-    private static Path repositoryRoot() {
-        Path current = Paths.get("").toAbsolutePath();
-        for (int depth = 0; depth < 5 && current != null; depth++) {
-            if (Files.isDirectory(current.resolve(Paths.get("docs", "ai-agent")))) {
-                return current;
-            }
-            current = current.getParent();
-        }
-        throw new IllegalStateException("repository root not found upwards from " + Paths.get("").toAbsolutePath());
-    }
-
-    private static String read(Path file) {
-        try {
-            return Files.readString(file, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new UncheckedIOException("could not read " + file, e);
-        }
-    }
-
-    /** Every {@code ruleId} declared in one bundle copy's {@code detectors.json}, in source order. */
-    private static Set<String> ruleIds(String bundle) {
-        Path table = repositoryRoot().resolve("docs/ai-agent/" + bundle + "/hooks/detectors.json");
-        JsonNode root;
-        try {
-            root = MAPPER.readTree(read(table));
-        } catch (IOException e) {
-            throw new UncheckedIOException("could not parse " + table, e);
-        }
-        Set<String> ids = new LinkedHashSet<>();
-        root.path("detectors").forEach(detector -> ids.add(detector.path("ruleId").asText()));
-        return ids;
-    }
-
     /**
      * Every gate U1..U20 minus the machine list must be outside the human census: the human gates
      * are the complement of the named rules. The rule and checklist both settle that split, and this
@@ -99,11 +55,9 @@ class UiHumanGateCensusTest {
     @Test
     @DisplayName("the guard rule and the checklist spell exactly the human-gate census, and detectors cover none of them")
     void guardRule_andChecklist_nameTheHumanGates_andNoDetectorCoversOne() {
-        for (String bundle : new String[] {".claude", ".opencode"}) {
-            Path rulePath = repositoryRoot().resolve("docs/ai-agent/" + bundle + "/rules/stand-test-ui-guardrails.md");
-            Path checklist = repositoryRoot().resolve("docs/ai-agent/" + bundle + "/skills/stand-test-ui-safety-review/ui-safety-checklist.md");
-            String ruleText = read(rulePath);
-            String checklistText = read(checklist);
+        for (String bundle : KitCensus.BUNDLES) {
+            String ruleText = KitCensus.guardRule(bundle);
+            String checklistText = KitCensus.checklist(bundle);
 
             assertThat(ruleText).as(bundle + " rules: the human-gate sentence must be the pinned one")
                     .contains("The rest stay human: " + HUMAN_GATES_SENTENCE);
@@ -120,7 +74,7 @@ class UiHumanGateCensusTest {
 
             // And the census itself is exact: every rule that drives a UI gate is pinned here, and no
             // stray UI-affecting rule sits in the declared table unnamed.
-            assertThat(uiRulesIn(ruleIds(bundle))).as(bundle + " detectors: the census of machine gates is exact")
+            assertThat(uiRulesIn(KitCensus.ruleIds(bundle))).as(bundle + " detectors: the census of machine gates is exact")
                     .containsExactlyInAnyOrderElementsOf(KNOWN_UI_RULES);
         }
     }
@@ -128,8 +82,8 @@ class UiHumanGateCensusTest {
     @Test
     @DisplayName("every UI rule the documents claim is present in both detector copies")
     void everyDeclaredUiRule_isInBothCopies() {
-        for (String bundle : new String[] {".claude", ".opencode"}) {
-            Set<String> declared = ruleIds(bundle);
+        for (String bundle : KitCensus.BUNDLES) {
+            Set<String> declared = KitCensus.ruleIds(bundle);
             for (String rule : KNOWN_UI_RULES) {
                 assertThat(declared).as(bundle + " detectors: rule " + rule + " must be declared").contains(rule);
             }
@@ -139,8 +93,8 @@ class UiHumanGateCensusTest {
     @Test
     @DisplayName("a detector that arrives for a human gate changes both copies and is caught as drift")
     void noUnknownUiRule_isSilentlyAdded() {
-        for (String bundle : new String[] {".claude", ".opencode"}) {
-            assertThat(uiRulesIn(ruleIds(bundle)))
+        for (String bundle : KitCensus.BUNDLES) {
+            assertThat(uiRulesIn(KitCensus.ruleIds(bundle)))
                     .as(bundle + " detectors: a new UI_* rule is a machine the census does not know. If the kit gained "
                             + "a detector for a human gate, the gate must move out of the human sentence FIRST and be asserted "
                             + "in KNOWN_UI_RULES here; otherwise the docs and the detector disagree on which gates stay human")
@@ -151,17 +105,17 @@ class UiHumanGateCensusTest {
     @Test
     @DisplayName("the two bundle copies declare the same detector set")
     void bothCopies_declareTheSameDetectorSet() {
-        assertThat(ruleIds(".claude"))
+        assertThat(KitCensus.ruleIds(".claude"))
                 .as("the .claude and .opencode bundles share one detector table; the census is about the kit, not a copy")
-                .isEqualTo(ruleIds(".opencode"));
+                .isEqualTo(KitCensus.ruleIds(".opencode"));
     }
 
     @Test
     @DisplayName("the kit says a clean hook run is still not a clean UI review, in both bundles")
     void theKitStillSaysACleanHookIsNotACleanReview() {
-        for (String bundle : new String[] {".claude", ".opencode"}) {
-            String rule = read(repositoryRoot().resolve("docs/ai-agent/" + bundle + "/rules/stand-test-ui-guardrails.md"));
-            String checklist = read(repositoryRoot().resolve("docs/ai-agent/" + bundle + "/skills/stand-test-ui-safety-review/ui-safety-checklist.md"));
+        for (String bundle : KitCensus.BUNDLES) {
+            String rule = KitCensus.guardRule(bundle);
+            String checklist = KitCensus.checklist(bundle);
             assertThat(rule).as(bundle + " guard rule: the boundary sentence the census exists to guard")
                     .contains("A clean hook run is still not a clean UI review");
             assertThat(checklist).as(bundle + " checklist: the same honest boundary is spelled into the coverage note")

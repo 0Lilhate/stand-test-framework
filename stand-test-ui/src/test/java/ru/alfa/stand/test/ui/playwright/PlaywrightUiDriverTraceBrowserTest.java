@@ -111,9 +111,13 @@ class PlaywrightUiDriverTraceBrowserTest {
                     .as("a resource entry is a DOM/asset clone of what the frame showed — exactly what snapshots=false exists to keep out of the artefact (SEC-05)")
                     .noneMatch(name -> name.startsWith("resources/"));
             ZipEntry network = zip.getEntry("trace.network");
-            assertThat(network == null || network.getSize() == 0L)
-                    .as("with snapshots off the Trace Viewer's Network tab stays empty — the trace is not the network artefact")
-                    .isTrue();
+            // Asserted on the size rather than on a boolean: a failing boolean says only "expected true",
+            // while the size says how much network story leaked into the artefact — which is the number
+            // whoever changed the recording options needs to see.
+            assertThat(network == null ? 0L : network.getSize())
+                    .as("with snapshots off the Trace Viewer's Network tab stays empty — the trace is not the network artefact, "
+                            + "and the ui-network text attachment is not a duplicate of it. Entries: " + entries)
+                    .isZero();
         }
     }
 
