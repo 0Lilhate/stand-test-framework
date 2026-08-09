@@ -2039,8 +2039,15 @@ tasks:
     requirement_ids: [KPI-1, KPI-2, KPI-3, KPI-5, OQ-05]
     artifact_sources: ["BRD §14 G-2", "BRD §13.3", "BRD §19.1"]
     affected_modules: []
-    status: BLOCKED
-    status_reason: "Не закрыт; базы не существует, поэтому §19.1 неприменим в принципе"
+    status: READY
+    status_reason: >-
+      READY с 2026-08-09 — поправка статуса по факту, а не новая работа. Карточка стояла BLOCKED, не имея
+      НИ ОДНОЙ блокировки: depends_on, external_dependencies, adr_dependencies и definition_of_ready все
+      пусты. Сравнение внутри собственного типа и вскрыло ошибку: X003 и X012 — тоже EXTERNAL с пустыми
+      зависимостями — стоят READY. Для EXTERNAL-карточки BLOCKED должно означать «предусловие не
+      выполнено», а не «ответа ещё не дали»; иначе очередь советует ждать там, где надо спрашивать.
+      По существу не изменилось ничего: базы не существует, поэтому §19.1 неприменим в принципе, и
+      замер KPI-1/2/3/5 остаётся работой QA-лидов.
     priority: P0
     size: M
     uncertainty: HIGH
@@ -2109,8 +2116,18 @@ tasks:
     requirement_ids: [SEC-05, SEC-07, SEC-08]
     artifact_sources: ["BRD §14 G-4", "BRD §11"]
     affected_modules: []
-    status: BLOCKED
-    status_reason: "Не закрыт; протокола согласования нет"
+    status: READY
+    status_reason: >-
+      READY с 2026-08-09, и здесь поправка сильнее прочих: у карточки definition_of_ready НЕ пуст, он
+      ВЫПОЛНЕН. «Механизм маскирования и срока жизни артефактов предъявлен (S017, S018)» — S017 DONE,
+      S018 реализована и стоит IN_REVIEW. То есть предусловие закрылось, а статус остался BLOCKED и
+      удерживал P0-гейт в списке ожидающих, хотя ждать было нечего.
+      Предъявлять ИБ есть что, и это не декларация: маскирование размеченных зон происходит в DOM ДО
+      снятия скриншота (порядок закреплён тестом, падающим при перестановке), ретенция артефактов
+      настраивается (stand.test.ui.artifacts.retention.days, 7 суток по умолчанию), а два ручных прогона
+      с реальным отчётом задокументированы — 34-allure-manual-run-report.md и
+      35-allure-trace-run-report.md.
+      Протокола согласования по §11 по-прежнему нет — это и есть остаток, и он принадлежит ИБ.
     priority: P0
     size: S
     uncertainty: HIGH
@@ -2286,8 +2303,12 @@ tasks:
     requirement_ids: [KPI-1, OQ-08]
     artifact_sources: ["BRD OQ-08", "BRD §17.2"]
     affected_modules: []
-    status: BLOCKED
-    status_reason: "Не закрыт"
+    status: READY
+    status_reason: >-
+      READY с 2026-08-09 — поправка статуса по факту: карточка стояла BLOCKED без единой блокировки
+      (все четыре поля зависимостей и definition_of_ready пусты), тогда как X003 и X012 с той же пустотой
+      стоят READY. SLA на ревью сгенерированного теста и на дефекты платформы по-прежнему не записан —
+      это работа QA-лидов, и она стала видимой в очереди, а не выглядящей заблокированной.
     priority: P2
     size: XS
     uncertainty: MEDIUM
@@ -2318,8 +2339,11 @@ tasks:
     requirement_ids: [NFR-01, KPI-3, OQ-11]
     artifact_sources: ["BRD OQ-11", "AS-06", "RISK-12"]
     affected_modules: []
-    status: BLOCKED
-    status_reason: "Не закрыт; порог не задан"
+    status: READY
+    status_reason: >-
+      READY с 2026-08-09 — поправка статуса по факту: BLOCKED без единой блокировки (все поля
+      зависимостей и definition_of_ready пусты). Порог допустимой недоступности стендов по-прежнему не
+      задан, как и способ отделения недоступности от flaky; это работа QA-лидов.
     priority: P2
     size: XS
     uncertainty: MEDIUM
@@ -2382,8 +2406,12 @@ tasks:
     requirement_ids: [OQ-10]
     artifact_sources: ["BRD §13.1", "BRD §19.1"]
     affected_modules: []
-    status: BLOCKED
-    status_reason: "Не закрыт; поэтому в плане и бэклоге нет ни одного человеко-дня"
+    status: READY
+    status_reason: >-
+      READY с 2026-08-09 — поправка статуса по факту: BLOCKED без единой блокировки (все поля
+      зависимостей и definition_of_ready пусты). По существу не изменилось ничего: размер команды и
+      стоимость человеко-месяца не названы, поэтому в плане и бэклоге нет ни одного человеко-дня, а
+      §13.1 и §13.3 BRD держат плейсхолдеры ‹…› вместо чисел.
     priority: P1
     size: XS
     uncertainty: HIGH
