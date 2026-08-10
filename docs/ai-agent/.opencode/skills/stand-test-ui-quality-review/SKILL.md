@@ -39,7 +39,7 @@ Walk the case's expectation list and find each one in the test. For every expect
 |---|---|
 | **covered** | there is a step asserting it, and the assertion actually distinguishes pass from fail |
 | **weakened** | asserted, but by something laxer than the case asked — `CONTAINS` where the case gave an exact string, presence where the case gave a value, one field of three |
-| **not covered — SDK** | the SDK cannot express it (screenshot, URL, upload…); belongs in the generation report's *not covered* |
+| **not covered — SDK** | the SDK cannot express it (URL/title/console assertion, file upload, network assertion…); belongs in the generation report's *not covered*. A failure **screenshot** is not one of these — the executor attaches it, together with the console, the network story and, where the registry opts in, a trace |
 | **not covered — unexplored** | discovery could not reach the screen (usually an irreversible control); same |
 | **dropped** | none of the above — a real gap, and a `REWORK` |
 

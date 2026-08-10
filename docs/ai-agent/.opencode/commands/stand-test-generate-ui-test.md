@@ -109,7 +109,10 @@ base, existing UI tests and Page Objects, and a browser-automation channel for s
 
 1. **Blocking questions from stage 2** — the run stops until they are answered.
 2. **Registry additions** — a new `ui-applications` alias, sign-in locators, a
-   `credentials-pool-ref`, a `discovery-account-ref`: all stand configuration, all human-approved.
+   `credentials-pool-ref` (or, for an application with exactly one account, the direct
+   `credentials-username`/`credentials-password` pair of format version 4), a
+   `discovery-account-ref`: all stand configuration, all human-approved. Propose them as references —
+   a proposed block carrying a password VALUE is a finding (`SECRET_IN_SOURCE`), not a shortcut.
 3. **Permission for an irreversible flow** when the case creates or changes business data and nobody
    has said the stand is for that.
 4. **The merge**, on the generation report. The workflow recommends; it never merges.

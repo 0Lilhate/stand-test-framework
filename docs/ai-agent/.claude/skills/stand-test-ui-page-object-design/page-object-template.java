@@ -104,5 +104,8 @@ public final class <Screen>Page {
 //   matcher asymmetry: TEXT / VALUE / ATTRIBUTE take all five matchers;
 //                      VISIBLE / ENABLED take EQUALS only (enforced at build() and at execution).
 //
-//   absent by design: XPath; screenshots, traces and attachments; URL/title/console assertions;
+//   absent by design: XPath; a screenshot or trace ON DEMAND; URL/title/console assertions;
 //                     select/hover/press/upload/drag-drop/back/tabs/iframe; network interception.
+//   automatic, not authored: a failing step attaches a screenshot (asSensitive() zones masked first),
+//                     the console, the network story and — where the registry says trace: on-failure —
+//                     a Playwright trace. Nothing here orders them; a green step leaves nothing.

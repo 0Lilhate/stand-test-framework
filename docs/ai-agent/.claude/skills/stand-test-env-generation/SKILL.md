@@ -45,6 +45,21 @@ surface refs are **bare NAMES only**: Spring resolves `${...}` during property b
 placeholder inside a `*-ref` would materialise the variable's VALUE (for credentials — the
 secret) into the registry before the SDK ever sees the reference.
 
+**UI applications are out of this skill's mapping, and the reason is not an oversight.** The
+`ui-applications` block (registry format version 2 and up) has no KB source to render from — the
+knowledge base has no UI collections in this version of the kit — so there is nothing to map, and
+inventing a mapping would produce configuration that no curated entry attests. A UI application's
+alias, `base-url-ref` and `auth` block are written by a human and approved as a registry addition.
+
+Two things to carry anyway, because this skill is where credentials get written down. First, an
+application with exactly one account may name it directly with `auth.credentials-username` /
+`auth.credentials-password` (format version 4, mutually exclusive with `credentials-pool-ref`) — if
+you are asked to prepare such a block, the same rule as every other credential applies: **emit the
+reference spelling, never the value.** Second, that pair accepts `${var:value}`, where the part after
+the colon is a VALUE rather than the name of a fallback variable, so **a password is never given a
+default**; the write hook refuses one (`SECRET_IN_SOURCE`, BLOCK) in the block-YAML form a registry is
+actually written in.
+
 ## Procedure
 
 1. **Load the KB**: the requested environment entry plus every service/topic/datasource/target it

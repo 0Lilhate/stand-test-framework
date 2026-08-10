@@ -117,4 +117,4 @@ Ceiling reminder: parallelism above the pool size makes runs **queue**, not fail
 
 | Asked for | Status | Disposition |
 |---|---|---|
-| <e.g. screenshot on failure> | absent in `stand-test-ui` | recorded in the generation report as *not covered*; raised with the SDK owners |
+| <e.g. проверка адресной строки после отправки> | absent in `stand-test-ui` | recorded in the generation report as *not covered*; raised with the SDK owners |

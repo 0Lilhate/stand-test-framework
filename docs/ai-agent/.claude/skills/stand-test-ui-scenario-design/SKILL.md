@@ -145,7 +145,9 @@ invent them — go back to stage 3, or record the screen as unexplored and desig
 - Emitting Java (that is stages 5–6).
 - Designing a step type, builder method or capability that
   [`stand-test-ui-guardrails.md`](../../rules/stand-test-ui-guardrails.md) lists as absent — no
-  screenshots, no URL assertions, no `select`/`hover`/`upload`, no network interception.
+  screenshot or trace on demand, no URL/console assertions, no `select`/`hover`/`upload`, no network
+  interception. (Failure artefacts themselves are not designed either: the executor attaches the
+  screenshot, console, network and — where the registry opts in — the trace by itself.)
 - Designing a locator that is not in the discovery report.
 - Designing a hand-rolled sign-in out of `ui.fill` + `ui.click` instead of `ui.login`.
 - Designing any wait other than `ui.expectEventually` / `ui.login`'s own bounded waits.

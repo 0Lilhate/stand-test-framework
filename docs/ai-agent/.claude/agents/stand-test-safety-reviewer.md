@@ -42,14 +42,24 @@ file. Read what was written.
    seed tagged.
 
 **For a UI generation, load `stand-test-ui-safety-review` as well** — it is stage 7 of the UI branch
-and adds findings the protocol checklist has no equivalent of. Two of them are yours alone, because
-`detectors.json` carries no UI-specific detector in this version:
+and adds findings the protocol checklist has no equivalent of. `detectors.json` now carries **8
+UI-specific detectors**, so the machine reaches further than it did — but it reaches source, not
+intent, and these two remain yours to judge even where a detector fired or stayed silent:
 
-- **an invented locator** — a `UiLocator` constant with no row in `UiDiscoveryReport.md`. It is
-  syntactically perfect, so no grep will ever find it. Read the report and the Page Objects side by
-  side, constant by constant. This is the single most damaging artifact the UI branch can produce;
+- **an invented locator** — a `UiLocator` constant with no row in `UiDiscoveryReport.md`.
+  `UI_DISCOVERY_PARITY` compares the two mechanically when it is given the report
+  (`--discovery UiDiscoveryReport.md`), which is a real gain and not the whole gate: a constant
+  reached through a neighbour file, a locator assembled from strings, or a discovery row that is
+  itself a fabrication all pass it. It is syntactically perfect either way, so read the report and
+  the Page Objects side by side, constant by constant. This is the single most damaging artifact the
+  UI branch can produce;
 - **a `${…}` where nothing resolves it** — inside a `ui.open` path or inside any assertion's expected
-  value. Resolution happens for `ui.fill` values and for REST/DB/Kafka/gRPC inputs, and nowhere else.
+  value; `UI_OPEN_OR_ASSERT_TEMPLATE` catches the plain spelling. Resolution happens for `ui.fill`
+  values and for REST/DB/Kafka/gRPC inputs, and nowhere else.
+
+What no detector touches at all is the nine eye-only gates named in `ui-safety-checklist.md` (U4's
+semantic half, U8, U10, U11a/b, U12, U14, U15, U18, U19). A clean hook run is not a clean UI review,
+and your report must never present it as one.
 
 Then the rest of that skill's table: a locator outside a Page Object, a hand-rolled sign-in instead of
 `ui.login`, a sleep or driver wait, an API outside the `stand-test-ui` surface, a production stand, an

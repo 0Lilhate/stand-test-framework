@@ -670,6 +670,47 @@ assertThat(blocking(temporary, "safety-review-report.md",
                 .contains("UI_DISCOVERY_PARITY");
     }
 
+    @Test
+    @DisplayName("a credential VALUE in a block-YAML registry is refused — the form the first pattern could not see (finding 2)")
+    void blockYamlRegistryCredentialIsRefused(@TempDir Path temporary) {
+        // Registry format version 4 made this expressible for the first time: `${VAR:value}` puts the
+        // value in the file, not the name of a fallback variable, so the SDK's standing rule ("never
+        // give a default to a password") stopped being a property of the format and became a habit.
+        assertThat(blocking(temporary, "application.yml",
+                "stand:\n  test:\n    version: 4\n    environments:\n      ift:\n        ui-applications:\n          portal:\n"
+                        + "            auth:\n              scheme: FORM\n              credentials-password: ${web_password:hunter2}\n"))
+                .as("the first pattern demands quotes on BOTH sides — a JSON-shaped line — and an environment registry is written as "
+                        + "block YAML with no quotes at all, so the one document whose whole job is to hold references could hold a "
+                        + "password and pass the gate")
+                .contains("SECRET_IN_SOURCE");
+
+        assertThat(blocking(temporary, "plain.yml", "auth:\n  password: hunter2\n"))
+                .as("a bare literal is the same defect written shorter")
+                .contains("SECRET_IN_SOURCE");
+    }
+
+    @Test
+    @DisplayName("the sanctioned registry spellings stay silent — a gate that refuses the correct form is a gate that gets switched off")
+    void sanctionedRegistrySpellingsAreSilent(@TempDir Path temporary) {
+        assertThat(reported(temporary, "clean.yml",
+                "auth:\n  credentials-username: PORTAL_USERNAME\n  credentials-password: ${PORTAL_PASSWORD}\n"
+                        + "  password-ref: LEGACY_PASSWORD\n  token-ref: SERVICE_TOKEN\n"))
+                .as("a bare NAME and a ${NAME} without a default are references, not values — refusing them would drive authors back "
+                        + "to writing the secret itself")
+                .doesNotContain("SECRET_IN_SOURCE");
+
+        assertThat(reported(temporary, "locators.yml",
+                "auth:\n  login:\n    username-locator: css=#username\n    password-locator: testId=login-password\n"))
+                .as("`password-locator` addresses the FIELD, not the credential — the only false positive a measurement over the whole "
+                        + "repository turned up, and the reason the key exemption names locators")
+                .doesNotContain("SECRET_IN_SOURCE");
+
+        assertThat(reported(temporary, "username.yml", "auth:\n  credentials-username: ${web_username:portal_admin}\n"))
+                .as("the SDK's rule is about the PASSWORD. A login with a default is a documented trade-off, not a leak, and a finding "
+                        + "here would be the detector inventing a rule the SDK does not have")
+                .doesNotContain("SECRET_IN_SOURCE");
+    }
+
     /** Runs the scanner against a staged directory and returns its JSON output, or aborts if node is absent. */
     private static String run(Path directory, List<String> args) {
         List<String> line = new ArrayList<>(List.of("node", repositoryRoot().resolve(GUARD).toString()));

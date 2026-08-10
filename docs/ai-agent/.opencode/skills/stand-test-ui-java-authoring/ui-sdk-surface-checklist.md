@@ -90,6 +90,15 @@ sign-in form's locators live in the registry (`auth.login.*`, spelled `<strategy
 test code. Accounts come from the pool behind `credentials-pool-ref`; the roster holds ids, roles and
 the **names** of credential variables — never a login or a password.
 
+An application that has exactly ONE account may name it directly instead, with the pair
+`auth.credentials-username` / `auth.credentials-password` (registry format version 4, mutually
+exclusive with the roster). It answers every declared role with the same account, so a suite's
+parallelism there is one run per role, not the pool size. Both spellings are still references — a bare
+word is the name of an environment variable — but this one also accepts the `${var:value}` form, which
+puts a VALUE in a file that lives in git. Hence the one rule an authoring stage must not lose:
+**a password is never given a default.** Nothing about any of this reaches test code: the test names a
+role, and that is all it ever knows about credentials.
+
 `challenge: mfa | otp | captcha` is a **declaration, not a bypass**: either a
 `UiLoginChallengeHandler` is registered on the test classpath, or the application moves to
 `STORAGE_STATE` with a session prepared outside the SDK. There is no third option and none may be
@@ -116,14 +125,30 @@ repository, so a "viewport" or "browser" parameter on a step does not exist to b
 | the locator matched **several** elements | `StandTestException` (names locator + match count) | BROKEN |
 | browser would not start, page would not load, alias not whitelisted, pool exhausted, unknown driver error | `StandTestException` | BROKEN |
 
+## What a failing step leaves behind — automatic, never authored
+
+Nothing below is written into a scenario: the executor attaches it when a `ui.*` step fails, and a
+green step leaves nothing at all. Know it anyway, because it decides what "not covered — SDK" may say
+in the generation report, and because it is what a red run is diagnosed from.
+
+| Artefact | When | Note |
+|---|---|---|
+| `ui-screenshot` (PNG) | every failing step, if a driver still exists | the zones of that step's `asSensitive()` locators are painted over **before** the grab; a zone that cannot be masked cancels the screenshot rather than risk it |
+| `ui-console` (text) | when the page logged anything | rides the text channel, so the sink's secret masker runs over it |
+| `ui-network` (text) | when any request was observed | method/path/status only, credential headers already masked |
+| `ui-trace` (ZIP) | only where the registry declares `trace: on-failure` | Playwright Trace Viewer; off by default, it is the heavy one. `ui.login` suspends recording around the credential fills |
+
+All four are best-effort — a capture that fails is a WARN and never replaces the step's own failure —
+and everything written lives under `stand.test.ui.artifacts.retention.days` (7 by default).
+
 ## Absent from this version — do not write it
 
 | Wanted | Status |
 |---|---|
-| screenshots, traces, attachments in the report | absent; the registry parses `trace:` but nothing consumes it yet |
-| masking sensitive zones in the DOM before an artefact is taken | absent (`asSensitive()` masks **values in messages and diagnostics**, which does work) |
-| assertions about the URL, the page title, the console | absent |
-| network interception / asserting the requests a page makes | absent (`injectCorrelationId()` adds a header; it does not let you read requests) |
+| a screenshot or a trace taken **on demand** | absent — the artefacts above happen on failure only; no step, builder method or configuration key orders one |
+| masking sensitive zones in the DOM before an artefact is taken | absent — the mask is a screenshot option, the DOM is left untouched (`asSensitive()` both hides values in messages/diagnostics and masks the zone in the screenshot, which does work) |
+| assertions about the URL, the page title, the console | absent — the console is attached as **evidence**, and evidence is not an assertable surface |
+| network interception / asserting the requests a page makes | absent (`injectCorrelationId()` adds a header; the `ui-network` attachment is evidence in the report, not something a step can assert on) |
 | `select`, `hover`, `press`, keyboard input beyond `fill`, file upload, drag-and-drop, scrolling | absent |
 | navigating back/forward, multiple tabs, iframes, new windows | absent |
 | visual regression, pixel comparison | absent |

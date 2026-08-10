@@ -42,13 +42,19 @@ Rows follow the case's own numbering, so a missing number is visible at a glance
 
 | # | Expectation | Cause | Disposition |
 |---|---|---|---|
-| 1 | скриншот при падении | **SDK** — screenshots/traces/attachments are absent from this version of `stand-test-ui` | raised with the SDK owners; the failure message and await diagnostics are what a red run gives today |
+| 1 | проверка адресной строки после отправки | **SDK** — `stand-test-ui` has no assertion about the URL, the page title or the console | raised with the SDK owners; the check is limited to what the screen displays |
 | 2 | экран поданной заявки | **unexplored** — reachable only through an irreversible control, which discovery may not perform | check limited to what the source screen shows; would need an out-of-band prepared application |
 | 3 | — | **case** — the case deliberately excludes it | — |
 | 4 | — | **blocked** — waiting on a human answer | see §3 and the completeness report |
 
 Causes are `SDK` / `unexplored` / `case` / `blocked`. If nothing is uncovered, write **none** — an
 empty section reads as a forgotten one.
+
+**A failure artefact is not a gap.** A screenshot, the console, the network story and — where the
+registry declares `trace: on-failure` — a Playwright trace are attached by the executor to any failing
+`ui.*` step, so «скриншот при падении» belongs in §6 beside the gate results, never in this table.
+Writing it here understates the delivery and sends whoever reads a red run looking for evidence that
+is already in the report.
 
 ## 3. Assumptions
 

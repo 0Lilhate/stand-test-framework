@@ -162,6 +162,34 @@ class OpencodeGuardPluginTest {
                 .contains("subagent-stop");
     }
 
+    @Test
+    @DisplayName("«opencode has no subagents» is true only while the bundle really declares none — the sentence dies with the gap")
+    void theMissingSubagentsClaimMatchesTheBundle() {
+        Path opencodeAgents = repositoryRoot().resolve("docs/ai-agent/.opencode/agents");
+        boolean declaresSubagents = Files.isDirectory(opencodeAgents) && !listing(opencodeAgents).isEmpty();
+
+        String plugin = read(repositoryRoot().resolve(PLUGIN));
+        String rule = read(repositoryRoot().resolve("docs/ai-agent/.opencode/rules/stand-test-pipeline.md"));
+        boolean saidByPlugin = plugin.contains("declares no subagents");
+        boolean saidByRule = rule.contains("вторая копия их не объявляет");
+
+        assertThat(saidByPlugin && saidByRule)
+                .as("two documents tell a reader that stages 2, 4, 8 and 11 run in the main context under opencode, and the whole "
+                        + "weight of the safety-review gate on that host rests on it. The claim is derivable — it is simply whether "
+                        + "%s holds an agent — so it must not outlive the gap: porting the three subagents is the ONE takeable item of "
+                        + "the kit plan, and the day it lands both sentences become false. Update them in the same change (and give "
+                        + "`agents/` an opencode twin in BundleParityTest while you are there)", opencodeAgents)
+                .isEqualTo(!declaresSubagents);
+    }
+
+    private static List<Path> listing(Path directory) {
+        try (var entries = Files.list(directory)) {
+            return entries.toList();
+        } catch (IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
     private static String read(Path file) {
         try {
             return Files.readString(file, StandardCharsets.UTF_8);

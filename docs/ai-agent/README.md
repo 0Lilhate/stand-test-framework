@@ -103,8 +103,9 @@ docs/ai-agent/
                        because the schema tests live in the SDK repo and do not travel with the bundle
                        kb-write-permit — curated KB writes are declared by path before the content
                        exists; the human confirms each write, kb-write re-reads what landed
-      detectors.json   all 18 safety findings, as data — the eighteenth needs the artifact's
-                       previous version (the disk, or `--against` in CI) and says so when it lacks one
+      detectors.json   all 26 safety findings, as data — 18 protocol plus 8 UI-specific. Finding 18
+                       (failure concealment) needs the artifact's previous version (the disk, or
+                       `--against` in CI) and says so when it lacks one
       lib/, corpus/    the engine and the golden fixtures it is proven against
       stand-batch.mjs  NOT a hook — nothing invokes it, and it enforces nothing of its own. A
                        directory of text cases, one headless `claude -p` session each, run by a
@@ -214,10 +215,17 @@ is the right command when a merged test starts failing on locators.
 **The UI track is Java-only** — `ui.*` steps are not in the AI JSON/YAML format, and no declarative UI
 document can be executed. What the adapter does and does not offer is pinned in
 [`ui-sdk-surface-checklist.md`](.claude/skills/stand-test-ui-java-authoring/ui-sdk-surface-checklist.md);
-nothing outside it may appear in a generated artifact. Known gap, stated rather than implied: the
-write hook carries **no UI-specific detector** in this version — the protocol findings (addresses,
-secrets, sleeps, PII) do run over UI Java files, but an invented locator or a locator in a test body
-is caught by the stage-7 review and by nothing else.
+nothing outside it may appear in a generated artifact. The write hook carries **8 UI-specific
+detectors** beside the protocol ones (addresses, secrets, sleeps, PII, which run over UI Java files
+too): an invented locator (`UI_DISCOVERY_PARITY`, against the discovery report), a locator outside a
+Page Object, XPath, `ui.login` without a role, `${…}` in an `ui.open` path or an expected value,
+`expectEventually` without a bound, a stand address in a discovery report, and an incomplete
+generation report. A ninth UI gate rides an existing detector rather than a new one: `THREAD_SLEEP` is
+extended with the driver-level waits (`page.waitForSelector/Timeout/LoadState`, `.waitFor`).
+Known gap, stated rather than implied: **that is still not a review** —
+nine gates (U4's semantic half, U8, U10, U11a/b, U12, U14, U15, U18, U19) have no regular expression
+and are closed by the stage-7 subagent and by a human, which is why a clean hook run is never reported
+as a clean UI review.
 
 ## Knowledge base: the anti-invention layer
 

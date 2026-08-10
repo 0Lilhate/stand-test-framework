@@ -17,7 +17,7 @@ One row per expectation in the case — including the negative ones.
 |---|---|---|---|---|
 | 1 | поле «Статус» показывает `Принята` | `await-accepted` | covered | exact text, polled 20 s |
 | 2 | кнопка недоступна при пустой сумме | `submit-disabled-when-empty` | covered | negative path |
-| 3 | скриншот при падении | — | not covered — SDK | absent in this version; in the generation report |
+| 3 | адресная строка после отправки | — | not covered — SDK | нет проверок URL/заголовка/консоли; в отчёте генерации |
 | 4 | экран поданной заявки | — | not covered — unexplored | irreversible control; in the generation report |
 
 | Tally | Count |

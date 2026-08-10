@@ -246,11 +246,13 @@ in a neighbour file still needs the human.
 ### 13. Sensitive fields are marked `asSensitive()`
 
 Any locator addressing a password, a token, a one-time code, or a field holding personal data is
-marked `UiLocator.label("Пароль").asSensitive()`. The mark is what keeps the value out of assertion
-failure messages and await diagnostics — that is, out of the report, the log and the CI output. It
-costs one call and it is the difference between a failed assertion and a credential in a build
-artifact. The saved browser session file (`STORAGE_STATE`) is likewise a secret: never attached,
-never logged, never printed — only its path.
+marked `UiLocator.label("Пароль").asSensitive()`. The mark does two things, and the second is why it
+matters more on this branch than the wording used to suggest: it keeps the value out of assertion
+failure messages and await diagnostics — that is, out of the report, the log and the CI output — and
+it is what paints that field over in the **failure screenshot**, before the picture is taken. An
+unmarked password field is therefore not merely a message risk; it is a credential rendered into a
+PNG that travels to the report. It costs one call. The saved browser session file (`STORAGE_STATE`)
+is likewise a secret: never attached, never logged, never printed — only its path.
 
 ### 14. Sign-in is `ui.login`, by role, from the pool
 
@@ -262,6 +264,19 @@ pre-flight (`UI_LOGIN_ROLE_REQUIRED` / `UI_LOGIN_ROLE_UNKNOWN`). Place it **befo
 `ui.open` of that application; a later sign-in can no longer restore a saved session and says so.
 `UiStep.login(` without a `.role(...)` before `.build()` is caught by detector `UI_LOGIN_WITHOUT_ROLE`
 (BLOCK).
+
+**Where the account comes from is the registry's business, and it has two shapes.** A roster behind
+`credentials-pool-ref` holds several accounts keyed by role; an application with exactly one names it
+directly with `auth.credentials-username` / `auth.credentials-password` (registry format version 4,
+mutually exclusive with the roster, answering every declared role with the same account). Neither
+changes a line of the test — it names a role either way. What changes is the registry's exposure: the
+direct pair also accepts the `${var:value}` spelling, and the part after the colon is a VALUE, not the
+name of a fallback variable. **A password is therefore never given a default** — that would commit the
+credential to the file, and a file is committed the moment it is written. A credential value in a
+registry document is caught by detector `SECRET_IN_SOURCE` (BLOCK), including the block-YAML form
+registries are actually written in; `${VAR}` without a default and a bare variable NAME stay silent
+because they are references. Proposing a registry addition is a human decision either way (§4), and
+proposing one that carries a password value is a finding, not a shortcut.
 
 There is **no MFA/OTP/CAPTCHA bypass** and there will not be one (external gate G-1). An application
 declaring a `challenge` either has a `UiLoginChallengeHandler` on the test classpath or is refused
@@ -303,14 +318,29 @@ Matcher asymmetry, enforced at `build()` and again at execution: `TEXT`, `VALUE`
 accept all five core matchers (EQUALS, CONTAINS, MATCHES, EXISTS, NOT_NULL); `VISIBLE` and `ENABLED`
 accept **EQUALS only**.
 
-**Not in this version — do not write it:** screenshots, traces and report attachments (the registry
-parses `trace:` but nothing consumes it yet); network interception or request assertions from the
-browser; visual regression; `select`/`hover`/`press`/`upload`/drag-and-drop/back-forward/multi-tab/
-iframe steps; assertions about the URL, the page title or the console; scrolling; `ui.*` in the
-AI (JSON/YAML) format — **the UI track is Java-only**; a Spring-starter auto-configuration for the UI
-executor (see the authoring skill for what a Spring consumer must declare); DOM masking of sensitive
-zones before an artefact is taken; browser reuse across runs; a `SSO` sign-in scheme (declared,
-refuses with "not implemented").
+**Failure artefacts exist, and a scenario never asks for them.** A failing `ui.*` step attaches them
+itself: a **screenshot** (PNG — the zones of that step's `asSensitive()` locators are painted over
+*before* the grab, and a zone that cannot be masked cancels the screenshot rather than risk it), the
+page's **console** and its **network** story (text, attached only when non-empty), and — where the
+application's registry entry declares `trace: on-failure` — a **Playwright trace** (ZIP for Trace
+Viewer, off by default because it is the heavy one). A green step leaves nothing behind. All four are
+best-effort: a capture that fails is a WARN and never replaces the step's own failure, and everything
+written lives under `stand.test.ui.artifacts.retention.days` (7 by default). There is no API to
+request one and none is needed — so in the generation report "скриншот при падении" is **covered by
+the SDK**, not a gap, and a red run is diagnosed from the attachments rather than from the message
+alone.
+
+**Not in this version — do not write it:** a screenshot or a trace taken **on demand** (they exist on
+failure only; no step, builder method or configuration key orders one); visual regression or pixel
+comparison; network interception, and assertions about the requests a page makes — the network
+attachment is *evidence in the report*, never a subject of an assertion; assertions about the URL,
+the page title or the console — the console attachment is likewise evidence, not an assertable
+surface; `select`/`hover`/`press`/`upload`/drag-and-drop/back-forward/multi-tab/iframe steps;
+scrolling; `ui.*` in the AI (JSON/YAML) format — **the UI track is Java-only**; a Spring-starter
+auto-configuration for the UI executor (see the authoring skill for what a Spring consumer must
+declare); masking sensitive zones in the **DOM** (the mask is a screenshot option — the DOM itself is
+left untouched); browser reuse across runs; a `SSO` sign-in scheme (declared, refuses with "not
+implemented").
 
 ## Definition of done for a generated UI test
 
