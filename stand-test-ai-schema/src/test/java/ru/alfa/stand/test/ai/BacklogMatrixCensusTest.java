@@ -26,7 +26,7 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  * путь"). That makes one particular drift expensive: a closed gate still shown as {@code BLOCKED}
  * tells the reader to wait for an answer that has already been given. That is not hypothetical — it is
  * what this test was written for. On 2026-08-10 the status column disagreed with the backlog in
- * <em>52 rows out of 79</em>, and one-sidedly: eight closed external gates read {@code BLOCKED}, four
+ * <em>54 rows out of 81</em>, and one-sidedly: eight closed external gates read {@code BLOCKED}, four
  * accepted decisions read {@code READY}, nine shipped slices read {@code IN_PROGRESS}, and six cards
  * had no row at all.
  *
