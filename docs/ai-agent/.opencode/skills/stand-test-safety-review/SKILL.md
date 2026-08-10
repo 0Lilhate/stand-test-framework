@@ -44,9 +44,15 @@ registry additions, build-file diffs.
 
 **What the automated half does NOT cover, so the eye covers it.** The write hook runs this table as
 `detectors.json`, and coverage depends on the artifact: findings 1, 3, 6, 8 and 11 are about DELIVERY
-and do not run over prose (`.md`/`.txt`) — an address in a report is a quotation, not a route to a
-stand. Findings 2, 13 and 14 do run there, because a credential is committed wherever it is written.
-The scan says so itself: `проверено находок: N из 18 (<вид>)`, with a reason beside every one that did
+and do not run over prose (`.md`/`.txt`) — an address in an ordinary document is a quotation, not a
+route to a stand. **7 of the 26 run over prose: 2, 4, 13, 14, 18, 24 and 26.** Disclosure travels with
+the file, so a credential (2, 13) and a real person (14) are findings wherever they are written, and
+so is a production stand named in a design (4); 18 runs whenever the artifact's previous version is
+available; 24 and 26 have no other kind at all — they exist for the UI reports, and 24 is where the
+address ban returns for a `Ui*Report.md` specifically, because a discovery report is the one document
+written by copying the screen. Every other finding is addressed to java, to a declarative document or
+to a build file: on prose that is a different subject, not a gap.
+The scan says so itself: `проверено находок: N из 26 (<вид>)`, with a reason beside every one that did
 not run, so a clean scan can be read for what it actually checked. Within Java the scanner reads
 imports, markers and step-anchored SQL rather than an AST, so reflection, a fully-qualified class name
 inline, a helper in a neighbouring file and a property spelled with spaces all pass it. Read the

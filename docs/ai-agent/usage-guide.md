@@ -442,16 +442,19 @@ Playwright-трейс (ZIP для Trace Viewer, по умолчанию выкл
 разделов, ни один не удаляется; протокольный аналог разбора —
 [`example-test-case-specification.md`](example-test-case-specification.md).
 
-**Честная оговорка про машину.** В `detectors.json` этой версии кита **25 находок, из них семь
+**Честная оговорка про машину.** В `detectors.json` этой версии кита **26 находок, из них восемь
 UI-специфичных**: `UI_LOCATOR_OUTSIDE_PAGES`, `UI_LOGIN_WITHOUT_ROLE`, `XPATH_LOCATOR`,
-`UI_OPEN_OR_ASSERT_TEMPLATE`, `EXPECT_EVENTUALLY_WITHOUT_WITHIN`, `UI_REPORT_STAND_ADDRESS` и
+`UI_OPEN_OR_ASSERT_TEMPLATE`, `EXPECT_EVENTUALLY_WITHOUT_WITHIN`, `UI_REPORT_STAND_ADDRESS`,
 `UI_DISCOVERY_PARITY` (U1 — локатор, которого нет в отчёте разведки; сверяется по `--discovery
-UiDiscoveryReport.md`, заявленный и отсутствующий отчёт — сам по себе BLOCK); `THREAD_SLEEP` расширен
-драйверными ожиданиями (`page.waitForSelector/Timeout/LoadState`, `.waitFor`). Общие находки
-(адрес, секрет, `Thread.sleep`, ПД) работают и над UI-файлами, но семантическая половина «помечено
-ли ПД», `${…}` в ожидаемом значении, и гейты U4(часть), U8, U10, U11a/b, U12, U14, U15, U16, U18,
-U19, U20 ловит только ревью стадии 7. Чистый прогон хука в UI-ветке — не чистое ревью, и отчёт обязан
-это говорить.
+UiDiscoveryReport.md`, заявленный и отсутствующий отчёт — сам по себе BLOCK) и
+`UI_GENERATION_REPORT_INCOMPLETE` (U16 — разделы отчёта считаются по НОМЕРУ, а `original.sha256`
+обязан существовать на диске); `THREAD_SLEEP` расширен драйверными ожиданиями
+(`page.waitForSelector/Timeout/LoadState`, `.waitFor`). Общие находки (адрес, секрет,
+`Thread.sleep`, ПД) работают и над UI-файлами — в том числе U20: `SHARED_MUTABLE_TEST_STATE` читает
+статическое мутабельное поле и в Page Object'е ровно так же, как в тест-классе. Не ловит ничто,
+кроме глаз стадии 7: семантическую половину U4 («помечено ли ПД»), СОДЕРЖАНИЕ разделов отчёта
+(заголовок, под которым ничего нет, проходит), а также U8, U10, U11a/b, U12, U14, U15, U18 и U19.
+Чистый прогон хука в UI-ветке — не чистое ревью, и отчёт обязан это говорить.
 
 ### Доля хрупких локаторов (KPI-9) — считает инструмент, а не отчёт
 
