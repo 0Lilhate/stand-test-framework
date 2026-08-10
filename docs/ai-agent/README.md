@@ -93,6 +93,10 @@ docs/ai-agent/
       stand-test-pipeline-rationale.md  the incidents the enforcement layer was built from, the
                                   exemptions that were tried and rejected, and what is provable
                                   about delegation versus what merely reads as proof
+      stand-test-guardrails-rationale.md  the three enforcement layers (pre-flight · fail-closed at
+                                  run time · review-only, enforced by nobody), why the target table
+                                  decides the DB-write shape, and why a business id copied from the
+                                  case is the same violation as an invented one
       stand-test-ui-guardrails-rationale.md  what actually enforces the discovery-account rule (at
                                   stage 3: nothing), why rung 4 is fragile, what `asSensitive()`
                                   does NOT reach, and why the registry's version-4 credential pair

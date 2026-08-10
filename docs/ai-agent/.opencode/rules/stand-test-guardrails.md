@@ -10,6 +10,10 @@ review-only rules that have no runtime enforcement — including the parallel-sa
 (`db.seed` tag column, `kafka.expect` per-run discriminator) that now FAIL CLOSED at run time.
 Details and detection patterns: `.opencode/skills/stand-test-safety-review/safety-checklist.md`.
 
+Which layer enforces each rule, and what it defends against:
+[`../reference/stand-test-guardrails-rationale.md`](../reference/stand-test-guardrails-rationale.md)
+— not auto-loaded, read it before CHANGING a rule and edit the two together.
+
 ## Process
 
 - Analysis before generation: text case → `stand-test-case-analysis` → `stand-test-kb-lookup`
@@ -27,8 +31,8 @@ Details and detection patterns: `.opencode/skills/stand-test-safety-review/safet
 - Logical aliases only in scenarios/tests — never URLs, hosts, ports, JDBC strings, bootstrap
   servers. In the Spring-starter REGISTRY the sanctioned exception is the endpoint value twins
   (`base-url`/`url`/`target`/`bootstrap-servers`/`security-protocol`), and even there only as
-  `${ENV_VAR:...}` placeholders — a hardcoded endpoint in a value field is a review finding
-  (no runtime check catches it: Spring resolves before the SDK sees it).
+  `${ENV_VAR:...}` placeholders — a hardcoded endpoint in a value field is a review finding, caught
+  by no runtime check.
 - No secrets anywhere: no `Authorization`/token/cookie/api-key headers or Bearer/Basic
   values; auth comes from the registry (`auth:` with `*-ref` env-var NAMES).
 - No production environments in any test registry.
@@ -42,12 +46,11 @@ Details and detection patterns: `.opencode/skills/stand-test-safety-review/safet
     Java DSL track (the AI format has no `db.seed`/`db.cleanup`/`db.write`).
   - *Which shape*: the TARGET TABLE decides. A table carrying a `test_run_id` marker column →
     `db.seed` + a paired `db.cleanup` (below). A table WITHOUT one — an ordinary business table —
-    → `db.write` with `identifiedBy("<pk>")`, whose row is undone after the run by a primary-key
-    compensation in the run's undo-log; no marker column and no paired cleanup are needed.
-    `identifiedBy` is mandatory there and every column it names must be bound as `:<column>` in the
-    INSERT — a write whose key cannot be resolved is refused at run time, so nothing un-undoable
-    reaches the stand. Timing is the scenario's `cleanupPolicy`: `ON_FAILURE` (default), `ALWAYS`,
-    `NEVER`. "No marker column" is therefore NOT a reason to declare the case blocked.
+    → `db.write` with `identifiedBy("<pk>")`, undone after the run by a primary-key compensation in
+    the run's undo-log; no marker column and no paired cleanup are needed. `identifiedBy` is
+    mandatory there and every column it names must be bound as `:<column>` in the INSERT. Timing is
+    the scenario's `cleanupPolicy`: `ON_FAILURE` (default), `ALWAYS`, `NEVER`. "No marker column" is
+    therefore NOT a reason to declare the case blocked.
   - *Preconditions first*: the datasource must have `write-allowed: true` in the registry
     (KB: `access.mode: write-allowed`) AND the target schema must be in `allowed-schemas`.
     Either missing ⇒ a blocking question to the human (registry/KB changes are human-approved) —
@@ -56,15 +59,13 @@ Details and detection patterns: `.opencode/skills/stand-test-safety-review/safet
     `test_run_id` column bound to the reserved `:testRunId` (auto-bound — never
     `param("testRunId", ...)`), AND the seed DECLARES that column with
     `taggedByTestRunId("<column>")` — the SAME column the paired cleanup filters. The write-guard
-    fails closed at run time if the tag column is not declared, or does not appear in the INSERT
-    column list bound to `:testRunId` (a seed tagging some other, non-reaped column would leak rows
-    across concurrent runs — BLOCK). Data ids derive from `${testRunId}`/captures — a fixed literal
-    primary key collides when two runs seed at once; table/column names trace to the
-    KB/case/recorded assumption ("No invented contracts" applies).
+    fails closed if the tag column is not declared or does not appear in the INSERT column list
+    bound to `:testRunId`. Data ids derive from `${testRunId}`/captures; table/column names trace to
+    the KB/case/recorded assumption ("No invented contracts" applies).
   - *Every seed has a paired cleanup*: `db.cleanup` with a bare `DELETE FROM <schema>.<table>`
-    (no author WHERE) + `whereTestRunId("<column>")` — the SAME `<column>` the seed tagged with
-    `taggedByTestRunId`; step order seed → trigger → awaits → cleanup; cleanup does NOT run after a
-    failed step (runner short-circuits) — a residual-data note in the javadoc/design is mandatory.
+    (no author WHERE — the SDK appends the filter) + `whereTestRunId("<column>")`, the SAME
+    `<column>` the seed tagged; step order seed → trigger → awaits → cleanup; cleanup does NOT run
+    after a failed step — a residual-data note in the javadoc/design is mandatory.
   - *Boundary*: writes touch TEST-SCOPED data only — never mutate the system's business rows
     (no state UPDATEs, no editing rows the test did not seed); changes the SYSTEM is expected
     to make are verified with read probes (`db.expectEventually`), not written by the test.
@@ -78,17 +79,16 @@ Details and detection patterns: `.opencode/skills/stand-test-safety-review/safet
 - `kafka.expect` selects by a per-run-UNIQUE discriminator: `correlationIdFromContext()` (the
   SDK-owned unique id) or a `key(...)` that is per-run-derived (contains a `${...}` placeholder,
   e.g. `key("${testRunId}")` / AI format `correlation: {fromContext: true}`). A constant key alone
-  is refused at run time — two concurrent runs would match each other's messages on a shared topic
-  (BLOCK); a constant key is allowed ONLY alongside `correlationIdFromContext()`, where it merely
-  narrows among the run's own correlated messages.
+  is refused at run time (BLOCK); it is allowed ONLY alongside `correlationIdFromContext()`, where
+  it merely narrows among the run's own correlated messages.
 - Parallel-safe by construction: generated tests must be safe under JUnit in-JVM parallel execution
   (SDK model — classes `concurrent`, methods `same_thread`, `maxParallelForks=1`, one scenario run
   = one thread; distinct runs get distinct `testRunId`/`correlationId`/`VariableStore`/Kafka group).
   No shared mutable static or instance state in the test class — every run-varying value flows
-  through captures / `${testRunId}`. Do NOT add `@StandParallelSafe` by default (isolation + the
-  consumer's `junit-platform.properties` make the class parallel-safe); mark a test `@StandIsolated`
-  or `@ResourceLock("<alias>")` ONLY when it touches a resource that cannot be `testRunId`-isolated
-  (a fixed port, a shared file, a process-wide singleton). Never Gradle `maxParallelForks>1`.
+  through captures / `${testRunId}`. Do NOT add `@StandParallelSafe` by default; mark a test
+  `@StandIsolated` or `@ResourceLock("<alias>")` ONLY when it touches a resource that cannot be
+  `testRunId`-isolated (a fixed port, a shared file, a process-wide singleton). Never Gradle
+  `maxParallelForks>1`.
 - No fixed test-data ids; system-generated ids only via `capture` → `${var}`. No stale statics
   in test data generally: run-unique fields derive from `${testRunId}`/captures, date-like
   values are computed in plain Java at run time (Java track) — never calendar literals that
@@ -96,18 +96,16 @@ Details and detection patterns: `.opencode/skills/stand-test-safety-review/safet
   that identifies ONE specific stateful row the SUT resolves at run time (client id, pinEQ,
   account id/number, deal/contract id, an approved-ТУ instance) is NOT exempt because "the system
   didn't mint it in-test": copying it from the case is the SAME violation as a fixed test-data id
-  (stale pointer + cross-run collision → BLOCK). Resolve by OWNERSHIP — a *test-ownable* entity
-  (client/account/deal/pin) is provisioned in-scenario via a KB-attested create-endpoint and
-  captured (`${var}`), or `db.seed`d into a write-allowed whitelisted schema (tagged by
-  `:testRunId`, §"DB write logic") when no create-endpoint exists; a *shared stateful catalog row*
-  (an approved ТУ) is boundary-forbidden to seed, is provisioned OUT-OF-BAND (legitimate — the
-  boundary rule sanctions it) and VERIFIED with a read-probe before the trigger; a test-ownable
-  entity is blocking missing information ONLY when NEITHER a create-endpoint nor a seedable
-  write-allowed schema exists (case-analysis item 7), never a case literal and never a DBA-runbook
-  substitute. A reference/dictionary CODE (service/ПУ/branch/currency — e.g. `PRICEASAVE`,
-  `PU_NWA`, `2932`) is a constant, NOT an instance-handle, and stays verbatim. (Review-only: Spring/
-  the fixture resolve literals before the SDK sees them, so no `ForbiddenOperation` catches a copied
-  business id — the detection pattern lives in `stand-test-safety-review/safety-checklist.md`.)
+  (BLOCK). Resolve by OWNERSHIP — a *test-ownable* entity (client/account/deal/pin) is provisioned
+  in-scenario via a KB-attested create-endpoint and captured (`${var}`), or `db.seed`d into a
+  write-allowed whitelisted schema (tagged by `:testRunId`, §"DB write logic") when no
+  create-endpoint exists; a *shared stateful catalog row* (an approved ТУ) is boundary-forbidden to
+  seed, is provisioned OUT-OF-BAND and VERIFIED with a read-probe before the trigger; it is blocking
+  missing information ONLY when NEITHER route exists (case-analysis item 7), never a case literal
+  and never a DBA-runbook substitute. A reference/dictionary CODE (service/ПУ/branch/currency —
+  e.g. `PRICEASAVE`, `PU_NWA`, `2932`) is a constant, NOT an instance-handle, and stays verbatim.
+  Review-only: nothing at run time catches a copied business id — the detection pattern lives in
+  `stand-test-safety-review/safety-checklist.md`.
 - No invented contracts: every endpoint path, JSON field, topic, table/column, SQL statement and
   gRPC method in a generated artifact traces to the knowledge base
   (`knowledge-base/`, contract: `docs/ai-agent/knowledge-base/`), to the case
