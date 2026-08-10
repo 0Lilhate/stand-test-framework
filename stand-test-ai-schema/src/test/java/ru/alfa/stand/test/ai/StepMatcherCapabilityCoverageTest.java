@@ -74,6 +74,25 @@ class StepMatcherCapabilityCoverageTest {
         // `[\s`*_]+` between tokens because the prose is markdown: "`MATCHES` regex on REST only".
         FORBIDDEN_CLAIMS.put("MATCHES[\\s`*_]+regex[\\s`*_]+on[\\s`*_]+REST[\\s`*_]+only", "gRPC accepts MATCHES as well.");
         FORBIDDEN_CLAIMS.put("gRPC\\s+unary\\s*\\(equals-only", "gRPC unary takes all five matchers — drop the equals-only marker.");
+        // The two spellings that got past every pattern above and shipped anyway. The list had grown by
+        // adding the exact line each incident produced, so each new pattern was one keystroke away from
+        // being evaded: "Kafka / gRPC / DB: equals only" carries no hyphen and does not put `grpc.unary`
+        // next to the claim, and "gRPC assertions are equals-only in the SDK" separates them by three
+        // words. This one asks the general question instead — gRPC, then the claim, in one line — and
+        // the corrected wordings pass it because they either put the claim BEFORE gRPC ("the equals-only
+        // adapters; REST and gRPC take …") or do not make it at all.
+        // The trailing lookahead is what keeps this from firing on the CORRECT sentence that contrasts
+        // the two — "full matcher set on REST and grpc.unary but equals-only on kafka.expect". There the
+        // claim is scoped to kafka/db by the words right after it, and that scope is the whole
+        // difference between naming the equals-only adapters and mislabelling gRPC as one. Without the
+        // lookahead this pattern refused the yaml-authoring skill's own description, which is exactly
+        // right about the partition.
+        FORBIDDEN_CLAIMS.put("gRPC[^\\n]{0,20}equals[- ]only(?![^\\n]{0,25}(?:kafka|db\\.))", "gRPC is at parity with REST — grpc.unary reads the same MATCHER wire key. Name the equals-only adapters explicitly (kafka.expect / db.expectEventually), and scope the claim to them rather than onto gRPC.");
+        FORBIDDEN_CLAIMS.put("only\\s+adapter[^\\n]{0,30}equals-only", "kafka is not the only one: db.expectEventually has no assertion type at all and is equals-only by construction. Say 'kafka and db are the equals-only adapters'.");
+        // A third spelling, found in the yaml-authoring TEMPLATE: "non-equals matchers ... ONLY on
+        // rest.* steps". It names neither `grpc.unary` nor the words "equals-only", so every pattern
+        // above walked past it — in the file a generated document is copied from.
+        FORBIDDEN_CLAIMS.put("(?:non-equals|contains|matches)[^\\n]{0,60}only\\s+on\\s+`?rest", "grpc.unary takes the non-equals matchers too. Write 'on rest.* AND grpc.unary', and name kafka.expect as the equals-only one.");
     }
 
     private static Path repoRoot() {
@@ -138,12 +157,30 @@ class StepMatcherCapabilityCoverageTest {
         return types;
     }
 
+    /**
+     * Every document this guard reads.
+     *
+     * <p>The corpus used to be the two bundle copies and the published rules, and both files that
+     * shipped a stale claim sat just outside it: the KB's own {@code example-grpc-targets.yml} header —
+     * a file a consumer copies into its repository — and {@code CLAUDE.md}, the instruction file loaded
+     * into every session in THIS repository. A guard whose corpus excludes the most-read document is a
+     * guard for the documents that happened to be inside it.
+     *
+     * <p>The knowledge base is walked as a whole rather than by file, because its entries are written
+     * by {@code /stand-test-kb-update} and a new one must inherit the check rather than have to be
+     * added to a list here.
+     */
     private static List<Path> documentationFiles() {
         Path root = repoRoot();
         List<Path> files = new ArrayList<>();
         files.add(root.resolve(Paths.get("stand-test-ai-schema", "src", "main", "resources", "ai", "stand-test-ai-generation-rules.md")));
+        files.add(root.resolve("CLAUDE.md"));
+        List<Path> trees = new ArrayList<>();
         for (String bundle : List.of(".claude", ".opencode")) {
-            Path dir = root.resolve(Paths.get("docs", "ai-agent", bundle));
+            trees.add(root.resolve(Paths.get("docs", "ai-agent", bundle)));
+        }
+        trees.add(root.resolve(Paths.get("docs", "ai-agent", "knowledge-base")));
+        for (Path dir : trees) {
             if (!Files.isDirectory(dir)) {
                 continue;
             }
@@ -159,6 +196,18 @@ class StepMatcherCapabilityCoverageTest {
             }
         }
         return files;
+    }
+
+    @Test
+    @DisplayName("the corpus really covers the two places a stale claim shipped from — CLAUDE.md and the knowledge base")
+    void documentationCorpus_coversTheFilesThatShippedStale() {
+        Path root = repoRoot();
+        List<Path> corpus = documentationFiles();
+
+        assertThat(corpus).as("CLAUDE.md is loaded into every session and must answer to this guard")
+                .contains(root.resolve("CLAUDE.md"));
+        assertThat(corpus).as("the KB example a consumer copies must answer to this guard")
+                .contains(root.resolve(Paths.get("docs", "ai-agent", "knowledge-base", "grpc", "example-grpc-targets.yml")));
     }
 
     @Test
@@ -259,7 +308,14 @@ class StepMatcherCapabilityCoverageTest {
                 "- \"Message contains substring\" on Kafka / regex on gRPC (equals-only adapters).",
                 "- Kafka/DB/gRPC assertions are equals-only — verify nobody smuggled a `matcher` key into",
                 "| Assertion correctness | OK | `MATCHES` regex on REST only; kafka/db equals-only respected |",
-                "  # --- optional gRPC unary (equals-only; deadline mandatory) ------------------");
+                "  # --- optional gRPC unary (equals-only; deadline mandatory) ------------------",
+                // The three that shipped anyway: the scenario-design matcher list, the KB grpc example
+                // and CLAUDE.md. Each is the line that CARRIES the claim — the guard reads line by line,
+                // so a claim split across two lines is caught on the half that states it.
+                "   - Kafka / gRPC / DB: equals only. Numbers compare by value (`100` == `100.0`), strings never",
+                "# gRPC assertions are equals-only in the SDK; a bounded deadline is mandatory per method;",
+                "only adapter still equals-only — `KafkaAssertion` carries no matcher field and",
+                "#   * non-equals matchers (contains/matches/exists/notNull) ONLY on rest.* steps");
 
         for (String line : shipped) {
             boolean caught = FORBIDDEN_CLAIMS.keySet().stream().anyMatch(regex -> Pattern.compile(regex, Pattern.CASE_INSENSITIVE).matcher(line).find());
@@ -278,7 +334,19 @@ class StepMatcherCapabilityCoverageTest {
                 "- Kafka/DB assertions are equals-only — verify nobody smuggled a `matcher` key into hand-built",
                 "  NOT equals-only: `GrpcStepParameters` reads the `MATCHER` key, so all 5 matchers apply there",
                 "inside its executable subset (7 step types, equals-only outside REST/gRPC, fixture-only bodies, no",
-                "  # --- optional gRPC unary (all 5 matchers, as REST; deadline mandatory) ------");
+                "  # --- optional gRPC unary (all 5 matchers, as REST; deadline mandatory) ------",
+                // The replacements for the three lines above. Each mentions gRPC and the equals-only
+                // adapters in one breath, which is exactly the shape the new patterns must tolerate:
+                // the claim is made ABOUT kafka/db and merely NEAR gRPC.
+                "   - REST and gRPC: `EQUALS` (default), `CONTAINS`, `MATCHES` (full-string regex), `EXISTS`",
+                "   - `kafka.expect` and `db.expectEventually`: equals only — those two, and only those two, are",
+                "# gRPC assertions take all five matchers, at parity with REST (EQUALS/CONTAINS/MATCHES/EXISTS/",
+                "# NOT_NULL) — `kafka.expect` and `db.expectEventually` are the equals-only adapters, not this one.",
+                "is the `java-platform` carrying constraints. Known asymmetry: **Kafka and DB** are",
+                "the equals-only adapters — `KafkaAssertion` carries no matcher field and `KafkaStepParameters` has no",
+                // The line the first version of the gRPC pattern refused: a correct contrast, where
+                // "equals-only" is scoped to kafka.expect by the words immediately after it.
+                "subset (7 step types, full matcher set on REST and grpc.unary but equals-only on kafka.expect, fixture-only bodies");
 
         for (String line : corrected) {
             List<String> tripped = FORBIDDEN_CLAIMS.keySet().stream().filter(regex -> Pattern.compile(regex, Pattern.CASE_INSENSITIVE).matcher(line).find()).toList();

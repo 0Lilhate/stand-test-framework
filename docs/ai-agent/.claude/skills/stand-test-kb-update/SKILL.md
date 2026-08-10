@@ -74,7 +74,7 @@ parse → candidates → validate → diff → report pipeline. The KB is stand 
 5. **Take a write permit.** The curated collections are closed to the agent without one, and the
    paths are declared BEFORE the content exists, so a write that strays outside them is refused while
    it is still recoverable:
-   `node <bundle>/hooks/stand-guard.mjs kb-write-permit --reason update --source <спека|pasted> <файлы>`.
+   `node <bundle>/hooks/stand-guard.mjs kb-write-permit --reason update --source <spec|pasted> <files>`.
    The host asks a human at each write — that prompt, not the permit, is the approval.
 6. **Write (apply mode only)** deterministically: collections sorted by `id`; entry keys in
    schema property order; 2-space indent; one collection key per file; file naming follows the

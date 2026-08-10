@@ -19,13 +19,25 @@ import { withoutComments } from './source.mjs';
 /**
  * What counts as an assertion, by artifact kind. Deliberately narrow: a miscount here is a false BLOCK.
  *
- * This is a MIRROR of the step-builder crib in `skills/stand-test-java-dsl-authoring/SKILL.md` and of
- * the executable subset in `stand-test-scenario.schema.json`, and it has to move when they do. It had
- * not. Six of the ten Java entries — `.expectBody`, `.expectJsonPath`, `.expectHeader`, `.expectField`,
- * `.expectRow`, `.expectMessage` — name methods that do not exist in the SDK and never did; not one is
- * declared anywhere under the modules' main sources. Meanwhile the `assertPath` family (the most-used
- * assertion in the whole repository) and `.expectValue` (the only one `db.expectEventually` has) were
- * missing, so deleting the verification half of a generated scenario changed the count by nothing.
+ * This is a MIRROR of the step-builder crib in `skills/stand-test-java-dsl-authoring/SKILL.md`, of the
+ * UI surface in `skills/stand-test-ui-java-authoring/ui-sdk-surface-checklist.md` and of the executable
+ * subset in `stand-test-scenario.schema.json`, and it has to move when they do. Twice now it had not.
+ *
+ * First: six of the ten Java entries — `.expectBody`, `.expectJsonPath`, `.expectHeader`,
+ * `.expectField`, `.expectRow`, `.expectMessage` — named methods that do not exist in the SDK and never
+ * did, while the `assertPath` family (the most-used assertion in the repository) and `.expectValue`
+ * (the only one `db.expectEventually` has) were missing. Deleting the verification half of a generated
+ * scenario changed the count by nothing. Three of the six phantoms survived that repair and are gone
+ * now; a pattern that cannot match is not harmless, it is a line that makes the list look checked.
+ *
+ * Second, and the reason to touch this again: the whole UI vocabulary was absent. `assertVisible`,
+ * `assertEnabled`, `assertText`, `assertTextContains`, `assertTextMatches`, `assertValue`,
+ * `assertAttribute` and `assertProperty` are what a `ui.expect` step asserts WITH — and none of them
+ * starts with `assertPath`, so deleting every check from a UI test moved the count by zero. The branch
+ * whose worst artifact is an invented locator was the branch whose deleted assertions nothing counted.
+ * The list is enumerated against the adapters' own `public` signatures rather than widened to
+ * `\.assert[A-Z]\w*\(`: a miscount here is a false BLOCK, and a consumer's own helper named
+ * `assertSomething` must not become one.
  *
  * The document entries were worse than incomplete, they were pointed at the wrong document. Neither
  * `assertions:` nor `matcher:` occurs anywhere in the executable scenario schema — they belong to the
@@ -36,7 +48,7 @@ import { withoutComments } from './source.mjs';
 const ASSERTIONS = {
   java: [/\bassertThat\s*\(/g, /\bassertThatThrownBy\s*\(/g, /\bassertThatCode\s*\(/g,
     /\.assertPath[A-Za-z]*\s*\(/g, /\.expectStatus\s*\(/g, /\.expectValue\s*\(/g,
-    /\.expectBody\s*\(/g, /\.expectHeader\s*\(/g, /\.expectMessage\s*\(/g],
+    /\.assert(?:Visible|Enabled|TextContains|TextMatches|Text|Value|Attribute|Property)\s*\(/g],
   document: [
     /"(?:equals|contains|matches|exists|notNull)"\s*:/g,
     /^\s*-?\s*(?:equals|contains|matches|exists|notNull)\s*:/gm,

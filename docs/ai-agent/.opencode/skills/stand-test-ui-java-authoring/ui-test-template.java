@@ -5,8 +5,8 @@
 //
 // Wiring: @StandTest discovers every StepExecutor through ServiceLoader, and stand-test-ui registers
 // UiStepExecutor in META-INF/services, so nothing further is needed. On the Spring starter, swap the
-// two annotations for @SpringBootTest + @Autowired StandClient AND declare a UiStepExecutor bean —
-// the starter does not auto-configure the UI executor in this SDK version.
+// two annotations for @SpringBootTest + @Autowired StandClient — and that is all: since ADR-UI-008 the
+// starter loads SPI-registered executors too, so no UiStepExecutor bean has to be declared.
 
 package <consumer.base.package>.ui;
 

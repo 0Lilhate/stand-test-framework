@@ -141,6 +141,18 @@ in the generation report, and because it is what a red run is diagnosed from.
 All four are best-effort — a capture that fails is a WARN and never replaces the step's own failure —
 and everything written lives under `stand.test.ui.artifacts.retention.days` (7 by default).
 
+## Wiring — what the consumer must declare
+
+| Consumer | What it declares |
+|---|---|
+| plain JUnit (`stand-test-junit` + `stand-test-ui` + `stand-test-config`) | nothing — `StandTestExtension` loads every `StepExecutor` through `ServiceLoader`, and `stand-test-ui` registers `UiStepExecutor` in `META-INF/services` |
+| Spring Boot starter | nothing either, since ADR-UI-008 — `StepExecutorDiscovery` loads SPI-registered executors beside the beans the starter declares. A `UiStepExecutor` bean is **optional**: declared, it wins by ordering, and the SPI copy of the same class is de-duplicated. **Never block a generation for the want of it** |
+
+This table sits above the absence list on purpose. It used to be an ABSENCE — "the starter does not
+auto-configure the UI executor" — and stayed one for a release after ADR-UI-008 made it false, which
+turned four assets into a false blocker: two of them told the agent to stop. An absence that becomes a
+capability has to move out of the absence table, not be reworded inside it.
+
 ## Absent from this version — do not write it
 
 | Wanted | Status |
@@ -153,7 +165,6 @@ and everything written lives under `stand.test.ui.artifacts.retention.days` (7 b
 | navigating back/forward, multiple tabs, iframes, new windows | absent |
 | visual regression, pixel comparison | absent |
 | `ui.*` in the AI (JSON/YAML) format | absent — **the UI track is Java-only** |
-| Spring-starter auto-configuration of `UiStepExecutor` | absent — a Spring consumer declares the bean itself |
 | browser reuse between runs, a browser pool | absent (one browsing context per run, closed in the runner's `finally`) |
 | a UI-side compensation / undo for a browser action | absent — the run's undo-log reaches `db.write` only |
 | `SSO` sign-in | declared in the registry, refuses with a speaking "not implemented" |

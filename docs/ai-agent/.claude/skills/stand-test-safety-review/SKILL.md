@@ -40,6 +40,7 @@ registry additions, build-file diffs.
 | 15 | Unsanctioned dependencies | consumer build diff adds anything beyond `allure-junit5`, JSON-Schema validator (+jackson), JDBC driver | HIGH |
 | 16 | Kafka expect without a per-run discriminator | a `kafka.expect` with neither `correlationIdFromContext()`/`correlation: {fromContext: true}` nor a `${...}`-derived `key` — a constant `.key(...)` alone (no `fromContext`) is refused at run time (two concurrent runs match each other's messages on a shared topic) | BLOCK |
 | 17 | Shared mutable state in the test class | `static` mutable fields, or reused mutable instance objects, holding run-varying data (counters, captured values, shared builders) instead of flowing through captures / `${testRunId}` — the runner and step executors are shared across parallel test threads, so this races | HIGH |
+| 18 | Failure concealment — a check that stopped running | the ONLY finding that needs BOTH versions of the artifact, because a deleted assertion is not in the file and a grown timeout looks exactly like a timeout. Compare against the previous version (the write hook holds the file on disk; in CI pass `scan --against <base>`): fewer assertions than before, a new `@Disabled`, a new `catch`, a timeout raised at an unchanged number of waits | **BLOCK** for a dropped assertion or a `@Disabled` with no ticket; HIGH (heuristic — confirm) for a new `catch` or a grown timeout, which can be legitimate work |
 
 **What the automated half does NOT cover, so the eye covers it.** The write hook runs this table as
 `detectors.json`, and coverage depends on the artifact: findings 1, 3, 6, 8 and 11 are about DELIVERY
@@ -56,7 +57,9 @@ JSON Schema; the DB write-guard and Kafka executor fail closed on an untagged se
 expect), but the review must catch them **statically** — a violation that only explodes at run time
 is still a defective artifact. Items 8, 10–15 and 17 have **no runtime enforcement** (a raw client or
 a shared static field never enters the SDK pipeline at all, so nothing can intercept it) — the review
-is the only net.
+is the only net. Item 18 is neither: nothing at run time can know a check used to be there, and no
+single-file read can either — it needs the artifact's previous version, which the write hook holds and
+CI supplies with `--against`. Where neither is available the honest answer is "not run", never "clean".
 
 ## Procedure
 
@@ -67,10 +70,13 @@ is the only net.
 4. Check every seed/cleanup pair (seed declares `taggedByTestRunId` naming the SAME column the
    cleanup filters), all test data `:testRunId`-scoped, every `kafka.expect` discriminated, and no
    shared static mutable state in the test class.
-5. Write the report per
+5. **When the artifact existed before this change, diff it against its previous version** (finding
+   18) — the one question a single-file read cannot answer. On a REGENERATION especially: a check
+   that quietly stopped running looks identical to a check that was never there.
+6. Write the report per
    [`safety-review-template.md`](../stand-test-safety-review/safety-review-template.md):
    verdict `PASS` / `PASS-WITH-NOTES` / `BLOCK`, findings with file:line, exact fix per finding.
-6. **Record the verdict**, naming exactly the artifacts it covers:
+7. **Record the verdict**, naming exactly the artifacts it covers:
    `node <bundle>/hooks/stand-guard.mjs record-gate --gate safety-review --verdict PASS <files>`.
 
 ## Who runs this, and who records it

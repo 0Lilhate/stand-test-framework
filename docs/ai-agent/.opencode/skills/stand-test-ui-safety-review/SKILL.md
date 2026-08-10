@@ -64,9 +64,19 @@ address, a secret, a `Thread.sleep`, a raw client and PII are caught in UI files
 partially automated: U1 (invented locator) → `UI_DISCOVERY_PARITY`, U2 → `UI_LOCATOR_OUTSIDE_PAGES`,
 U5 → `UI_LOGIN_WITHOUT_ROLE`, U6 (driver wait) → `THREAD_SLEEP`, U7 → `XPATH_LOCATOR`,
 U9 → `UI_OPEN_OR_ASSERT_TEMPLATE`, U17 → `EXPECT_EVENTUALLY_WITHOUT_WITHIN`, and the U3 report half →
-`UI_REPORT_STAND_ADDRESS`. **The rest — U4 (semantic half), U8, U10, U11a/b, U12, U14, U15, U16,
-U18, U19, U20 — has no detector in this kit.** Nothing intercepts a fabricated-but-plausible `${var}`,
-a role discrepancy, or a report that hides its gaps; the eye is the only net.
+`UI_REPORT_STAND_ADDRESS`. Two more ride detectors of their own: U16 → `UI_GENERATION_REPORT_INCOMPLETE`
+**partly** (the eight headings are counted by NUMBER and `original.sha256` must exist on disk; a heading
+with nothing under it passes, so the section CONTENT stays eye only), and U20 →
+`SHARED_MUTABLE_TEST_STATE`, the protocol detector, which reads a static mutable field in a Page Object
+exactly as in a test class. **The rest — U4 (semantic half), U8, U10, U11a/b, U12, U14, U15, U18,
+U19 — has no detector in this kit.** Nothing intercepts a fabricated-but-plausible `${var}`, a role
+discrepancy, or a report whose sections are present and empty; the eye is the only net.
+
+That list is not prose to be re-derived: it is pinned in both directions by `UiHumanGateCensusTest`
+(no detector covers a gate named here) and `UiMachineGateCensusTest` (no gate named machine-covered is
+also named here), against the coverage table in
+[`ui-safety-checklist.md`](ui-safety-checklist.md) — which is the authority if this paragraph and it
+ever disagree.
 
 `UI_DISCOVERY_PARITY` needs the discovery report to judge against: run
 `node <bundle>/hooks/stand-guard.mjs scan <page> --discovery UiDiscoveryReport.md`. Absent the report,

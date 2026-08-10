@@ -231,6 +231,31 @@ class GuardMappingTest {
     }
 
     @Test
+    @DisplayName("a Page Object is not asked for a mapping — it is not a test, and the entry has nowhere to put it")
+    void pageObjects_areNotAskedForAMapping(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+        String page = "package ru.example.ui.pages;\n\npublic final class NewApplicationPage {\n\n    private NewApplicationPage() {\n    }\n}\n";
+        String path = "src/test/java/ru/example/ui/pages/NewApplicationPage.java";
+        String write = MAPPER.createObjectNode()
+                .put("cwd", project.toString())
+                .put("tool_name", "Write")
+                .set("tool_input", MAPPER.createObjectNode()
+                        .put("file_path", project.resolve(path).toString())
+                        .put("content", page))
+                .toString();
+        write(project, path, page);
+        run(project, write, "pre-write");
+        run(project, subagentPayload(project), "subagent-stop");
+        run(project, "", "record-gate", "--verdict", "PASS", path);
+
+        assertThat(run(project, payload(project), "stop").exitCode())
+                .as("the UI branch writes a Page Object per screen beside one test. A mapping entry names exactly one "
+                        + "class — `generatedTest.className` — and it is the TEST's; asking for one per Page Object asks "
+                        + "for a record the schema cannot hold, and spent the NOT-READY line on every UI generation")
+                .isZero();
+    }
+
+    @Test
     @DisplayName("record-gate --case fails fast on a case the collection has never heard of")
     void recordGate_checksTheCaseIdEarly(@TempDir Path temporary) throws IOException {
         Path project = temporary.toRealPath();

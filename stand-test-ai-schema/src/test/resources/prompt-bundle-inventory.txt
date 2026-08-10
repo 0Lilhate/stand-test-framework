@@ -5,8 +5,10 @@
 # Covered: the asset directories (commands, rules, skills, workflows, hooks, agents) of BOTH bundle
 # copies, the bundle-root assets (settings.json, .gitignore) and the opencode-only loader manual
 # AGENTS.md. Machine-local residue (.env*, settings.local.json, scheduled_tasks.lock) sits at the
-# bundle root, outside those directories, and is not shipped. hooks/ and agents/ exist in the Claude
-# copy alone — they are Claude Code mechanisms, and BundleParityTest exempts those two prefixes.
+# bundle root, outside those directories, and is not shipped. hooks/ and agents/ now exist in BOTH
+# copies. hooks/ are byte-identical; agents/ carry the same body under each host's own permission
+# grammar, which is why BundleParityTest exempts that prefix from byte parity and AgentDefinitionSafetyTest
+# compares the two semantically instead.
 #
 # Adding, deleting or renaming an asset must be a deliberate edit of this file in the same commit.
 # Regenerate from the repository root:
@@ -149,6 +151,9 @@
 .claude/workflows/review-and-apply-kb-candidates.md
 .opencode/.gitignore
 .opencode/AGENTS.md
+.opencode/agents/stand-test-kb-resolver.md
+.opencode/agents/stand-test-quality-reviewer.md
+.opencode/agents/stand-test-safety-reviewer.md
 .opencode/commands/stand-test-apply-kb-candidates.md
 .opencode/commands/stand-test-bootstrap-kb.md
 .opencode/commands/stand-test-debug.md

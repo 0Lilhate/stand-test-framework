@@ -37,6 +37,7 @@
 | 15 | No unsanctioned dependencies | PASS/FAIL | build diff |
 | 16 | Every `kafka.expect` has a per-run discriminator (`fromContext` or `${...}`-key; no constant-key-only) | PASS/FAIL | |
 | 17 | No shared mutable static/instance state in the test class (parallel-safe) | PASS/FAIL | |
+| 18 | No failure concealment — needs the artifact's PREVIOUS version (the write hook has it; in CI pass `scan --against <base>`): no assertion count dropped, no `@Disabled` without a ticket, no new `catch`, no timeout grown at an unchanged number of waits | PASS/FAIL/**NOT-RUN** | which previous version was compared, or that there was none |
 
 ## Findings
 

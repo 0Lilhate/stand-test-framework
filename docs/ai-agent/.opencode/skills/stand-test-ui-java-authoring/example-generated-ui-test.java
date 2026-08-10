@@ -37,9 +37,17 @@ import ru.alfa.stand.test.ui.UiStep;
  * the application number is asserted by shape (`AP-\d+`) because the system mints it.
  *
  * <p>Not covered: the submitted-application screen (reachable only through the irreversible submit,
- * which discovery may not perform), and a screenshot on failure (absent from this SDK version).
- * Residual data: every run leaves one application in status «Принята» on the stand — a browser action
- * has no compensation in this SDK version, and no delete endpoint is curated.
+ * which discovery may not perform).
+ *
+ * <p>Residual data: every run leaves one application in status «Принята» on the stand — a browser
+ * action has no compensation in this SDK version, and no delete endpoint is curated.
+ *
+ * <p>What is deliberately NOT in the list above: the failure screenshot. A failing ui.* step attaches
+ * one itself, with the asSensitive() zones painted over before the grab, next to the console and the
+ * network story — so listing it as a gap would report a hole that is not there. Only a screenshot
+ * ordered ON DEMAND is absent, and no case has ever needed one. Keep this out of the "not covered"
+ * paragraph: that paragraph is copied into the generation report, and everything in it is read as
+ * something the SDK could not do.
  */
 @StandTest(env = "ift")
 @EnabledIfEnvironmentVariable(named = "CLIENT_PORTAL_URL", matches = ".+")

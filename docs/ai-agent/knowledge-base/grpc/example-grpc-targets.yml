@@ -1,7 +1,9 @@
 # Example KB entry — gRPC target. Schema: ../schema/grpc-target.schema.json
 # A target is a registry whitelist entry (alias + METADATA correlation key); its methods list
 # the unary operations a test may call. The address is an env-var REFERENCE per environment.
-# gRPC assertions are equals-only in the SDK; a bounded deadline is mandatory per method;
+# gRPC assertions take all five matchers, at parity with REST (EQUALS/CONTAINS/MATCHES/EXISTS/
+# NOT_NULL) — `kafka.expect` and `db.expectEventually` are the equals-only adapters, not this one.
+# A bounded deadline is mandatory per method;
 # the server must expose Reflection v1 (the SDK resolves messages via DynamicMessage).
 grpcTargets:
   - id: result-grpc-service

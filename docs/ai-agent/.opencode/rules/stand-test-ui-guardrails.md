@@ -336,9 +336,7 @@ comparison; network interception, and assertions about the requests a page makes
 attachment is *evidence in the report*, never a subject of an assertion; assertions about the URL,
 the page title or the console — the console attachment is likewise evidence, not an assertable
 surface; `select`/`hover`/`press`/`upload`/drag-and-drop/back-forward/multi-tab/iframe steps;
-scrolling; `ui.*` in the AI (JSON/YAML) format — **the UI track is Java-only**; a Spring-starter
-auto-configuration for the UI executor (see the authoring skill for what a Spring consumer must
-declare); masking sensitive zones in the **DOM** (the mask is a screenshot option — the DOM itself is
+scrolling; `ui.*` in the AI (JSON/YAML) format — **the UI track is Java-only**; masking sensitive zones in the **DOM** (the mask is a screenshot option — the DOM itself is
 left untouched); browser reuse across runs; a `SSO` sign-in scheme (declared, refuses with "not
 implemented").
 

@@ -112,8 +112,10 @@ an empty discovery report is a correct outcome, a fabricated one is not.
 | `/stand-test-generate-env` | KB → `stand-test-environments.yml` / `stand.test.environments.*` | dry-run |
 
 Commands carry `description`-only frontmatter and take no `$ARGUMENTS` placeholders — read arguments
-from the user's message. There is no `.opencode/agents/` directory: everything runs on the default
-agent, so a command cannot delegate — you execute its steps yourself.
+from the user's message. `.opencode/agents/` declares three subagents (`stand-test-kb-resolver`,
+`stand-test-safety-reviewer`, `stand-test-quality-reviewer`), and `opencode.json` allows the task tool
+to call exactly those three — so a command that says "in a separate context" means it: delegate rather
+than executing that stage yourself.
 
 ## Skills
 
@@ -149,11 +151,15 @@ report format**.
 | `stand-test-ui-quality-review` | after UI safety passes, against the ORIGINAL case |
 | `stand-test-ui-generation-report` | the eight-section report + the KPI-4 snapshot |
 
-**Under opencode there are no subagents** (`agents/` is a Claude Code mechanism), so the two reviews
-run in the main context. That is a real weakening, and it matters most in the UI branch: the error
-stage 7 hunts for is an invented locator, and the context that wrote it remembers deciding it rather
-than observing it. Compensate by reading `UiDiscoveryReport.md` and the Page Objects side by side,
-row by row, rather than trusting recall.
+**Both reviews run in a separate context here too.** `agents/` used to be a Claude Code mechanism
+and the two reviews ran inline, which mattered most in this branch: the error stage 7 hunts for is an
+invented locator, and the context that wrote it remembers deciding it rather than observing it. Call
+`stand-test-safety-reviewer` and `stand-test-quality-reviewer` through the task tool; neither can write,
+so each reports and you fix.
+
+What is still weaker here than under Claude Code: nothing RECORDS that the delegation happened. The
+`safety-review` gate's "a subagent finished since the artifact was written" check is Stop-hook
+bookkeeping, and opencode has no Stop gate. The separate context is real; the proof of it is not.
 
 ## Workflows
 

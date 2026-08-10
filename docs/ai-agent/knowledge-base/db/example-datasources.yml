@@ -5,6 +5,11 @@
 # reference this datasource by id — one direction of reference, no duplication.
 # Destructive SQL is globally forbidden by the SDK's ForbiddenOperation; the KB never
 # re-declares that list (single source of truth stays in stand-test-core).
+#
+# TWO entries, and the pair is the point: `access.mode` is what kb-lookup step 5 checks before a case
+# that needs preconditions may design a `db.seed`, so an example set with only a readonly datasource
+# cannot show what a passing check looks like. It also cannot show what a FAILING one looks like, which
+# is worse — that is the branch that turns into a blocking question to a human.
 datasources:
   - id: client-db
     alias: client-db
@@ -13,6 +18,21 @@ datasources:
       mode: readonly
     allowedSchemas:
       - client
+    allowedEnvironments:
+      - dev
+      - ift
+
+  # The seed/cleanup side. A `db.seed` needs BOTH of the properties below — `write-allowed` here AND
+  # the target schema in `allowedSchemas` — and the table it writes into must carry the marker column
+  # (example-db-tables.yml). Missing either is a blocking question to a human, never a workaround:
+  # the registry is stand configuration and only a person changes it.
+  - id: client-test-data-db
+    alias: client-test-data-db
+    description: Same client stand, the test-data schema — the only place seed/cleanup may write
+    access:
+      mode: write-allowed
+    allowedSchemas:
+      - test_data
     allowedEnvironments:
       - dev
       - ift

@@ -70,10 +70,13 @@ explicitly assumed).
    `${scenarioId}`, `${testRunId}`, `${correlationId}`, `${environment}`.
    Syntax is `${name}` — **not** `{{name}}`; no defaults, no expressions, no escaping.
 8. **Assertions** — per step, with matcher:
-   - REST: `EQUALS` (default), `CONTAINS`, `MATCHES` (full-string regex), `EXISTS` (true/false;
-     JSON `null` counts as present), `NOT_NULL` (true/false).
-   - Kafka / gRPC / DB: equals only. Numbers compare by value (`100` == `100.0`), strings never
-     coerce (`"100"` != `100`).
+   - REST and gRPC: `EQUALS` (default), `CONTAINS`, `MATCHES` (full-string regex), `EXISTS`
+     (true/false; JSON `null` counts as present), `NOT_NULL` (true/false). `grpc.unary` is at
+     parity with REST — it reads the same `MATCHER` wire key, and designing a CONTAINS/MATCHES
+     check away from it is understating the SDK.
+   - `kafka.expect` and `db.expectEventually`: equals only — those two, and only those two, are
+     the equals-only adapters. Numbers compare by value (`100` == `100.0`), strings never coerce
+     (`"100"` != `100`).
    - Use definite JSONPaths with presence matchers (no `$..x`, no `[*]`).
 9. **Awaits** — every async check is an `expectEventually`/`expect` step with an explicit
    timeout. Pick the smallest realistic SLA; cap 1h (AI grammar: ≤99999ms / ≤999s / ≤60m).

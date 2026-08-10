@@ -44,7 +44,7 @@ Anything failing a precondition is reported and skipped; it is never written.
    umbrella). A failure means the entry is not promotable — report it, do not write.
 4. **Take a write permit** naming every curated file this promote will touch, the owning service's
    rollup included (it is written a second time by the referential-integrity step):
-   `node <bundle>/hooks/stand-guard.mjs kb-write-permit --reason promote --document <document-id> <файлы>`.
+   `node <bundle>/hooks/stand-guard.mjs kb-write-permit --reason promote --document <document-id> <files>`.
    It refuses a document with no review record — that catches a promote aimed at the wrong id and is
    NOT the approval; the approval is the host prompt on each write.
 5. **Hand off to `stand-test-kb-update`** as the SOLE deterministic writer. Feed the projected entries
@@ -66,7 +66,7 @@ Anything failing a precondition is reported and skipped; it is never written.
    every touched curated file.
 10. **Close the write.** At a consumer, where the schema tests do not exist:
    `node <bundle>/hooks/stand-guard.mjs kb-validate --exit-code` and `alias-check`, then
-   `node <bundle>/hooks/stand-guard.mjs record-gate --gate kb-write --verdict PASS <файлы>` — until
+   `node <bundle>/hooks/stand-guard.mjs record-gate --gate kb-write --verdict PASS <files>` — until
    that verdict is recorded the session will not end, because a curated write nobody re-read breaks
    not this session but the next generated test.
 

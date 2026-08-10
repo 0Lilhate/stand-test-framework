@@ -126,7 +126,122 @@ class UiCapabilityAbsenceCensusTest {
                     "upload(",
                     false,
                     List.of(),
-                    "there is no upload step — the kit is right to call it absent"));
+                    "there is no upload step — the kit is right to call it absent"),
+            // ADR-UI-008. This entry is here because its absence let the kit ship the one stale claim
+            // that COSTS a run rather than merely misinforming it: four assets said the starter does not
+            // auto-configure the UI executor, and two of them told the agent to STOP when no
+            // `UiStepExecutor` bean was declared. `StepExecutorDiscovery` had already made the bean
+            // unnecessary. A register that probes what the SDK can do is worth exactly the capabilities
+            // it lists, and this one was not among them.
+            new Capability(
+                    "Spring-starter auto-configuration of the UI executor",
+                    List.of("auto-configur", "автоконфигур", "UiStepExecutor` bean", "declares the bean"),
+                    "stand-test-spring-boot-starter/src/main/java/ru/alfa/stand/test/starter/StepExecutorDiscovery.java",
+                    "ServiceLoader.load(",
+                    true,
+                    List.of(),
+                    "the starter discovers every SPI-registered executor since ADR-UI-008, so a starter consumer declares no UiStepExecutor bean — and must never be told to stop for the want of one"),
+            // ---------------------------------------------------------------------------------------
+            // The rest of the surface checklist's absence table. Until now the register carried eight
+            // capabilities against twelve rows, so four fifths of what the kit calls absent was claimed
+            // by nobody — and the register's own docstring already says why that is not a neutral gap:
+            // two of these structures are TEMPLATES, and a stale absence is copied verbatim into the
+            // generation report as a hole in the SDK that is not there.
+            //
+            // Every marker below is the natural name the capability would have, checked to be absent
+            // from the probe file TODAY so that none of them is a pattern that can never match. That is
+            // the known weakness of a name-shaped probe and it is bounded, not denied: someone adding a
+            // hover step spelled `mouseOver(` would slip past. The alternative — probing for the
+            // capability's effect — needs a runtime, which this census deliberately does not have.
+            new Capability(
+                    "assertions about the URL or the page title",
+                    List.of("the url", "page title"),
+                    UI_MAIN + "UiProperty.java",
+                    "URL",
+                    false,
+                    List.of(),
+                    "UiProperty offers TEXT, VALUE, ATTRIBUTE, VISIBLE and ENABLED. A URL or TITLE constant would make the address bar assertable and this row would have to go"),
+            new Capability(
+                    "a select step",
+                    List.of("`select`"),
+                    UI_MAIN + "UiStep.java",
+                    "UiStep select(",
+                    false,
+                    List.of(),
+                    "UiStep has open/click/fill/expect/expectEventually/login and nothing else — a select factory would end this row"),
+            new Capability(
+                    "a hover step",
+                    List.of("`hover`"),
+                    UI_MAIN + "UiStep.java",
+                    "UiStep hover(",
+                    false,
+                    List.of(),
+                    "no hover factory exists on UiStep"),
+            new Capability(
+                    "a scrolling step",
+                    List.of("scrolling"),
+                    UI_MAIN + "UiStep.java",
+                    "UiStep scroll(",
+                    false,
+                    List.of(),
+                    "no scroll factory exists on UiStep; what is visible without scrolling is a discovery observation, not a step"),
+            new Capability(
+                    "browser history navigation",
+                    List.of("back/forward", "back-forward"),
+                    UI_MAIN + "UiStep.java",
+                    "UiStep back(",
+                    false,
+                    List.of(),
+                    "no back/forward factory exists on UiStep"),
+            new Capability(
+                    "an iframe step",
+                    List.of("iframe"),
+                    UI_MAIN + "UiStep.java",
+                    "UiStep frame(",
+                    false,
+                    List.of(),
+                    "no frame factory exists on UiStep; a locator addresses the top document only"),
+            new Capability(
+                    "visual regression / pixel comparison",
+                    List.of("visual regression", "pixel"),
+                    UI_MAIN + "UiStep.java",
+                    "expectScreenshot(",
+                    false,
+                    List.of(),
+                    "there is no baseline-image assertion; the failure screenshot is evidence, never a subject of comparison"),
+            new Capability(
+                    "ui.* steps in the AI (JSON/YAML) format",
+                    List.of("ai (json/yaml) format", "declarative surface", "java-only"),
+                    "stand-test-ai-schema/src/main/resources/schema/stand-test-scenario.schema.json",
+                    "\"ui.open\"",
+                    false,
+                    List.of(),
+                    "the scenario schema declares no ui.* step type, so AiScenarioParser cannot produce one. If the schema gained them, the UI track would stop being Java-only and stage 4's track decision would change"),
+            new Capability(
+                    "browser reuse between runs / a browser pool",
+                    List.of("browser reuse", "browser pool"),
+                    UI_MAIN + "playwright/PlaywrightDriverFactory.java",
+                    "browserPool",
+                    false,
+                    List.of(),
+                    "the factory opens a context per run and closes the browser after it; a pool would change the isolation the whole parallelism budget rests on"),
+            new Capability(
+                    "a UI-side compensation for a browser action",
+                    List.of("compensation", "undo for a browser"),
+                    UI_MAIN + "UiStepExecutor.java",
+                    "Compensat",
+                    false,
+                    List.of(),
+                    "the run's undo-log reaches db.write only; nothing undoes a click. If a UI compensator appeared, the residual-data verdict of stage 4 would stop being the last word"));
+
+    // Two rows of the same table are deliberately NOT registered here: `SSO` sign-in and the
+    // MFA/OTP/CAPTCHA gate. Neither is an ABSENCE in this census's sense — the SDK declares both in its
+    // configuration vocabulary and REFUSES them at run time with a speaking message, which is a
+    // different statement and one this model cannot express (a marker's presence must mean the
+    // capability exists, and here the marker would be the refusal). Both refusals are pinned where they
+    // belong, by the UI module's own tests: UiLoginStepExecutorTest for the SSO scheme and
+    // UiLoginChallengeHandlerTest for the challenge gate. Saying so here is the point — an unexplained
+    // hole in a register reads as an oversight and gets filled with something wrong.
 
     // ---- reading the kit's absence structures -------------------------------------------------
 
@@ -294,6 +409,40 @@ class UiCapabilityAbsenceCensusTest {
         items.addAll(pageObjectTemplateItems(bundle));
         items.addAll(sdkCauseRows(bundle, "skills/stand-test-ui-generation-report/ui-generation-report-template.md"));
         items.addAll(sdkCauseRows(bundle, "skills/stand-test-ui-quality-review/ui-quality-checklist.md"));
+        items.addAll(workedExampleNotCovered(bundle));
+        return items;
+    }
+
+    /**
+     * The {@code Not covered:} sentence of the worked UI test's javadoc.
+     *
+     * <p>Added because the structure this census did not read is where the next stale claim was found:
+     * the example said "a screenshot on failure (absent from this SDK version)" while the executor has
+     * attached one all along, and the case template two directories away said so correctly. A worked
+     * example is not commentary — it is the shape a generated test's javadoc is copied from, so an
+     * absence invented there is an absence the generation report inherits. Every other structure this
+     * census parses is here for the same reason; this one was simply missed.
+     */
+    private static List<AbsenceItem> workedExampleNotCovered(String bundle) {
+        String relative = "skills/stand-test-ui-java-authoring/example-generated-ui-test.java";
+        String text = KitCensus.read(bundleFile(bundle, relative));
+        int from = text.indexOf("Not covered:");
+        if (from < 0) {
+            return List.of();
+        }
+        int to = text.indexOf("Residual data:", from);
+        String block = (to < 0 ? text.substring(from) : text.substring(from, to))
+                .replace("*", " ")
+                .replace("\n", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+        List<AbsenceItem> items = new ArrayList<>();
+        for (String piece : block.split("[,.]")) {
+            String trimmed = piece.trim();
+            if (!trimmed.isBlank()) {
+                items.add(new AbsenceItem(bundle + "/…/example-generated-ui-test.java", trimmed));
+            }
+        }
         return items;
     }
 

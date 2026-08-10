@@ -9,7 +9,8 @@
 #   * aliases only (service/topic/datasource/target) — never URLs/hosts/JDBC
 #   * every async step has "timeout": <n>ms (1-99999) | <n>s (1-999) | <n>m (1-60)
 #   * bodies/payloads/requests ONLY as {fixture: relative/path.json} — inline json is rejected
-#   * non-equals matchers (contains/matches/exists/notNull) ONLY on rest.* steps
+#   * non-equals matchers (contains/matches/exists/notNull) on rest.* AND grpc.unary steps;
+#     kafka.expect is the equals-only one (db.expectEventually carries no assertion list at all)
 #   * db query: single SELECT statement, :name binds via params, values may use ${var}
 #   * step ids unique (runtime-checked, not schema-checked)
 #   * data flow: capture {var: "$.path"} then ${var}; built-ins:

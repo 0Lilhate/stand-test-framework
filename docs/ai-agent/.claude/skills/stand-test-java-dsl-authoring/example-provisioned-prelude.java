@@ -43,8 +43,13 @@ import ru.alfa.stand.test.rest.RestStep;
  * item 7): you STOP and ask the human — you do NOT invent an endpoint and you do NOT hardcode a pointer.
  *
  * <p><b>Counter-example — the real lgot domain (why it resolves to a BLOCK, not this happy path).</b>
- * In {@code UlDiscountScheme…Test} the case supplies {@code client 1939437}, {@code pinEQ "UBVCMF"},
- * {@code accountId 50287348}, account number {@code "40802810129320000000"}. Classify each:
+ * In {@code UlDiscountScheme…Test} the case supplies a client id, a {@code pinEQ}, an account id and a
+ * 20-digit account number. The values are deliberately NOT reproduced here: the lesson is the
+ * classification and the SHAPE, and the digits teach nothing a placeholder does not — while a real
+ * client id, pin and settlement account in a bundle that is copied into consumer repositories is
+ * production data in an example, which this kit's own rule forbids. Nothing machine-checks it either:
+ * the account-number heuristic of {@code FIXED_TEST_DATA_ID} applies to documents, this is Java, and
+ * the literals sat in a javadoc. Classify each:
  * <ul>
  *   <li>client / pin / account / deal id → <b>entity-instance-handles, test-ownable</b>: they WOULD be
  *       provisioned+captured exactly as steps 1–4 below — but no create-endpoint is curated and the

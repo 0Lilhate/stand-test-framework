@@ -29,7 +29,7 @@ The KB is stand configuration: a human approves the diff before `apply` lands.
 6. **Take a write permit.** The curated collections are closed to the agent without one, and the
    paths are declared BEFORE the content exists, so a write that strays outside them is refused while
    it is still recoverable:
-   `node <bundle>/hooks/stand-guard.mjs kb-write-permit --reason update --source <спека|pasted> <файлы>`.
+   `node <bundle>/hooks/stand-guard.mjs kb-write-permit --reason update --source <spec|pasted> <files>`.
    The host asks a human at each write — that prompt, not the permit, is the approval.
 7. **apply**: write deterministically (collections sorted by id, schema key order, one collection
    key per file), never deleting, never renaming ids/aliases.

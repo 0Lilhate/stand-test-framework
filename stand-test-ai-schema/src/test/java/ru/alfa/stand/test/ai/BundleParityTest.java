@@ -63,11 +63,14 @@ class BundleParityTest {
     /**
      * Assets that legitimately exist only in the Claude copy: the enforcement layer.
      *
-     * <p>Subagents and {@code settings.json} are Claude Code mechanisms with no byte-identical opencode
-     * twin — opencode declares agents in its own format and expresses permissions in
-     * {@code opencode.json}. Listing them here rather than widening the walk keeps the asymmetry
-     * deliberate: an asset that lands in {@code .claude/} without appearing on this prefix list still
-     * fails the parity check, which is what makes "copy it across" the default answer.
+     * <p>{@code settings.json} is a Claude Code mechanism with no opencode twin — that host expresses
+     * the same policy in {@code opencode.json}. Listing it here rather than widening the walk keeps the
+     * asymmetry deliberate: an asset that lands in {@code .claude/} without appearing on this prefix
+     * list still fails the parity check, which is what makes "copy it across" the default answer.
+     *
+     * <p>Subagents used to be on this list and are not any more — they ship to both bundles now, and
+     * their host-specific half is handled by {@link #HOST_SPECIFIC_PREFIXES} rather than by an
+     * exemption from parity altogether.
      *
      * <p>{@code hooks/} used to be on this list and is not any more. The guard is plain Node and cares
      * nothing for the host: what is Claude-specific is the WIRING — the events in {@code settings.json}
@@ -81,10 +84,34 @@ class BundleParityTest {
      * <p>What the two copies must NOT diverge on is policy, and file-level parity cannot see that —
      * {@code opencode.json} is opencode-only. {@code ClaudeSettingsSafetyTest} owns that comparison.
      */
-    private static final Set<String> CLAUDE_ONLY_PREFIXES = new TreeSet<>(Set.of("settings.json", "agents/"));
+    private static final Set<String> CLAUDE_ONLY_PREFIXES = new TreeSet<>(Set.of("settings.json"));
 
     private static boolean isClaudeOnly(String relativePath) {
         return CLAUDE_ONLY_PREFIXES.stream().anyMatch(relativePath::startsWith);
+    }
+
+    /**
+     * Assets both bundles ship under the same path, whose CONTENT each host expresses in its own
+     * format — so byte parity is the wrong question and a semantic test owns them instead.
+     *
+     * <p>Today that is {@code agents/}. It used to sit in {@link #CLAUDE_ONLY_PREFIXES}, because the
+     * opencode copy declared no subagents at all: stages 2, 4, 8 and 11 ran in the main context there,
+     * and the {@code safety-review} gate proved less than its own rule claimed — a review by the
+     * context that wrote the code. The definitions now exist in both, and they cannot be byte-identical:
+     * Claude Code grants a subagent its tools with {@code tools: Read, Grep, Glob}, opencode with a
+     * {@code permission:} block and {@code mode: subagent}. The BODY — the instruction that actually
+     * decides what the reviewer does — is path-adapted and identical, and
+     * {@code AgentDefinitionSafetyTest} is what checks that, together with the property both spellings
+     * exist to preserve: a reviewer cannot write.
+     *
+     * <p>The prefix therefore buys an exemption from ONE comparison and pays for it with another. It
+     * is not a waiver: an agent added to one bundle and not the other still fails
+     * {@link #fileSets_match()}, because both sides are walked.
+     */
+    private static final Set<String> HOST_SPECIFIC_PREFIXES = new TreeSet<>(Set.of("agents/"));
+
+    private static boolean isHostSpecific(String relativePath) {
+        return HOST_SPECIFIC_PREFIXES.stream().anyMatch(relativePath::startsWith);
     }
 
     private static Path bundleRoot(String bundle) {
@@ -226,6 +253,9 @@ class BundleParityTest {
         for (var entry : claude.entrySet()) {
             Path other = opencode.get(entry.getKey());
             if (other == null) {
+                continue;
+            }
+            if (isHostSpecific(entry.getKey())) {
                 continue;
             }
             String left = read(entry.getValue());

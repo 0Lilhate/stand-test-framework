@@ -25,6 +25,10 @@ environments:
         urlRef: CLIENT_DB_URL
         userRef: CLIENT_DB_USER
         passwordRef: CLIENT_DB_PASSWORD
+      - datasourceId: client-test-data-db
+        urlRef: CLIENT_TEST_DATA_DB_URL
+        userRef: CLIENT_TEST_DATA_DB_USER
+        passwordRef: CLIENT_TEST_DATA_DB_PASSWORD
     secrets:
       mode: external
       allowedRefPrefixes:

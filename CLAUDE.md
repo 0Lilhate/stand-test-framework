@@ -213,10 +213,13 @@ bodies), **`stand-test-scenario-yaml`** (two surfaces: given/then YAML and the A
 to the core enum), **`stand-test-spring-boot-starter`** (Boot-3 auto-configuration, adapters as
 `compileOnly` optionals) and **`stand-test-config`** (file-based `EnvironmentRegistry` SPI provider).
 **`stand-test-example`** is a test-only showcase (offline doubles, not published); **`stand-test-bom`**
-is the `java-platform` carrying constraints for every published module. Known asymmetry: **Kafka** is the
-only adapter still equals-only — `KafkaAssertion` carries no matcher field and `KafkaStepParameters` has no
-`MATCHER` key, so `kafka.expect` runs EQUALS and `AiStepNormalizer` rejects any other matcher on it. REST and
-gRPC both carry the full five-matcher set over the `StepParameterKeys.MATCHER` wire key. Equality itself is
+is the `java-platform` carrying constraints for every published module. Known asymmetry: **Kafka and DB** are
+the equals-only adapters — `KafkaAssertion` carries no matcher field and `KafkaStepParameters` has no
+`MATCHER` key, so `kafka.expect` runs EQUALS and `AiStepNormalizer` rejects any other matcher on it; `db`
+has no assertion type at all (`db.expectEventually` takes a single `expectValue`, and `DbValues` delegates
+straight to `equalsMatch`), so it is equals-only by construction rather than by a missing key. REST and
+gRPC both carry the full five-matcher set over the `StepParameterKeys.MATCHER` wire key — `grpc.unary` is at
+parity with REST, and any document calling it equals-only is stale. Equality itself is
 no longer duplicated: kafka's `MessageAssertions` and db's `DbValues` both delegate to core's
 `AssertionMatchers.equalsMatch`, so all four adapters share one evaluator and cannot drift apart.
 
@@ -237,12 +240,19 @@ cannot, so it carries a *discovery* stage against the live DEV/IFT UI (registry 
 Locators live in Page Objects, `ui.*` is Java-only (no declarative surface), and every generation ends
 in the eight-section BR-07 report plus a preserved snapshot of the original generation — the diff base
 without which KPI-4 is unobservable. `UITG-S020` (backlog S-5.4) shipped the UI half of the safety
-gate: `detectors.json` now carries six UI-specific detectors — `UI_LOCATOR_OUTSIDE_PAGES`,
-`UI_LOGIN_WITHOUT_ROLE`, `XPATH_LOCATOR`, `UI_OPEN_OR_ASSERT_TEMPLATE`,
-`EXPECT_EVENTUALLY_WITHOUT_WITHIN`, `UI_REPORT_STAND_ADDRESS` — and `THREAD_SLEEP` is extended to
-driver-level waits; the gates that stay eye-only (U1, U4 (semantic half), U8, U10, U11a/b, U12, U14,
-U15, U16, U18, U19, U20) are enumerated in `ui-safety-checklist.md`, and every asset still says that
-a clean hook run is not a clean UI review; UI entries in the knowledge base remain S-5.3.
+gate, and `UITG-S021`/`F006` finished it: `detectors.json` now carries **eight** UI-specific detectors
+— `UI_LOCATOR_OUTSIDE_PAGES`, `UI_LOGIN_WITHOUT_ROLE`, `XPATH_LOCATOR`, `UI_OPEN_OR_ASSERT_TEMPLATE`,
+`EXPECT_EVENTUALLY_WITHOUT_WITHIN`, `UI_REPORT_STAND_ADDRESS`, plus `UI_DISCOVERY_PARITY` (U1 — a
+locator with no row in the discovery report, checked against it by `scan --discovery`) and
+`UI_GENERATION_REPORT_INCOMPLETE` (U16 — the eight headings counted by NUMBER, and `original.sha256`
+must exist on disk) — for 26 findings in all, 18 protocol plus these eight. `THREAD_SLEEP` is
+extended to driver-level waits, and U20 needs no detector of its own: the protocol-wide
+`SHARED_MUTABLE_TEST_STATE` reads a static mutable field in a Page Object exactly as in a test class.
+The gates that stay eye-only are U4 (semantic half), U8, U10, U11a/b, U12, U14, U15, U18, U19 —
+enumerated in `ui-safety-checklist.md` and pinned in BOTH directions by `UiHumanGateCensusTest` /
+`UiMachineGateCensusTest`, so a gate cannot be counted as machine-covered and eye-only at once. Every
+asset still says that a clean hook run is not a clean UI review; UI entries in the knowledge base
+remain S-5.3.
 
 Three artefacts of that effort survive because they were written before it and do not depend on it:
 `docs/agent-analysis/current-state-analysis.md` (findings A-01…A-17 about the kit, the SDK and this

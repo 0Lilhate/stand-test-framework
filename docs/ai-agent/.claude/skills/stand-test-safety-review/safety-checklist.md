@@ -93,6 +93,19 @@ blocks the workflow.
 - [ ] **No unsanctioned dependencies** — additions limited to `allure-junit5:2.29.1`,
       a JSON-Schema 2020-12 validator (+ jackson) for the JSON track, the JDBC driver.
 
+## Needs the artifact's PREVIOUS version — the one item a single read cannot answer
+
+- [ ] **No failure concealment** (`FAILURE_CONCEALMENT`, finding 18) — this is the only item on this
+      page that cannot be decided from the file in front of you: a deleted assertion is not in the
+      file, and an inflated timeout looks exactly like a timeout. It needs both versions, which the
+      write hook has (the file on disk vs the content about to replace it) and CI supplies with
+      `scan --against <base>` (`git show origin/main:<path>`). Four signals, and they are not equally
+      certain: **fewer assertions than before** and **a `@Disabled`/`@Ignore` with no ticket** BLOCK;
+      **a new `catch`** and **a timeout raised while the number of waits stayed the same** are
+      HEURISTIC/HIGH — legitimate work can produce either, so they are for a human to confirm.
+      Most relevant on a REGENERATION and on any hand-edit of a merged test. With neither version
+      available the item is **NOT RUN**, and the report says so — never "clean".
+
 ## One grep to start every sweep
 
 ```

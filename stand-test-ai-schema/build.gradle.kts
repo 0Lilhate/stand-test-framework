@@ -117,4 +117,20 @@ tasks.test {
     // The main sources only: the module's tests move constantly and would invalidate the cache on every
     // unrelated edit, while proving nothing about what the adapter offers.
     inputs.dir(rootDir.resolve("stand-test-ui/src/main/java")).withPropertyName("standTestUiAdapterSource")
+
+    // The same census also probes the STARTER, for the one capability that is not the UI adapter's to
+    // provide: whether a Spring consumer must declare a `UiStepExecutor` bean. ADR-UI-008 made that
+    // bean unnecessary and four kit assets went on requiring it — two of them by telling the agent to
+    // STOP. Undeclared, this input would let exactly that change pass while the census stayed
+    // UP-TO-DATE, which is the failure mode the comment above describes, one module over.
+    inputs.dir(rootDir.resolve("stand-test-spring-boot-starter/src/main/java")).withPropertyName("standTestStarterSource")
+
+    // ProtocolCapabilityAbsenceCensusTest is the same idea one branch over: the kit's
+    // NOT-AUTOMATABLE list, checked against the adapters that would have to grow the capability. Those
+    // claims cost more than the UI ones when they go stale — stage 1 is told to DROP the check and
+    // report the loss as a limitation of the SDK — so the sources they are about are declared inputs
+    // for exactly the reason the block above gives.
+    listOf("stand-test-rest", "stand-test-kafka", "stand-test-db", "stand-test-scenario-yaml").forEach { module ->
+        inputs.dir(rootDir.resolve("$module/src/main/java")).withPropertyName("${module.replace("-", "")}Source")
+    }
 }

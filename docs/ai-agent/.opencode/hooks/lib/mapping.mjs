@@ -65,9 +65,32 @@ export function claimsArtifact(entries, path) {
   return entries.some((entry) => entry.classNames.includes(className));
 }
 
-/** Whether a generated test needs a mapping at all. */
+/**
+ * A Page Object, by the same predicate the `UI_LOCATOR_OUTSIDE_PAGES` detector uses.
+ *
+ * Path only, because that is all the Stop gate has — it works off the artifact ledger, whose keys are
+ * paths, and the sanctioned layout puts these classes under `…/ui/pages/` (the Page Object skill says
+ * so, and the detector already reads the same shape).
+ */
+const PAGE_OBJECT = [/(?:^|[/\\])ui[/\\]pages?[/\\]/i, /(?:^|[/\\])ui[/\\]pageobjects?[/\\]/i, /page[-_]object/i];
+
+/**
+ * Whether a generated artifact needs a mapping at all.
+ *
+ * A mapping entry records the join "case → the test that answers it", and its schema has exactly one
+ * place for a class: `generatedTest.className`. A **Page Object is not a test** and has nowhere to go
+ * in that entry — so demanding one for it asks for a record that cannot be written.
+ *
+ * That is what this used to do. Every `.java` outside `knowledge-base/` was asked for a mapping, and
+ * the UI branch produces a Page Object per screen beside the one test: a UI generation therefore ended
+ * every session with the Stop gate naming `NewApplicationPage.java` among "tests that passed review
+ * and are not declared in knowledge-base/mappings/". Not a hard block — the second pass reports rather
+ * than loops — but a NOT-READY line that is wrong every time is worse than none: it is the line the
+ * whole gate exists to make people read, spent on an artifact that was never supposed to be there.
+ */
 export function needsMapping(path) {
-  return /^(?!knowledge-base\/).*\.java$/i.test(path);
+  if (!/^(?!knowledge-base\/).*\.java$/i.test(path)) return false;
+  return !PAGE_OBJECT.some((pattern) => pattern.test(path));
 }
 
 /** The entry a person can paste, with every field the schema requires already in place. */

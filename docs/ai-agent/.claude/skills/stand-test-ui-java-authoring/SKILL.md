@@ -37,11 +37,14 @@ What the SDK does and does not offer:
 | Consumer setup | What to write | Why |
 |---|---|---|
 | **Plain JUnit** (`stand-test-junit` + `stand-test-ui` + `stand-test-config`) | `@StandTest(env = "ift")` on the class; take `StandClient stand` as a test-method parameter | `StandTestExtension` discovers every `StepExecutor` through `ServiceLoader`, and `stand-test-ui` registers `UiStepExecutor` in `META-INF/services`. **Nothing else is needed** — this is the default track for UI |
-| **Spring Boot starter** | `@SpringBootTest` + `@Autowired StandClient` **plus a `UiStepExecutor` bean the consumer declares** | The starter auto-configures REST/Kafka/DB/gRPC executors and, in this SDK version, **not** the UI one. The runner bean takes `List<StepExecutor>`, so a consumer-declared `@Bean UiStepExecutor` joins it. Declaring an executor bean is an addition, not one of the forbidden overrides (validator / runner / `StandClient`) |
+| **Spring Boot starter** | `@SpringBootTest` + `@Autowired StandClient`, and nothing more | Since ADR-UI-008 the starter's `StepExecutorDiscovery` loads every SPI-registered executor beside the beans it declares, so `stand-test-ui` on the test classpath is enough. Discovery is not UI-specific — any adapter registered through `META-INF/services` is picked up, including one built outside this repository |
 
-If the project is on the starter and has no such bean, say so rather than generating a test that
-fails at run time with "no executor for step type ui.open" — the missing bean is a one-line
-consumer-side addition, and it is a decision for the human.
+**Do not require a `UiStepExecutor` bean, and do not stop for the want of one.** This skill used to say
+the opposite, and that instruction is now a false blocker — the costliest kind of stale rule, because it
+halts a run that would have worked. A consumer may still declare the bean if it wants to configure the
+executor itself: a declared bean wins by ordering, and the SPI copy of the same class is de-duplicated,
+so it neither loses nor runs twice. What remains forbidden is unchanged — overriding the validator, the
+runner or `StandClient`.
 
 ## The shape
 

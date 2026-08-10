@@ -6,6 +6,7 @@
     ".opencode/rules/**/*.md",
     "AGENTS.md"
   ],
+  "subagent_depth": 2,
   "permission": {
     "skill": {
       "*": "allow"
@@ -35,6 +36,7 @@
       "powershell*": "deny"
     },
     "edit": {
+      "**/.opencode/agents/**": "deny",
       "**/.opencode/hooks/**": "deny",
       "**/.opencode/rules/**": "deny",
       "**/.opencode/skills/**": "deny",
@@ -57,7 +59,13 @@
       "**/tomcat/conf/server.xml": "deny",
       "**/tomcat/conf/web.xml": "deny"
     },
-    "mcp_*": "ask"
+    "mcp_*": "ask",
+    "task": {
+      "*": "deny",
+      "stand-test-kb-resolver": "allow",
+      "stand-test-safety-reviewer": "allow",
+      "stand-test-quality-reviewer": "allow"
+    }
   },
   "provider": {
     "alfagen": {
@@ -77,22 +85,40 @@
   "mcp": {
     "memory": {
       "type": "local",
-      "command": ["npx", "-y", "@modelcontextprotocol/server-memory"],
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
       "enabled": true
     },
     "sequential-thinking": {
       "type": "local",
-      "command": ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
       "enabled": true
     },
     "context7": {
       "type": "local",
-      "command": ["npx", "-y", "@upstash/context7-mcp@latest"],
+      "command": [
+        "npx",
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ],
       "enabled": true
     },
     "playwright": {
       "type": "local",
-      "command": ["npx", "-y", "@playwright/mcp", "--browser", "chrome"],
+      "command": [
+        "npx",
+        "-y",
+        "@playwright/mcp",
+        "--browser",
+        "chrome"
+      ],
       "enabled": true
     }
   }

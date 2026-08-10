@@ -28,10 +28,12 @@ One JUnit 5 test class in the consumer's test sources, composed from Page Object
    | Consumer setup | What to write |
    |---|---|
    | plain JUnit (`stand-test-junit` + `stand-test-ui` + `stand-test-config`) | `@StandTest(env = "…")`; take `StandClient stand` as a method parameter. `ServiceLoader` finds `UiStepExecutor` — nothing else is needed |
-   | Spring Boot starter | `@SpringBootTest` + `@Autowired StandClient` **and** a consumer-declared `UiStepExecutor` bean — the starter does not auto-configure the UI executor in this SDK version |
+   | Spring Boot starter | `@SpringBootTest` + `@Autowired StandClient`. Nothing else either — since ADR-UI-008 the starter's `StepExecutorDiscovery` loads every SPI-registered executor, `UiStepExecutor` included |
 
-   No such bean on a starter project ⇒ say so and stop; a test that would fail at run time with "no
-   executor for step type ui.open" is not a deliverable.
+   **Do not demand a `UiStepExecutor` bean and do not stop for the want of one.** That instruction was
+   correct before ADR-UI-008 and is now a false blocker — the most expensive kind, because it halts a
+   run that would have worked. A consumer MAY still declare the bean; a declared bean wins by ordering
+   and the SPI copy of the same class is de-duplicated, so both spellings work and neither runs twice.
 
 2. **Transcribe the design** — [`stand-test-ui-java-authoring`](../skills/stand-test-ui-java-authoring/SKILL.md).
    One `Scenario`, steps in the design's order with the design's ids, `ui.login` first with an

@@ -5,9 +5,14 @@
 # (example-datasources.yml, one direction of reference).
 dbTables:
   - id: client-orders-table
-    datasourceId: client-db
-    description: Orders table used by seed/cleanup and read-only projection probes (example entry)
-    schema: client
+    datasourceId: client-test-data-db
+    description: >-
+      Orders table seeded and cleaned up by a test (example entry). It points at the WRITE-ALLOWED
+      datasource, not at the readonly one: a table declaring a testRunIdColumn is declaring that
+      db.seed/db.cleanup may target it, and a seed against a readonly datasource is refused. The
+      readonly `client-db` is for probes (example-db-probes.yml); its schema is not in this one's
+      allowedSchemas and must not be.
+    schema: test_data
     table: orders
     columns:
       - id

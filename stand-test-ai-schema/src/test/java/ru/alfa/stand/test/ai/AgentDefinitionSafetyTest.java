@@ -29,6 +29,15 @@ import org.junit.jupiter.api.Test;
  * <p>So the tool list is pinned here. Frontmatter is the whole enforcement — Claude Code grants a
  * subagent exactly what {@code tools:} names — which makes a single word added to that line the
  * difference between a reviewer and an author, with nothing else in the kit to notice.
+ *
+ * <p><strong>Both bundles, since the opencode port.</strong> The opencode copy declared no subagents
+ * at all, so stages 2, 4, 8 and 11 ran in its main context and the {@code safety-review} gate proved
+ * less than the rule beside it claimed. The definitions now ship to both — and they cannot be
+ * byte-identical, because the hosts grant permission differently: {@code tools: Read, Grep, Glob}
+ * against {@code mode: subagent} plus a {@code permission:} block. {@code BundleParityTest} therefore
+ * exempts {@code agents/} from byte parity and hands the comparison here, which means the two
+ * spellings must be checked for the SAME property rather than for the same text. That property is
+ * one sentence: a reviewer cannot write.
  */
 class AgentDefinitionSafetyTest {
 
@@ -115,6 +124,72 @@ class AgentDefinitionSafetyTest {
         assertThat(tools("stand-test-kb-resolver"))
                 .as("stages 2 and 4 answer with facts; a resolver that can run commands is one that can start creating the entries it failed to find")
                 .containsExactlyInAnyOrder("Read", "Grep", "Glob");
+    }
+
+    private static Path opencodeAgentFile(String name) {
+        return repositoryRoot().resolve(AGENTS.replace(".claude", ".opencode")).resolve(name + ".md");
+    }
+
+    /** The opencode copy of an agent, whose permission block is its tool list. */
+    private static String opencodeAgent(String name) {
+        return read(opencodeAgentFile(name));
+    }
+
+    @Test
+    @DisplayName("the opencode copy declares the same three agents — the port is not half-done")
+    void opencode_declaresTheSameAgents() {
+        for (String name : AGENT_SKILLS.keySet()) {
+            Path file = opencodeAgentFile(name);
+            assertThat(file)
+                    .as("%s: the opencode bundle must declare it too. Without it that host runs stages 2, 4, 8 and 11 "
+                            + "in the main context, and its safety-review gate records a verdict the writing context "
+                            + "reached about its own work", name)
+                    .exists();
+            assertThat(opencodeAgent(name))
+                    .as("%s: opencode addresses a subagent through 'mode: subagent'; without it the file is a prompt nobody invokes", name)
+                    .contains("mode: subagent");
+        }
+    }
+
+    @Test
+    @DisplayName("no opencode reviewer can write either — the same property, spelled in the other host's grammar")
+    void opencodeReviewers_cannotWrite() {
+        List<String> armed = new ArrayList<>();
+        for (String name : AGENT_SKILLS.keySet()) {
+            String frontmatter = opencodeAgent(name).split("---", 3)[1];
+            for (String denied : List.of("write", "edit")) {
+                if (!frontmatter.contains(denied + ": deny")) {
+                    armed.add(name + " does not deny '" + denied + "'");
+                }
+            }
+        }
+        assertThat(armed)
+                .as("under opencode a subagent's powers come from its permission block, so 'write: deny' and 'edit: deny' "
+                        + "are what 'no Write tool' means there. A reviewer that can repair what it found reports on an "
+                        + "artifact that no longer exists")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("the opencode resolver reads and returns — bash denied, as its Claude twin has no Bash")
+    void opencodeResolver_onlyReads() {
+        assertThat(opencodeAgent("stand-test-kb-resolver").split("---", 3)[1])
+                .as("stages 2 and 4 answer with facts; a resolver that can run commands is one that can start creating "
+                        + "the entries it failed to find — and the Claude copy says so by omitting Bash from its tool list")
+                .contains("bash: deny");
+    }
+
+    @Test
+    @DisplayName("the instruction body is the same in both copies — only the permission grammar differs")
+    void agentBodies_areIdenticalModuloPathSpelling() {
+        for (String name : AGENT_SKILLS.keySet()) {
+            String claude = read(agentFile(name)).split("---", 3)[2];
+            String opencode = opencodeAgent(name).split("---", 3)[2].replace(".opencode", ".claude");
+            assertThat(opencode)
+                    .as("%s: the BODY decides what the reviewer actually does, and it is the half that must not drift. "
+                            + "The frontmatter is host grammar; this is not", name)
+                    .isEqualTo(claude);
+        }
     }
 
     @Test

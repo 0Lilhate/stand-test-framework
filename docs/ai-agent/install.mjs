@@ -14,7 +14,8 @@
 // against it and answers both questions in about a second.
 //
 // Usage:
-//   node install.mjs --manifest                     regenerate MANIFEST.json from this tree
+//   node install.mjs --manifest [--version <N>]     regenerate MANIFEST.json from this tree
+//                                                   (--version bumps the kit version; omitted, it is carried)
 //   node install.mjs <target> [--host claude|opencode] [--apply]
 //                                                   dry-run by default, like every other write here
 
@@ -82,12 +83,34 @@ export function readManifest(root = ROOT) {
   return JSON.parse(readFileSync(join(root, MANIFEST), 'utf8'));
 }
 
-function commandRegenerate() {
+function commandRegenerate(argv = []) {
   const previous = existsSync(join(ROOT, MANIFEST)) ? readManifest(ROOT) : { version: 0 };
-  const manifest = buildManifest(ROOT, previous.version || 1);
+  const carried = previous.version || 1;
+
+  // The version is the ONE field regeneration cannot derive, and carrying it silently is what let it
+  // sit at 1 across four rounds of edits that changed what the prompts tell an agent to do. `doctor`
+  // answers "which version is this" off this number, so a number that never moves makes that answer
+  // useless while looking exactly like an answer. Hence a flag: bumping is now one command rather than
+  // hand-editing JSON, and the message below says when it is owed.
+  const asked = argumentValue(argv, '--version');
+  if (asked !== null && !/^[1-9][0-9]*$/.test(asked)) {
+    process.stderr.write(`--version принимает целое число больше нуля, а не '${asked}'\n`);
+    process.exit(1);
+  }
+  const version = asked === null ? carried : Number(asked);
+  if (asked !== null && version < carried) {
+    process.stderr.write(`версия кита не понижается: сейчас ${carried}, запрошено ${version}\n`);
+    process.exit(1);
+  }
+
+  const manifest = buildManifest(ROOT, version);
   writeFileSync(join(ROOT, MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
-  process.stdout.write(`${MANIFEST}: ${Object.keys(manifest.files).length} файлов, версия кита ${manifest.version}\n`
-    + '  Версия правится руками — она про смысл набора промтов, а не про то, что кто-то поправил опечатку.\n');
+  process.stdout.write(`${MANIFEST}: ${Object.keys(manifest.files).length} файлов, версия кита ${manifest.version}`
+    + `${asked === null ? ' (перенесена)' : ` (была ${carried})`}\n`
+    + '  Версия — про СМЫСЛ набора промтов, а не про то, что кто-то поправил опечатку. Поднимайте её\n'
+    + '  (node install.mjs --manifest --version <N+1>), когда меняется то, что кит ГОВОРИТ агенту делать:\n'
+    + '  правило, стадия, гейт, утверждение о возможностях SDK, новый скилл или команда. Переформулировка,\n'
+    + '  опечатка и правка ссылки версию не двигают — на них хватает хеша файла.\n');
 }
 
 function commandInstall(argv) {
@@ -152,9 +175,9 @@ function argumentValue(argv, name) {
 
 const argv = process.argv.slice(2);
 if (argv.includes('--manifest')) {
-  commandRegenerate();
+  commandRegenerate(argv);
 } else if (argv.length > 0) {
   commandInstall(argv);
 } else {
-  process.stdout.write('node install.mjs --manifest | node install.mjs <target> [--host claude|opencode] [--apply] [--force]\n');
+  process.stdout.write('node install.mjs --manifest [--version <N>] | node install.mjs <target> [--host claude|opencode] [--apply] [--force]\n');
 }
