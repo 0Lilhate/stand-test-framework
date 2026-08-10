@@ -93,6 +93,10 @@ docs/ai-agent/
       stand-test-pipeline-rationale.md  the incidents the enforcement layer was built from, the
                                   exemptions that were tried and rejected, and what is provable
                                   about delegation versus what merely reads as proof
+      stand-test-ui-guardrails-rationale.md  what actually enforces the discovery-account rule (at
+                                  stage 3: nothing), why rung 4 is fragile, what `asSensitive()`
+                                  does NOT reach, and why the registry's version-4 credential pair
+                                  is a knowing relaxation of ADR-UI-006 §5
     workflows/       ← 2 multi-command pipeline docs (not auto-loaded; referenced by the KB commands)
       ingest-unstructured-spec-to-kb.md    document → staged candidates
       review-and-apply-kb-candidates.md    candidates → human review → curated write

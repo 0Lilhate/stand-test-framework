@@ -3,8 +3,8 @@
 # lexicographically sorted; blank lines and lines starting with '#' are ignored.
 #
 # Covered: the asset directories (commands, rules, reference, skills, workflows, hooks, agents,
-# plugin) of BOTH bundle
-# copies, the bundle-root assets (settings.json, .gitignore) and the opencode-only loader manual
+# plugin) of BOTH bundle copies, the bundle-root assets (settings.json, .gitignore) and the
+# opencode-only loader manual
 # AGENTS.md. Machine-local residue (.env*, settings.local.json, scheduled_tasks.lock) sits at the
 # bundle root, outside those directories, and is not shipped. hooks/ and agents/ now exist in BOTH
 # copies. hooks/ are byte-identical; agents/ carry the same body under each host's own permission
@@ -71,6 +71,7 @@
 .claude/hooks/stand-batch.mjs
 .claude/hooks/stand-guard.mjs
 .claude/reference/stand-test-pipeline-rationale.md
+.claude/reference/stand-test-ui-guardrails-rationale.md
 .claude/rules/stand-test-guardrails.md
 .claude/rules/stand-test-pipeline.md
 .claude/rules/stand-test-ui-guardrails.md
@@ -207,6 +208,7 @@
 .opencode/hooks/stand-guard.mjs
 .opencode/plugin/stand-guard.js
 .opencode/reference/stand-test-pipeline-rationale.md
+.opencode/reference/stand-test-ui-guardrails-rationale.md
 .opencode/rules/stand-test-guardrails.md
 .opencode/rules/stand-test-pipeline.md
 .opencode/rules/stand-test-ui-guardrails.md
