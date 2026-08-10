@@ -164,6 +164,26 @@ follow the same rule; note the shape guard cannot recognise a *bare* token paste
 whitespace, `://` and `Bearer `/`Basic ` prefixes) — the same residual trust applies to datasource
 passwords today.
 
+### The one thing this file cannot check: where a reference points
+
+A `*-ref` is a variable NAME, so the SDK never sees the address behind it. **It therefore cannot tell a
+DEV stand from production** — that is a property of the design, not an oversight, and the residual risk
+is **accepted in writing** (decision of 2026-08-09, `UITG-S029`, requirement `SEC-01`).
+
+What does hold, and holds by machine rather than by discipline:
+
+- a UI scenario can only name an **alias**, and an alias absent from `ui-applications` is refused
+  **before a browser starts** — `NON_WHITELISTED_UI_APPLICATION`, raised by the pre-flight validator;
+- a literal URL is **not expressible** in a step at all, so no scenario can route itself anywhere;
+- the environment vocabulary of the evaluation corpus is the enum `dev | ift`, whose own schema says
+  "Production is not expressible".
+
+So reaching production requires someone to point a whitelisted alias's variable at it deliberately.
+**A blocklist of forbidden hosts was considered and rejected**: it would be maintained by hand, would
+go stale, and a stale list gives false confidence — worse than a stated limit. What guards this instead
+is the same thing that guards the credentials: the variable's value is set on the stand, by the people
+who own it.
+
 ## Relationship to the Spring Boot starter
 
 The Spring Boot starter builds its registry from `@ConfigurationProperties("stand.test")` and does **not**
