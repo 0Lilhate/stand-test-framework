@@ -106,4 +106,15 @@ tasks.test {
     // something unrelated invalidated the cache.
     inputs.dir(rootDir.resolve("docs/ui-test-generation")).withPropertyName("standTestUiLineDocuments")
     inputs.file(rootDir.resolve("docs/brd/ui-test-generation-brd.md")).withPropertyName("standTestUiLineBrd")
+
+    // UiCapabilityAbsenceCensusTest probes the UI adapter's own source: it decides whether a capability
+    // the kit calls absent actually exists (the executor attaching `ui-screenshot`, a `XPATH` strategy,
+    // an `upload(` step). This is the ONE input whose absence would reproduce the very defect the test
+    // was written for — the kit went stale because stand-test-ui gained the failure-artefact lane and
+    // nothing re-read the documents. Undeclared, the census would stay UP-TO-DATE across exactly that
+    // change and go green while the claim it guards turned false.
+    //
+    // The main sources only: the module's tests move constantly and would invalidate the cache on every
+    // unrelated edit, while proving nothing about what the adapter offers.
+    inputs.dir(rootDir.resolve("stand-test-ui/src/main/java")).withPropertyName("standTestUiAdapterSource")
 }
