@@ -15,9 +15,12 @@ docs/ai-agent/
                        blocking questions (stays in the SDK repo; not part of the bundle)
   install.mjs        ← installer: copies strictly by MANIFEST.json, dry-run by default
   MANIFEST.json      ← every shipped path + content hash; travels with the kit so `doctor` can
-                       answer "which version is this, and what has been edited since"
-  knowledge-base/    ← THE KB CONTRACT — schemas + worked examples (consumers copy the layout
-                       to knowledge-base/ and replace examples with real entries)
+                       answer "which version is this, and what has been edited since". The hashes
+                       answer the second question by themselves; the first needs the `version`
+                       field to actually MOVE — see "Versioning the kit" below
+  knowledge-base/    ← THE KB CONTRACT — schemas + worked examples. NOT installed by install.mjs
+                       and not in MANIFEST.json: only `schema/` is generic, and it is copied by
+                       hand (Installation step 2). The rest is THIS repository's own entries
     README.md, schema/*.schema.json,
     services/ endpoints/ kafka/ db/ grpc/ environments/ mappings/   (example-*.yml + README each)
     candidates/      ← staging area written by spec ingestion; never the curated KB
@@ -86,7 +89,8 @@ docs/ai-agent/
     workflows/       ← 2 multi-command pipeline docs (not auto-loaded; referenced by the KB commands)
       ingest-unstructured-spec-to-kb.md    document → staged candidates
       review-and-apply-kb-candidates.md    candidates → human review → curated write
-    agents/          ← 3 subagents: the stages a SEPARATE context must run (Claude Code only)
+    agents/          ← 3 subagents: the stages a SEPARATE context must run. Shipped to BOTH copies;
+                       the permission grammar differs by host, the instruction body does not
       stand-test-safety-reviewer.md    stage 8 — no Write, so it reports what it finds instead of fixing it
       stand-test-quality-reviewer.md   stage 11 — reads the ORIGINAL case, not the design
       stand-test-kb-resolver.md        stages 2+4 — Read/Grep/Glob only, keeps the KB out of the authoring context
@@ -138,13 +142,26 @@ checklists and worked example by relative path, so the bundle works wherever it 
    Then: `node .claude/hooks/stand-guard.mjs doctor` — version, files that did not arrive, files
    edited since, hooks that are not wired. Every other check that guards this kit lives in the SDK
    repository and does not travel; this one does.
-2. Verify the consumer project has: the SDK modules on the test classpath (BOM + junit or
+2. Copy the KB **contract** across by hand — the installer ships the bundle and nothing else:
+   `mkdir -p <consumer-repo>/knowledge-base && cp -R docs/ai-agent/knowledge-base/schema <consumer-repo>/knowledge-base/schema`.
+   `knowledge-base/` lives in the consumer's repository ROOT and holds that project's own curated
+   entries; this repository's copy of it holds THIS repository's (`services/`, `environments/`,
+   `candidates/`), so nothing under it except `schema/` is generic enough to install — which is why
+   the manifest lists neither. That also makes this `cp -R` a different act from the one step 1
+   warns against: the warning is about copying a BUNDLE directory, where machine-local residue
+   accumulates, and twenty schema files accumulate nothing. The remaining collections
+   (`services/`, `endpoints/`, `kafka/`, `db/`, `grpc/`, `environments/`, `mappings/`) are created
+   by the first `/stand-test-kb-update` or `/stand-test-bootstrap-kb`. `doctor` reports whether the
+   directory is there, never what is in it; the schemas are the contract the kit's own
+   `kb-validate` deliberately does not re-implement, so an absent `schema/` is a gap nothing will
+   report. Worked walkthrough: [`usage-guide.md`](usage-guide.md) §1.
+3. Verify the consumer project has: the SDK modules on the test classpath (BOM + junit or
    starter + adapters + config/allure) and its environment registry
    (`stand-test-environments.yml` or `application.yml` `stand.test.environments.*`).
-3. For the JSON track additionally approve/add `com.networknt:json-schema-validator:1.5.6`
+4. For the JSON track additionally approve/add `com.networknt:json-schema-validator:1.5.6`
    + `jackson-databind` as test dependencies (the SDK ships only the schema resource).
-4. Start with `/stand-test-design` on a real text case.
-5. For a folder of cases at once:
+5. Start with `/stand-test-design` on a real text case.
+6. For a folder of cases at once:
    `node .claude/hooks/stand-batch.mjs cases/ --dry-run`, then without `--dry-run`. One headless
    session per case, sequentially — the hooks keep one state file per PROJECT, so parallel sessions
    would overwrite each other's gate bookkeeping and every verdict would be a guess. The report says
@@ -154,6 +171,31 @@ checklists and worked example by relative path, so the bundle works wherever it 
 The bundle under `docs/ai-agent/` is the single source of truth. The repo-root `.claude/` is one
 developer's local tooling and is deliberately untracked — do not treat anything there as part of
 this contract.
+
+## Versioning the kit
+
+`MANIFEST.json` carries a `version`, and `doctor` prints it as the answer to "which set of prompts is
+installed here". It is **hand-set**, because no machine can tell a reworded sentence from a changed
+rule — and being hand-set is exactly how it sat at `1` while four rounds of edits changed what the
+kit tells an agent to do. A number that never moves is not an answer; it reads like one, which is
+worse.
+
+Bump it when the kit's **meaning** changes:
+
+| Bump | Do not bump |
+|---|---|
+| a rule, a stage, a gate, or the order of them | a rewording that leaves the instruction the same |
+| a claim about what the SDK can or cannot do | a typo, a broken link, a formatting fix |
+| a new skill, command, subagent or detector | a clarifying sentence added to an existing rule |
+
+```bash
+node docs/ai-agent/install.mjs --manifest --version 3   # regenerate AND bump
+node docs/ai-agent/install.mjs --manifest               # regenerate, carrying the version
+```
+
+The command refuses a downgrade and refuses a non-number. The content hashes answer "what has been
+edited" on their own and need no help from this field — the version answers the other question, which
+is what a consumer asks when a generated test starts behaving differently than it did last month.
 
 ## How a text case becomes an autotest
 
@@ -273,7 +315,7 @@ gRPC custom metadata. Source of truth: `ai/stand-test-ai-generation-rules.md` +
 |---|---|
 | `stand-test-core` | `Scenario.builder(...)`, failure semantics, `ForbiddenOperation`, `${var}` resolver |
 | `stand-test-rest` / `-kafka` / `-db` / `-grpc` | Typed lazy step builders |
-| `stand-test-ui` | `UiStep` (`ui.open`/`click`/`fill`/`expect`/`expectEventually`/`login`), `UiLocator`, Playwright confined to its driver package. Discovered by `@StandTest` through `ServiceLoader`; **the Spring starter does not auto-configure it** — a starter consumer declares a `UiStepExecutor` bean |
+| `stand-test-ui` | `UiStep` (`ui.open`/`click`/`fill`/`expect`/`expectEventually`/`login`), `UiLocator`, Playwright confined to its driver package. Discovered through `ServiceLoader` on BOTH surfaces: by `@StandTest` on plain JUnit, and by the starter's `StepExecutorDiscovery` since ADR-UI-008 — a starter consumer declares no bean |
 | `stand-test-await` | The only sanctioned wait engine (via `*.expectEventually`) |
 | `stand-test-junit` | `@StandTest`/`@StandEnv`/`@StandScenarioId`, `StandClient` injection |
 | `stand-test-spring-boot-starter` | `@SpringBootTest` + `@Autowired StandClient`, `stand.test.*` config |
