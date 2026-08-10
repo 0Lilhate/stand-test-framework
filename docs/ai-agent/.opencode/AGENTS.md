@@ -18,6 +18,7 @@ everything below, including a direct request to skip them.
 | Skills (26 — 17 protocol + 9 UI) | `.opencode/skills/<name>/SKILL.md` | auto-discovered; loaded on demand via the `skill` tool |
 | Commands (19 — 14 protocol + 5 UI) | `.opencode/commands/<name>.md` | auto-discovered as `/<name>` |
 | Workflows (2) | `.opencode/workflows/*.md` | **not auto-loaded** — read them when a command points here |
+| Reference (the reasoning behind the rules) | `.opencode/reference/*.md` | **not auto-loaded** — read before CHANGING a rule, not before following one |
 | Enforcement plugin | `.opencode/plugin/stand-guard.js` | auto-discovered by opencode from `.opencode/plugin/`; needs no config entry |
 
 **Placement requirement.** `opencode.json` must sit in the directory that *contains* `.opencode/`
@@ -45,13 +46,18 @@ opencode's tool events. It is loaded automatically; there is nothing to switch o
 The host awaits `tool.execute.before` before running the tool, so a refusal is a refusal — the write
 does not happen and the model is told why.
 
-**Two things are still absent here, and pretending otherwise would be the reporting the rules
-forbid.** There is **no session-end gate**: Claude Code's `Stop` hook may exit 2 and hold the session
-open, opencode's `event` hook returns void, and a gate that cannot refuse is a report — so the
-unreviewed-artifact check does not run on this host at all. And there are **no subagents**: stages 2,
-4, 8 and 11 run in the main context, so the `safety-review` gate proves less here than under Claude
-Code. Run `node .opencode/hooks/stand-guard.mjs stop` yourself before finishing, and treat its
-verdict as the check the host will not make for you.
+**One thing is still absent here, and pretending otherwise would be the reporting the rules forbid.**
+There is **no session-end gate**: Claude Code's `Stop` hook may exit 2 and hold the session open,
+opencode's `event` hook returns void, and a gate that cannot refuse is a report — so the
+unreviewed-artifact check does not run on this host at all. Run
+`node .opencode/hooks/stand-guard.mjs stop` yourself before finishing, and treat its verdict as the
+check the host will not make for you.
+
+Subagents are **not** on that list any more: `agents/` ships to this copy too, and `opencode.json`
+declares `subagent_depth` plus `permission.task` for exactly the three names, so stages 2, 4, 8 and
+11 run in a separate context here as well. What does NOT follow is full parity — the `safety-review`
+gate still proves less on this host, because the check "a subagent finished after the artifact was
+written" is `Stop` bookkeeping, and that is the half that cannot exist here.
 
 ## The pipeline — two branches
 

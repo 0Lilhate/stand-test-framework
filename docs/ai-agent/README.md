@@ -85,7 +85,14 @@ docs/ai-agent/
                                   only, no PROD, discovery account, no irreversible actions, locator
                                   priority, no XPath, no sleeps, the SDK's UI surface, the report
       stand-test-pipeline.md    ← binding stage order + gates for BOTH branches; the .claude
-                                  counterpart of .opencode/AGENTS.md, which points at this same file
+                                  counterpart of .opencode/AGENTS.md, which points at this same file.
+                                  States the rules only — the reasoning lives in reference/ below,
+                                  because a rule file is loaded into every session and an argument
+                                  for a rule is read once, by whoever is about to change it
+    reference/       ← the non-auto-loaded half of the rules: why each one is what it is
+      stand-test-pipeline-rationale.md  the incidents the enforcement layer was built from, the
+                                  exemptions that were tried and rejected, and what is provable
+                                  about delegation versus what merely reads as proof
     workflows/       ← 2 multi-command pipeline docs (not auto-loaded; referenced by the KB commands)
       ingest-unstructured-spec-to-kb.md    document → staged candidates
       review-and-apply-kb-candidates.md    candidates → human review → curated write

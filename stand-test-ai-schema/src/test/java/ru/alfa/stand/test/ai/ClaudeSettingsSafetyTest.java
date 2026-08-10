@@ -119,6 +119,7 @@ class ClaudeSettingsSafetyTest {
             "./.claude/agents/**",
             "./.claude/commands/**",
             "./.claude/hooks/**",
+            "./.claude/reference/**",
             "./.claude/rules/**",
             "./.claude/settings.json",
             "./.claude/skills/**",

@@ -26,6 +26,7 @@
       "Edit(./.claude/skills/**)",
       "Edit(./.claude/commands/**)",
       "Edit(./.claude/workflows/**)",
+      "Edit(./.claude/reference/**)",
       "Edit(./knowledge-base/schema/**)",
       "Bash(node .claude/hooks/stand-guard.mjs subagent-stop:*)",
       "Bash(node .claude/hooks/stand-guard.mjs pre-write:*)",

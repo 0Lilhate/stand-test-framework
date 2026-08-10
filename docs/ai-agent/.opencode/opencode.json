@@ -42,6 +42,7 @@
       "**/.opencode/skills/**": "deny",
       "**/.opencode/commands/**": "deny",
       "**/.opencode/workflows/**": "deny",
+      "**/.opencode/reference/**": "deny",
       "**/.opencode/opencode.json": "deny",
       "**/checkstyle.xml": "deny",
       "**/pmd.xml": "deny",

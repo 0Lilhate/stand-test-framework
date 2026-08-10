@@ -29,10 +29,10 @@ import org.junit.jupiter.api.Test;
  * Updating the snapshot is a one-line, deliberate act — which is the point: the migration that edits
  * 32 prompts must be provably additive.
  *
- * <p>Covered are the seven asset directories of each copy ({@code commands}, {@code rules},
- * {@code skills}, {@code workflows}, {@code hooks}, {@code agents}, {@code plugin} — {@code agents}
- * exists only in the Claude Code copy, {@code plugin} only in the opencode one) plus the bundle-root
- * assets and the opencode-only loader manual. That
+ * <p>Covered are the eight asset directories of each copy ({@code commands}, {@code rules},
+ * {@code reference}, {@code skills}, {@code workflows}, {@code hooks}, {@code agents},
+ * {@code plugin} — {@code agents} exists only in the Claude Code copy, {@code plugin} only in the
+ * opencode one) plus the bundle-root assets and the opencode-only loader manual. That
  * is exactly the file set {@code stand-test-ai-schema/build.gradle.kts} declares as a test input, so
  * a change to any pinned file re-runs this test instead of returning a stale {@code FROM-CACHE}
  * result. The machine-local residue that also lives in those bundle directories ({@code .env*},
@@ -44,8 +44,15 @@ class PromptBundleInventoryTest {
     /** The two shipped copies of the same bundle, spelled as they appear under {@code docs/ai-agent}. */
     private static final List<String> BUNDLES = List.of(".claude", ".opencode");
 
-    /** Asset directories that carry the prompts themselves plus their templates, examples and checklists. */
-    private static final List<String> ASSET_DIRECTORIES = List.of("commands", "rules", "skills", "workflows", "hooks", "agents", "plugin");
+    /**
+     * Asset directories that carry the prompts themselves plus their templates, examples and checklists.
+     *
+     * <p>{@code reference} is the non-auto-loaded half of the rules: an auto-loaded file states the
+     * rule, its reference states why the rule is what it is. It is listed here because it ships and is
+     * therefore composition — a reference that silently stops being installed leaves every rule
+     * pointing at a file the consumer does not have.
+     */
+    private static final List<String> ASSET_DIRECTORIES = List.of("commands", "rules", "reference", "skills", "workflows", "hooks", "agents", "plugin");
 
     /**
      * Single files that are assets in their own right, in whichever copy carries them.

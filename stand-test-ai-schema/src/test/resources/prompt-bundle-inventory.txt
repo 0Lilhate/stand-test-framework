@@ -2,7 +2,8 @@
 # PromptBundleInventoryTest. One shipped asset path per line, relative to docs/ai-agent,
 # lexicographically sorted; blank lines and lines starting with '#' are ignored.
 #
-# Covered: the asset directories (commands, rules, skills, workflows, hooks, agents) of BOTH bundle
+# Covered: the asset directories (commands, rules, reference, skills, workflows, hooks, agents,
+# plugin) of BOTH bundle
 # copies, the bundle-root assets (settings.json, .gitignore) and the opencode-only loader manual
 # AGENTS.md. Machine-local residue (.env*, settings.local.json, scheduled_tasks.lock) sits at the
 # bundle root, outside those directories, and is not shipped. hooks/ and agents/ now exist in BOTH
@@ -12,10 +13,11 @@
 #
 # Adding, deleting or renaming an asset must be a deliberate edit of this file in the same commit.
 # Regenerate from the repository root:
-#   cd docs/ai-agent && { for b in .claude .opencode; do for d in commands rules skills workflows \
-#     hooks agents; do find "$b/$d" -type f 2>/dev/null; done; \
+#   cd docs/ai-agent && { for b in .claude .opencode; do for d in commands rules reference skills \
+#     workflows hooks agents plugin; do find "$b/$d" -type f 2>/dev/null; done; \
 #     find "$b" -maxdepth 1 \( -name settings.json -o -name .gitignore \) ; done; \
 #     echo ".opencode/AGENTS.md"; } | LC_ALL=C sort
+
 .claude/.gitignore
 .claude/agents/stand-test-kb-resolver.md
 .claude/agents/stand-test-quality-reviewer.md
@@ -68,6 +70,7 @@
 .claude/hooks/lib/state.mjs
 .claude/hooks/stand-batch.mjs
 .claude/hooks/stand-guard.mjs
+.claude/reference/stand-test-pipeline-rationale.md
 .claude/rules/stand-test-guardrails.md
 .claude/rules/stand-test-pipeline.md
 .claude/rules/stand-test-ui-guardrails.md
@@ -203,6 +206,7 @@
 .opencode/hooks/stand-batch.mjs
 .opencode/hooks/stand-guard.mjs
 .opencode/plugin/stand-guard.js
+.opencode/reference/stand-test-pipeline-rationale.md
 .opencode/rules/stand-test-guardrails.md
 .opencode/rules/stand-test-pipeline.md
 .opencode/rules/stand-test-ui-guardrails.md
