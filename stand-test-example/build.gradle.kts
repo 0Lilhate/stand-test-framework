@@ -174,10 +174,16 @@ tasks.withType<Test>().configureEach {
 // maven publication for it at all.
 tasks.withType<JacocoCoverageVerification>().configureEach { enabled = false }
 
-// AuthoringCribApiCoverageTest reads the authoring crib from docs/ai-agent (outside this module),
-// so declare it as a test input — editing the crib must re-run the test instead of hitting a stale
-// FROM-CACHE result. Only the curated asset tree: the bundle directory also holds gitignored
-// machine-local files whose contents must not enter the cache key.
+// AuthoringCribApiCoverageTest and UiAuthoringCribApiCoverageTest read the authoring cribs from
+// docs/ai-agent (outside this module) — the protocol one from `skills/**`, the UI one from `skills/**`
+// AND `rules/**`, because the UI surface is written down in both — so declare them as a test input:
+// editing a crib must re-run the tests instead of hitting a stale FROM-CACHE result. Only the curated
+// asset tree: the bundle directory also holds gitignored machine-local files whose contents must not
+// enter the cache key.
+//
+// The other half of both tests needs no declaration and it is worth knowing why: they resolve the SDK
+// side by REFLECTION over classes on the test classpath, so Gradle already invalidates them when an
+// adapter changes. A test that read the adapter's SOURCE instead would need that path declared too.
 tasks.test {
     inputs.files(
         fileTree(rootDir.resolve("docs/ai-agent/.claude")) {
