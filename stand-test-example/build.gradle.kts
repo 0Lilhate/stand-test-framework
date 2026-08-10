@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 // stand-test-example — technical usage examples (Iteration 8, docs/arch/stand-test-example-implementation-plan.md).
 // TEST-ONLY: the scenarios live in src/test and run through the public SDK API as a black box against
 // in-process doubles (JDK HttpServer for REST, H2 for DB), so `./gradlew build` is green offline without
@@ -78,6 +80,54 @@ dependencies {
 // The gRPC example stands up a real (Netty) gRPC double on a fixed loopback port pinned by GRPC_TARGET,
 // which the default no-arg GrpcStepExecutor resolves via System.getenv (like CLIENT_SERVICE_URL for REST).
 // Override the port in CI with -PexampleGrpcPort=NNNN to avoid collisions.
+// Stand-bound variables for TaksaRequestListTest, read once at configuration time through the provider
+// API so Gradle registers each of them as a configuration input: exporting or changing one invalidates
+// the configuration cache entry, which plain System.getenv() would not do.
+//
+// Read by prefix, not by name, so a second technical account (TKS_<ID>_USERNAME/_PASSWORD) needs no
+// edit here. PLAYWRIGHT_* carries PLAYWRIGHT_DOWNLOAD_HOST for a closed network and
+// PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD for a CI job that wants a loud failure instead of a 1.1 GB
+// mid-test download.
+//
+// Credentials may also arrive as Gradle properties, which is what makes the test pass from an IDE
+// without exporting anything per session: put them in ~/.gradle/gradle.properties — a file OUTSIDE
+// this repository, so a password never reaches git — and they are forwarded as the environment
+// variables the account roster names. An exported variable always wins over the property.
+//
+//     tksAdminUsername=...
+//     tksAdminPassword=...
+//
+// UI run settings (headed/headless, browser, timeouts, artifacts dir) are read by the SDK from SYSTEM
+// properties of the test JVM, and Gradle does not pass its own down to a forked one — so
+// `-Dstand.test.ui.headless=false` on the command line silently did nothing here. Forwarded by prefix,
+// the same way stand-test-ui's own browserTest task does it, so watching a run with your own eyes is:
+//
+//     TAKSA_IFT_URL='http://taksa-dev3/' ./gradlew :stand-test-example:test \
+//         --tests '*TaksaMainScreenTest' -Dstand.test.ui.headless=false --rerun-tasks
+//
+// Default: HEADED. The stand-bound example is run by a person watching it, so a visible window is the
+// useful default here — unlike stand-test-ui's browserTest, which defaults to headless because it runs
+// two dozen browsers on CI. `-Dstand.test.ui.headless=true` (or a CI job setting it) wins over this.
+val standUiSystemProperties: Map<String, String> = buildMap {
+    put("stand.test.ui.headless", "false")
+    putAll(providers.systemPropertiesPrefixedBy("stand.test.ui.").get())
+}
+
+val standBoundEnvironment: Map<String, String> = buildMap {
+    (findProperty("tksAdminUsername") as String?)?.let { put("TKS_ADMIN_1_USERNAME", it) }
+    (findProperty("tksAdminPassword") as String?)?.let { put("TKS_ADMIN_1_PASSWORD", it) }
+    listOf("TAKSA_", "TKS_", "PLAYWRIGHT_").forEach { prefix ->
+        putAll(providers.environmentVariablesPrefixedBy(prefix).get())
+    }
+}
+
+// A DIGEST of those variables, not the values: they are declared as a task input below, and a task
+// input snapshot holding TKS_*_PASSWORD would write the password under .gradle/. A digest still
+// changes when a corrected password is exported, which is the case the input exists for.
+val standBoundEnvironmentDigest: String = MessageDigest.getInstance("SHA-256")
+    .digest((standBoundEnvironment.toSortedMap().toString() + standUiSystemProperties.toSortedMap()).toByteArray())
+    .joinToString("") { part -> "%02x".format(part) }
+
 val exampleRestPort = (findProperty("exampleRestPort") as String?)?.toInt() ?: 18080
 val exampleGrpcPort = (findProperty("exampleGrpcPort") as String?)?.toInt() ?: 18090
 tasks.withType<Test>().configureEach {
@@ -88,6 +138,12 @@ tasks.withType<Test>().configureEach {
         if (!project.hasProperty("includeRequiresBroker")) {
             excludeTags("requires-broker")
         }
+        // The UI example that talks to a real stand (TaksaRequestListTest) is NOT gated here: it
+        // carries @EnabledIfEnvironmentVariable(TAKSA_IFT_URL), the same device
+        // ClientRequestAcceptedE2eDraftTest uses. A tag excluded here would be subtracted from a
+        // --tests filter as well, so running that one test by name from an IDE reported "No matching
+        // tests found" instead of skipping it — the precondition has to be a JUnit condition, which
+        // reports itself, rather than a build-side exclusion, which cannot.
     }
     environment("MAIN_DB_URL", "jdbc:h2:mem:exampledb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL")
     environment("MAIN_DB_USER", "sa")
@@ -98,6 +154,19 @@ tasks.withType<Test>().configureEach {
     environment("CLIENT_PASSWORD", "open sesame")
     environment("GRPC_TARGET", "127.0.0.1:$exampleGrpcPort")
     environment("KAFKA_BOOTSTRAP_SERVERS", (findProperty("kafkaBootstrapServers") as String?) ?: "localhost:9092")
+
+    // Forward the stand-bound variables to the test JVM. Inheriting them looks like it works and does
+    // not: with the configuration cache the task's environment is whatever was computed when the entry
+    // was written, so a variable exported afterwards never reaches the tests.
+    environment(standBoundEnvironment)
+    standUiSystemProperties.forEach { (name, value) -> systemProperty(name, value) }
+
+    // Forwarding alone is still not enough, and the gap reads as a bug in the test rather than in the
+    // build. Gradle does not treat a task's environment as an INPUT, so after one run the task stays
+    // UP-TO-DATE: export the variables, run again, and the previous result — a skip — is replayed
+    // verbatim while `env` in the same shell plainly shows the values. Declaring the digest as an input
+    // is what makes the next run actually re-execute.
+    inputs.property("standBoundEnvironment", standBoundEnvironmentDigest)
 }
 
 // Examples are demonstrations, not production code: src/main is empty, so the 80% coverage gate is not
