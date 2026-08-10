@@ -1,6 +1,6 @@
 {
   "kit": "stand-test-ai-agent-kit",
-  "version": 8,
+  "version": 9,
   "files": {
     ".claude/.gitignore": "sha256:968175e913f53bbf53491eabafe13466899f81ef4d6dcdd81141169bf7ff70f9",
     ".claude/agents/stand-test-kb-resolver.md": "sha256:f010af0b66beafe4cd9577b4fbcb5a898ff89fd15a6b5136ab6ce6260661d579",
