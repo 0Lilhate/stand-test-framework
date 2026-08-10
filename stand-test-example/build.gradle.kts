@@ -3,7 +3,10 @@ import java.security.MessageDigest
 // stand-test-example — technical usage examples (Iteration 8, docs/arch/stand-test-example-implementation-plan.md).
 // TEST-ONLY: the scenarios live in src/test and run through the public SDK API as a black box against
 // in-process doubles (JDK HttpServer for REST, H2 for DB), so `./gradlew build` is green offline without
-// a real DEV/IFT stand (test doubles are allowed by plan §16). It is a pure consumer (a sink) of the SDK
+// a real DEV/IFT stand (test doubles are allowed by plan §16) — with ONE exception, added deliberately
+// and named here so the invariant is not read as wider than it is: TaksaMainScreenTest drives a real
+// browser against a real stand and is gated by nothing, so this module is green offline for every
+// example EXCEPT that one. See the note beside the test task below. It is a pure consumer (a sink) of the SDK
 // modules; nothing depends on it. No business logic, no real-stand config, no published artifact
 // (plan §6/§7/§20). Phase 1 covers REST+DB via the manual runner; Phase 2 adds the canonical @StandTest
 // path (StandTestExampleTest) and a tagged Kafka example (KafkaExampleTest, requires a broker — excluded
@@ -80,7 +83,7 @@ dependencies {
 // The gRPC example stands up a real (Netty) gRPC double on a fixed loopback port pinned by GRPC_TARGET,
 // which the default no-arg GrpcStepExecutor resolves via System.getenv (like CLIENT_SERVICE_URL for REST).
 // Override the port in CI with -PexampleGrpcPort=NNNN to avoid collisions.
-// Stand-bound variables for TaksaRequestListTest, read once at configuration time through the provider
+// Stand-bound variables for TaksaMainScreenTest, read once at configuration time through the provider
 // API so Gradle registers each of them as a configuration input: exporting or changing one invalidates
 // the configuration cache entry, which plain System.getenv() would not do.
 //
@@ -138,11 +141,17 @@ tasks.withType<Test>().configureEach {
         if (!project.hasProperty("includeRequiresBroker")) {
             excludeTags("requires-broker")
         }
-        // The UI example that talks to a real stand (TaksaRequestListTest) is NOT gated here: it
-        // carries @EnabledIfEnvironmentVariable(TAKSA_IFT_URL), the same device
-        // ClientRequestAcceptedE2eDraftTest uses. A tag excluded here would be subtracted from a
-        // --tests filter as well, so running that one test by name from an IDE reported "No matching
-        // tests found" instead of skipping it — the precondition has to be a JUnit condition, which
+        // The UI example that talks to a real stand (TaksaMainScreenTest) is gated by NOTHING — not by
+        // a tag here and not by a JUnit condition on the test. That is the line owner's decision: it
+        // runs in an ordinary run, and the price is stated rather than hidden — on a machine without
+        // access to the taksa stand, or without trust in the internal CA, `./gradlew build` goes red.
+        // The module header says the same; the offline invariant covers every OTHER example.
+        //
+        // If that decision is ever revisited, the gate belongs on the TEST, not here:
+        // @EnabledIfEnvironmentVariable(named = "TAKSA_IFT_URL", ...), the device
+        // ClientRequestAcceptedE2eDraftTest uses. A tag excluded in this block is subtracted from a
+        // --tests filter as well, so running that one test by name from an IDE reports "No matching
+        // tests found" instead of skipping it — a precondition has to be a JUnit condition, which
         // reports itself, rather than a build-side exclusion, which cannot.
     }
     environment("MAIN_DB_URL", "jdbc:h2:mem:exampledb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL")
