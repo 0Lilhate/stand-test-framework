@@ -55,7 +55,9 @@ public final class EnvironmentConfig {
 
     private static final Set<String> AUTH_KEYS = Set.of("scheme", "username-ref", "usernameRef", "password-ref", "passwordRef", "token-ref", "tokenRef");
     private static final Set<String> UI_APPLICATION_KEYS = Set.of("base-url-ref", "baseUrlRef", "default-viewport", "defaultViewport", "viewport-profiles", "viewportProfiles", "trace", "auth");
-    private static final Set<String> UI_AUTH_KEYS = Set.of("scheme", "credentials-pool-ref", "credentialsPoolRef", "roles", "discovery-account-ref", "discoveryAccountRef", "login", "challenge");
+    private static final Set<String> UI_AUTH_KEYS = Set.of(
+            "scheme", "credentials-pool-ref", "credentialsPoolRef", "credentials-username", "credentialsUsername", "credentials-password", "credentialsPassword",
+            "roles", "discovery-account-ref", "discoveryAccountRef", "login", "challenge");
     private static final Set<String> UI_LOGIN_KEYS = Set.of(
             "path",
             "username-locator", "usernameLocator",
@@ -185,6 +187,13 @@ public final class EnvironmentConfig {
         checkKnownKeys(fields, UI_AUTH_KEYS, location);
         UiAuthScheme scheme = uiAuthScheme(requireString(fields, "scheme", "scheme", location), location);
         String credentialsPoolRef = optionalReference(fields, "credentials-pool-ref", "credentialsPoolRef", location);
+        if (fields.containsKey("credentials-username") || fields.containsKey("credentialsUsername")
+                || fields.containsKey("credentials-password") || fields.containsKey("credentialsPassword")) {
+            EnvironmentConfigFormat.requireSectionSupported(
+                    version, "auth.credentials-username/credentials-password", EnvironmentConfigFormat.UI_DIRECT_CREDENTIALS_SINCE_VERSION, location);
+        }
+        String credentialsUsername = optionalReference(fields, "credentials-username", "credentialsUsername", location);
+        String credentialsPassword = optionalReference(fields, "credentials-password", "credentialsPassword", location);
         String discoveryAccountRef = optionalReference(fields, "discovery-account-ref", "discoveryAccountRef", location);
         List<String> roles = stringList(fields.get("roles"), location + ".roles");
         if (fields.containsKey("login")) {
@@ -195,7 +204,7 @@ public final class EnvironmentConfig {
         }
         UiLoginFormConfig login = uiLogin(fields.get("login"), location + ".login");
         UiLoginChallenge challenge = uiLoginChallenge(fields.get("challenge"), location + ".challenge");
-        return build(location, () -> new UiAuthConfig(scheme, credentialsPoolRef, roles, discoveryAccountRef, login, challenge));
+        return build(location, () -> new UiAuthConfig(scheme, credentialsPoolRef, roles, discoveryAccountRef, login, challenge, credentialsUsername, credentialsPassword));
     }
 
     /**

@@ -57,6 +57,55 @@ class UiAuthConfigTest {
     }
 
     @Test
+    @DisplayName("a single application may name its account directly instead of a roster, and the pair satisfies both the pool requirement and the roles requirement")
+    void directCredentialPairReplacesThePool() {
+        UiAuthConfig direct = new UiAuthConfig(
+                UiAuthScheme.FORM, null, List.of("admin"), null, LOGIN_FORM, UiLoginChallenge.NONE, "WEB_USERNAME", "WEB_PASSWORD");
+
+        assertThat(direct.credentialsPoolRef()).isNull();
+        assertThat(direct.credentialsUsername()).isEqualTo("WEB_USERNAME");
+        assertThat(direct.credentialsPassword()).isEqualTo("WEB_PASSWORD");
+        assertThat(direct.rolesDeclared()).isTrue();
+        assertThat(direct.hasDirectCredentials()).isTrue();
+        assertThat(new UiAuthConfig(UiAuthScheme.FORM, "POOL", List.of(), null, LOGIN_FORM, null).hasDirectCredentials()).isFalse();
+    }
+
+    @Test
+    @DisplayName("half a pair is a configuration error: a login without a password names an account nobody can sign in as")
+    void halfOfTheCredentialPairIsRejected() {
+        assertThatThrownBy(() -> new UiAuthConfig(
+                UiAuthScheme.FORM, null, List.of(), null, LOGIN_FORM, UiLoginChallenge.NONE, "WEB_USERNAME", null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("credentialsPassword");
+        assertThatThrownBy(() -> new UiAuthConfig(
+                UiAuthScheme.FORM, null, List.of(), null, LOGIN_FORM, UiLoginChallenge.NONE, null, "WEB_PASSWORD"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("credentialsUsername");
+        assertThatThrownBy(() -> new UiAuthConfig(
+                UiAuthScheme.FORM, null, List.of(), null, LOGIN_FORM, UiLoginChallenge.NONE, " ", "WEB_PASSWORD"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("credentialsUsername");
+    }
+
+    @Test
+    @DisplayName("a pool and a direct pair together are refused: which of the two the accounts come from would be a coin toss")
+    void poolAndDirectPairAreMutuallyExclusive() {
+        assertThatThrownBy(() -> new UiAuthConfig(
+                UiAuthScheme.FORM, "POOL", List.of(), null, LOGIN_FORM, UiLoginChallenge.NONE, "WEB_USERNAME", "WEB_PASSWORD"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("credentials-pool-ref");
+    }
+
+    @Test
+    @DisplayName("scheme NONE must not carry a direct pair either — it is a credential like any other")
+    void noneCarriesNoDirectPair() {
+        assertThatThrownBy(() -> new UiAuthConfig(
+                UiAuthScheme.NONE, null, List.of(), null, null, UiLoginChallenge.NONE, "WEB_USERNAME", "WEB_PASSWORD"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("NONE");
+    }
+
+    @Test
     @DisplayName("blank and duplicate roles, and blank references, are rejected")
     void malformedValues_areRejected() {
         assertThatThrownBy(() -> new UiAuthConfig(UiAuthScheme.FORM, "POOL", List.of("client", " "), null))

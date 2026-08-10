@@ -568,6 +568,46 @@ class UiLoginStepExecutorTest {
      * does in its {@code finally}. Without the close the account stays leased — which is the pool working as
      * designed, and would make the next "run" in the same test wait out its whole timeout.
      */
+    @Test
+    @DisplayName("an application may name its one account directly instead of a roster, and the pair is typed into the form like any other credential")
+    void directCredentialPairSignsIn() {
+        FakeUiDriverFactory factory = signingInFactory();
+
+        StepResult result = execute(factory, new ResourceScope(),
+                UiLoginTestSupport.applicationWithDirectCredentials(UiAuthScheme.FORM, List.of("client", "manager")),
+                UiStep.login(UiTestSupport.APPLICATION).id("login").role("client").build());
+
+        assertThat(result.status()).isEqualTo(StepStatus.SUCCESS);
+        assertThat(factory.only().calls()).containsSubsequence(
+                "fill:" + UiLoginTestSupport.USERNAME.describe() + "=" + UiLoginTestSupport.DIRECT_USERNAME,
+                "fill:" + UiLoginTestSupport.PASSWORD.describe() + "=" + UiLoginTestSupport.DIRECT_PASSWORD);
+    }
+
+    @Test
+    @DisplayName("the direct pair answers every declared role — there is nothing to choose between, so a second role reuses the same account rather than exhausting a pool of one")
+    void directCredentialPairAnswersEveryDeclaredRole() {
+        UiApplicationDefinition application = UiLoginTestSupport.applicationWithDirectCredentials(UiAuthScheme.FORM, List.of("client", "manager"));
+
+        StepResult asClient = execute(signingInFactory(), new ResourceScope(), application,
+                UiStep.login(UiTestSupport.APPLICATION).id("login").role("client").build());
+        StepResult asManager = execute(signingInFactory(), new ResourceScope(), application,
+                UiStep.login(UiTestSupport.APPLICATION).id("login").role("manager").build());
+
+        assertThat(asClient.status()).isEqualTo(StepStatus.SUCCESS);
+        assertThat(asManager.status()).isEqualTo(StepStatus.SUCCESS);
+    }
+
+    @Test
+    @DisplayName("a role the application does not declare is still refused with a direct pair: the pair answers DECLARED roles, not any role at all")
+    void directCredentialPairRefusesAnUndeclaredRole() {
+        UiApplicationDefinition application = UiLoginTestSupport.applicationWithDirectCredentials(UiAuthScheme.FORM, List.of("client"));
+        ScenarioStep step = UiStep.login(UiTestSupport.APPLICATION).id("login").role("auditor").build();
+
+        assertThatThrownBy(() -> execute(signingInFactory(), new ResourceScope(), application, step))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("auditor");
+    }
+
     private StepResult executeCompleteRun(FakeUiDriverFactory factory, UiAuthScheme scheme, ScenarioStep step) {
         ResourceScope scope = new ResourceScope();
         try {

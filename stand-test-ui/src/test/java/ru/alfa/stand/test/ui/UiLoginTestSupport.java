@@ -22,6 +22,15 @@ final class UiLoginTestSupport {
     /** Two client accounts and one manager — enough to prove exclusivity without making a test slow. */
     static final String ROSTER = "portal-client-1:client;portal-client-2:client;portal-manager-1:manager";
 
+    /** The direct pair: an application with exactly one account names it instead of keeping a roster. */
+    static final String DIRECT_USERNAME_REF = "PORTAL_SINGLE_USERNAME";
+
+    static final String DIRECT_PASSWORD_REF = "PORTAL_SINGLE_PASSWORD";
+
+    static final String DIRECT_USERNAME = "portal.single";
+
+    static final String DIRECT_PASSWORD = "s3cret-single-!";
+
     static final UiLocator USERNAME = UiLocator.testId("login-username");
 
     static final UiLocator PASSWORD = UiLocator.testId("login-password");
@@ -51,6 +60,16 @@ final class UiLoginTestSupport {
     }
 
     /**
+     * An application that names its ONE account directly instead of pointing at a roster. The pair answers
+     * every declared role, so both {@code client} and {@code manager} resolve to the same credentials.
+     */
+    static UiApplicationDefinition applicationWithDirectCredentials(UiAuthScheme scheme, List<String> roles) {
+        UiAuthConfig auth = new UiAuthConfig(
+                scheme, null, roles, DISCOVERY_REF, FORM, UiLoginChallenge.NONE, DIRECT_USERNAME_REF, DIRECT_PASSWORD_REF);
+        return new UiApplicationDefinition(UiTestSupport.APPLICATION, UiTestSupport.BASE_URL_REF, null, Map.of(), UiTraceMode.OFF, auth);
+    }
+
+    /**
      * The environment variables a sign-in resolves: the base URL, the account roster and one pair of
      * credentials per rostered account. Nothing here reaches configuration — that is the point of the two
      * levels of indirection this fixture reproduces.
@@ -65,6 +84,8 @@ final class UiLoginTestSupport {
         values.put("PORTAL_CLIENT_2_PASSWORD", "s3cret-two-!");
         values.put("PORTAL_MANAGER_1_USERNAME", "portal.manager.one");
         values.put("PORTAL_MANAGER_1_PASSWORD", "s3cret-manager-!");
+        values.put(DIRECT_USERNAME_REF, DIRECT_USERNAME);
+        values.put(DIRECT_PASSWORD_REF, DIRECT_PASSWORD);
         return values::get;
     }
 

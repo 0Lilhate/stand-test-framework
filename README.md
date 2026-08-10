@@ -74,7 +74,7 @@ environments:
         password-ref: MAIN_DB_PASSWORD
         allowed-schemas: [test_data]
         write-allowed: true
-    ui-applications:                             # требует version: 2 (секция auth.login — version: 3)
+    ui-applications:                             # требует version: 2 (auth.login — version: 3, пара credentials-* — version: 4)
       client-portal:
         base-url-ref: CLIENT_PORTAL_IFT_URL      # имя переменной окружения, не URL
         default-viewport: desktop                # профиль прогона — конфигурацией, не полем сценария
@@ -85,6 +85,10 @@ environments:
         auth:
           scheme: FORM                           # NONE | FORM | STORAGE_STATE | SSO (SSO — говорящий отказ)
           credentials-pool-ref: CLIENT_PORTAL_TEST_USERS   # переменная с РЕЕСТРОМ учёток, не с учёткой
+          # у приложения с ОДНОЙ учёткой реестр не нужен — она называется прямо (version: 4), и
+          # эта пара исключает credentials-pool-ref: способ должен быть один:
+          # credentials-username: CLIENT_PORTAL_USERNAME
+          # credentials-password: CLIENT_PORTAL_PASSWORD
           roles: [client, operator]              # объявлены роли ⇒ ui.login обязан назвать одну из них
           discovery-account-ref: CLIENT_PORTAL_DISCOVERY   # учётка разведки, вне пула (SEC-10)
           challenge: none                        # none | mfa | otp | captcha — объявляется, не обходится
@@ -99,8 +103,27 @@ environments:
 Переменная `CLIENT_PORTAL_TEST_USERS` содержит **реестр учёток**, а не учётку:
 `portal-client-1:client;portal-client-2:client;portal-manager-1:manager`. Каждая запись — это
 `<id>:<роль>` (имена переменных с логином и паролем выводятся из id: `PORTAL_CLIENT_1_USERNAME` /
-`PORTAL_CLIENT_1_PASSWORD`) либо `<id>:<роль>:<переменная-логина>:<переменная-пароля>`. Ни логина, ни
-пароля в конфигурации нет ни на одном уровне.
+`PORTAL_CLIENT_1_PASSWORD`) либо `<id>:<роль>:<переменная-логина>:<переменная-пароля>`.
+
+#### Приложение с одной учёткой: `credentials-username` / `credentials-password`
+
+Реестр из нескольких записей нужен там, где учёток несколько. Приложению с **одной** технической
+учёткой она называется прямо, и такая пара **исключает** `credentials-pool-ref` — способ должен быть
+один, иначе непонятно, откуда брать учётку:
+
+```yaml
+auth:
+  scheme: STORAGE_STATE
+  credentials-username: CLIENT_PORTAL_USERNAME    # ИМЯ переменной окружения
+  credentials-password: CLIENT_PORTAL_PASSWORD
+  roles: [admin]                                  # пара отвечает на любую объявленную роль
+```
+
+Пара — такие же **ссылки**, как всё остальное: голое слово это имя переменной окружения. Спеллинг
+`${web_username:tks_Admin}` тоже допустим, и дефолт в нём — **значение**, а не имя запасной
+переменной; поэтому для логина он уместен, а **паролю дефолт не дают никогда** — то же правило, что у
+`password-ref` датасорса. Это единственное место, где значение учётных данных вообще выразимо в
+реестре: раньше не было и его (`ADR-UI-006 §5`), и ослабление принято владельцем линии осознанно.
 
 ### Версия формата реестра
 
@@ -123,7 +146,8 @@ environments:
 понимает SDK. Одно предупреждение на загрузку документа, а не на обращение к алиасу.
 
 Секции, появившиеся после версии 1, требуют явного объявления версии: `ui-applications` — это
-`version: 2`, а `auth.login`/`auth.challenge` внутри неё — `version: 3` (поле, добавленное в секцию,
+`version: 2`, `auth.login`/`auth.challenge` внутри неё — `version: 3`, а пара
+`auth.credentials-username`/`auth.credentials-password` — `version: 4` (поле, добавленное в секцию,
 считается секцией для этого правила). Смысл в том, что более старый SDK, встретив такой файл, скажет
 «файл версии 3, поддерживается 2 — обновите SDK», а не «неизвестный ключ `login`».
 

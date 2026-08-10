@@ -297,14 +297,26 @@ public class StandTestProperties {
 
     /**
      * Sign-in configuration of a {@link UiApplication}. The scheme is spelled {@code scheme} — the same key
-     * a service's {@link Auth} uses — and every credential is a {@code *-ref} reference, never a value:
-     * there is deliberately no value twin here, because a UI credential has no non-secret reading.
+     * a service's {@link Auth} uses — and every credential is a reference, never a value: there is
+     * deliberately no value twin here, because a UI credential has no non-secret reading.
+     *
+     * <p>{@code credentialsUsername}/{@code credentialsPassword} name one account directly, for an
+     * application that has exactly one; they exclude {@code credentialsPoolRef}. Both are references
+     * too, and on this surface that matters more than it does for the file: <strong>write a bare
+     * variable NAME, never {@code ${VAR:default}}</strong>. Spring expands a placeholder at context
+     * startup, so the SDK would receive the expanded value and read it as the name of a variable that
+     * does not exist. The {@code ${VAR:value}} spelling belongs to {@code stand-test-environments.yml},
+     * where nothing expands it before the SDK does.
      */
     public static class UiAuth {
 
         private UiAuthScheme scheme;
 
         private String credentialsPoolRef;
+
+        private String credentialsUsername;
+
+        private String credentialsPassword;
 
         private final List<String> roles = new ArrayList<>();
 
@@ -328,6 +340,22 @@ public class StandTestProperties {
 
         public void setCredentialsPoolRef(String credentialsPoolRef) {
             this.credentialsPoolRef = credentialsPoolRef;
+        }
+
+        public String getCredentialsUsername() {
+            return credentialsUsername;
+        }
+
+        public void setCredentialsUsername(String credentialsUsername) {
+            this.credentialsUsername = credentialsUsername;
+        }
+
+        public String getCredentialsPassword() {
+            return credentialsPassword;
+        }
+
+        public void setCredentialsPassword(String credentialsPassword) {
+            this.credentialsPassword = credentialsPassword;
         }
 
         public List<String> getRoles() {

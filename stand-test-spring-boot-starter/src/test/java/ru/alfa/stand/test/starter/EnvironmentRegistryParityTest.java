@@ -159,10 +159,10 @@ class EnvironmentRegistryParityTest {
      * consumer.
      */
     @Test
-    @DisplayName("both surfaces agree on the same config: a version-3 registry with a ui-applications section and a login form maps identically")
+    @DisplayName("both surfaces agree on the same config: a version-4 registry with a ui-applications section, a login form and both ways of naming an account maps identically")
     void bothSurfacesAgreeOnTheSameConfig() throws IOException {
         StandTestProperties properties = standTestProperties();
-        properties.setVersion(3);
+        properties.setVersion(4);
         final StandTestProperties.Environment ift = properties.getEnvironments().get("ift");
 
         StandTestProperties.UiApplication portal = new StandTestProperties.UiApplication();
@@ -191,14 +191,24 @@ class EnvironmentRegistryParityTest {
         portal.setAuth(auth);
         ift.getUiApplications().put("client-portal", portal);
 
+        // The second application carries the OTHER way of naming an account — the direct pair, which
+        // excludes a roster — so between the two every component of UiAuthConfig is exercised.
         StandTestProperties.UiApplication backOffice = new StandTestProperties.UiApplication();
         backOffice.setBaseUrlRef("BACK_OFFICE_IFT_URL");
         backOffice.setTrace("on-failure");
+        StandTestProperties.UiAuth backOfficeAuth = new StandTestProperties.UiAuth();
+        backOfficeAuth.setScheme(UiAuthScheme.STORAGE_STATE);
+        backOfficeAuth.setCredentialsUsername("BACK_OFFICE_USERNAME");
+        backOfficeAuth.setCredentialsPassword("BACK_OFFICE_PASSWORD");
+        StandTestProperties.UiLogin backOfficeLogin = new StandTestProperties.UiLogin();
+        backOfficeLogin.setSignedInLocator("testId=user-menu");
+        backOfficeAuth.setLogin(backOfficeLogin);
+        backOffice.setAuth(backOfficeAuth);
         ift.getUiApplications().put("back-office", backOffice);
 
         EnvironmentRegistry fromProperties = EnvironmentRegistryFactory.build(properties);
         EnvironmentRegistry fromYaml = loadFromYaml("""
-                version: 3
+                version: 4
                 environments:
                   ift:
                     services:
@@ -265,6 +275,12 @@ class EnvironmentRegistryParityTest {
                       back-office:
                         base-url-ref: BACK_OFFICE_IFT_URL
                         trace: on-failure
+                        auth:
+                          scheme: STORAGE_STATE
+                          credentials-username: BACK_OFFICE_USERNAME
+                          credentials-password: BACK_OFFICE_PASSWORD
+                          login:
+                            signed-in-locator: testId=user-menu
                     kafka-cluster:
                       bootstrap-servers-ref: KAFKA_BOOTSTRAP
                       security-protocol-ref: KAFKA_SECURITY
@@ -279,8 +295,13 @@ class EnvironmentRegistryParityTest {
         // invisible: nobody remembers to extend two mirrored fixtures. So the fixture is checked against the
         // model rather than against somebody's memory. A component added to UiAuthConfig or UiLoginFormConfig
         // fails here until both surfaces exercise it with a value that is not the one an unread field yields.
+        // Checked ACROSS the two applications rather than on one, because the roster and the direct pair
+        // exclude each other: no single auth section can carry both, so demanding it of one would make the
+        // fixture unwritable rather than strict. What must hold is that every component is load-bearing
+        // SOMEWHERE — a field dropped by one mapper still shows up as a mismatch above.
         UiAuthConfig portalAuth = fromYaml.environment("ift").orElseThrow().uiApplications().get("client-portal").auth();
-        assertEveryComponentIsExercised(portalAuth);
+        UiAuthConfig backOfficeAuthFromYaml = fromYaml.environment("ift").orElseThrow().uiApplications().get("back-office").auth();
+        assertEveryComponentIsExercisedAcross(List.of(portalAuth, backOfficeAuthFromYaml));
         assertEveryComponentIsExercised(portalAuth.login());
     }
 
@@ -317,6 +338,26 @@ class EnvironmentRegistryParityTest {
                 """))
                 .hasMessageContaining("auth.challenge")
                 .hasMessageContaining("format version 3");
+    }
+
+    /**
+     * The same check spread over several records of one type: each component must be exercised by at least
+     * one of them. Used where the model makes two fields mutually exclusive, so no single instance can
+     * carry every component at once.
+     */
+    private static void assertEveryComponentIsExercisedAcross(List<?> records) {
+        for (RecordComponent component : records.get(0).getClass().getRecordComponents()) {
+            boolean exercised = records.stream().map(record -> read(record, component)).anyMatch(EnvironmentRegistryParityTest::isExercised);
+            assertThat(exercised)
+                    .as("the parity fixture must set %s.%s on at least one of its applications to something an unread field could not produce"
+                            + " — otherwise both mappers could drop it and this test would still pass",
+                            records.get(0).getClass().getSimpleName(), component.getName())
+                    .isTrue();
+        }
+    }
+
+    private static boolean isExercised(Object value) {
+        return value != null && !List.of().equals(value) && !"".equals(value) && value != UiLoginChallenge.NONE && value != UiAuthScheme.NONE;
     }
 
     /**

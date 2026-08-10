@@ -417,6 +417,79 @@ class EnvironmentConfigTest {
     // ---- ui-applications (BR-27, BR-31) ----
 
     @Test
+    @DisplayName("an application with exactly one account names it directly, and the pair is read as references like every other credential")
+    void uiApplicationDirectCredentialsAreParsed() {
+        EnvironmentDefinition ift = parse("""
+                version: 4
+                environments:
+                  ift:
+                    ui-applications:
+                      taksa:
+                        base-url-ref: TAKSA_IFT_URL
+                        auth:
+                          scheme: STORAGE_STATE
+                          credentials-username: ${web_username:TAKSA_USERNAME}
+                          credentials-password: TAKSA_PASSWORD
+                          roles: [admin]
+                          login:
+                            signed-in-locator: text=Выйти
+                """).environment("ift").orElseThrow();
+
+        UiAuthConfig auth = ift.uiApplication("taksa").orElseThrow().auth();
+        assertThat(auth.credentialsUsername()).isEqualTo("${web_username:TAKSA_USERNAME}");
+        assertThat(auth.credentialsPassword()).isEqualTo("TAKSA_PASSWORD");
+        assertThat(auth.credentialsPoolRef()).isNull();
+        assertThat(auth.hasDirectCredentials()).isTrue();
+    }
+
+    @Test
+    @DisplayName("the direct pair declares the format version it arrived in, so an older SDK names the version instead of the field")
+    void uiApplicationDirectCredentialsRequireVersionFour() {
+        assertThatThrownBy(() -> parse("""
+                version: 3
+                environments:
+                  ift:
+                    ui-applications:
+                      taksa:
+                        base-url-ref: TAKSA_IFT_URL
+                        auth:
+                          scheme: FORM
+                          credentials-username: TAKSA_USERNAME
+                          credentials-password: TAKSA_PASSWORD
+                          login:
+                            username-locator: css=#username
+                            password-locator: css=#password
+                            submit-locator: css=#kc-login
+                            signed-in-locator: text=Выйти
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("credentials-username")
+                .hasMessageContaining("format version 4");
+    }
+
+    @Test
+    @DisplayName("a roster and a direct pair together are refused by the loader, naming both spellings")
+    void uiApplicationRefusesPoolAndDirectPairTogether() {
+        assertThatThrownBy(() -> parse("""
+                version: 4
+                environments:
+                  ift:
+                    ui-applications:
+                      taksa:
+                        base-url-ref: TAKSA_IFT_URL
+                        auth:
+                          scheme: STORAGE_STATE
+                          credentials-pool-ref: TAKSA_TEST_USERS
+                          credentials-username: TAKSA_USERNAME
+                          credentials-password: TAKSA_PASSWORD
+                          login:
+                            signed-in-locator: text=Выйти
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("credentials-pool-ref");
+    }
+
+    @Test
     @DisplayName("a ui-applications section parses alias, base-url-ref, viewport profiles, trace and auth")
     void uiApplicationsSectionIsParsed() {
         EnvironmentDefinition ift = parse("""

@@ -46,7 +46,7 @@ public final class EnvironmentConfigFormat {
     public static final int INITIAL_VERSION = 1;
 
     /** The highest registry format version this SDK build can read. */
-    public static final int SUPPORTED_VERSION = 3;
+    public static final int SUPPORTED_VERSION = 4;
 
     /** Format version in which the per-environment {@code ui-applications} section was introduced. */
     public static final int UI_APPLICATIONS_SINCE_VERSION = 2;
@@ -63,6 +63,18 @@ public final class EnvironmentConfigFormat {
      * a version number; the cost of reasoning around it is the promise itself.
      */
     public static final int UI_LOGIN_SINCE_VERSION = 3;
+
+    /**
+     * Format version in which a UI application gained {@code auth.credentials-username} and
+     * {@code auth.credentials-password} — the pair that names one technical account directly, instead of
+     * pointing at a roster of several.
+     *
+     * <p>The same rule as above, applied for the same reason: an SDK built before this change meets the
+     * pair as {@code Unknown field 'credentials-username'} unless the document declares the version it
+     * needs. Here the argument is stronger than it was for {@code auth.login}, because version 3 IS in use —
+     * the example module's registry declares it — so a reader of the older contract really exists.
+     */
+    public static final int UI_DIRECT_CREDENTIALS_SINCE_VERSION = 4;
 
     private EnvironmentConfigFormat() {
     }

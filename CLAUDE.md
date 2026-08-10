@@ -162,8 +162,14 @@ YAML DSL ────────────────┘                    
   `ForbiddenOperation` constants, because they are scenario/registry mismatches rather than forbidden acts.
 - **Sign-in is `ui.login`, a step of its own** (ADR-UI-006, implemented): a technical account is leased
   **by role** from a per-JVM `AccountPool` whose roster lives behind `credentials-pool-ref` — a variable
-  holding account ids, roles and the *names* of the credential variables, so no login or password exists at
-  any configuration level. The lease is registered in the `ResourceScope`, so the runner's `finally`
+  holding account ids, roles and the *names* of the credential variables. An application with exactly one
+  account may instead name it directly with `credentials-username`/`credentials-password` (registry format
+  **version 4**, mutually exclusive with the roster, answers every declared role, one `accountId` per role).
+  Both spellings are references, so a configuration written with bare variable names still holds no
+  credential — but the `${VAR:value}` spelling makes one *expressible*, which the roster never did: that is
+  a deliberate relaxation of ADR-UI-006 §5 accepted by the line owner, and "never give a default to a
+  password" is now a documented rule rather than a property of the construction. The lease is registered in
+  the `ResourceScope`, so the runner's `finally`
   returns it on every outcome; waiting for a free account is bounded (`accountTimeout`, default 60 s,
   capped by `MAX_TIMEOUT_MILLIS`) and exhaustion is a `StandTestException` naming application, role, pool
   size and timeout. `FORM` fills the form every time; `STORAGE_STATE` restores a session saved per

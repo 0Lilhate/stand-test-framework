@@ -153,13 +153,19 @@ public final class EnvironmentRegistryFactory {
         if (auth.getChallenge() != null) {
             EnvironmentConfigFormat.requireSectionSupported(version, "auth.challenge", EnvironmentConfigFormat.UI_LOGIN_SINCE_VERSION, location + ".challenge");
         }
+        if (auth.getCredentialsUsername() != null || auth.getCredentialsPassword() != null) {
+            EnvironmentConfigFormat.requireSectionSupported(
+                    version, "auth.credentials-username/credentials-password", EnvironmentConfigFormat.UI_DIRECT_CREDENTIALS_SINCE_VERSION, location);
+        }
         return new UiAuthConfig(
                 auth.getScheme(),
                 ref(auth.getCredentialsPoolRef(), "credentials-pool-ref", alias),
                 List.copyOf(auth.getRoles()),
                 ref(auth.getDiscoveryAccountRef(), "discovery-account-ref", alias),
                 uiLogin(auth.getLogin()),
-                (auth.getChallenge() == null) ? UiLoginChallenge.NONE : auth.getChallenge());
+                (auth.getChallenge() == null) ? UiLoginChallenge.NONE : auth.getChallenge(),
+                ref(auth.getCredentialsUsername(), "credentials-username", alias),
+                ref(auth.getCredentialsPassword(), "credentials-password", alias));
     }
 
     /**

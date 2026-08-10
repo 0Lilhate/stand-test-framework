@@ -108,7 +108,7 @@ stand:
         enabled: true
     environments:
       ift:
-        ui-applications:      # requires version: 2 (auth.login: version: 3)
+        ui-applications:      # requires version: 2 (auth.login: version: 3; credentials-username/password: version: 4)
           client-portal:
             base-url-ref: CLIENT_PORTAL_IFT_URL
             default-viewport: desktop
@@ -119,6 +119,10 @@ stand:
             auth:             # key `scheme`, as for services; credentials are refs only — no value twin
               scheme: FORM
               credentials-pool-ref: CLIENT_PORTAL_TEST_USERS   # env var holding the account ROSTER
+              # An application with exactly ONE account names it instead (version: 4). The pair excludes
+              # credentials-pool-ref and answers every declared role:
+              #   credentials-username: CLIENT_PORTAL_USERNAME   # a bare NAME — see the trap below
+              #   credentials-password: CLIENT_PORTAL_PASSWORD
               roles: [client, operator]                        # declared roles ⇒ ui.login must name one
               discovery-account-ref: CLIENT_PORTAL_DISCOVERY
               challenge: none                                  # none | mfa | otp | captcha
@@ -168,7 +172,9 @@ The version of the environment-registry **format**, not of the SDK — the exact
 | > supported | context startup fails with a message naming the declared version, the supported one and the action (upgrade `stand-test-*`) — never `Unknown field` |
 
 Sections introduced after version 1 must declare the version they arrived in: `ui-applications`
-requires `stand.test.version: 2`, and `auth.login`/`auth.challenge` inside it require `stand.test.version: 3`. Without that rule a configuration could carry a version-2 section
+requires `stand.test.version: 2`, `auth.login`/`auth.challenge` inside it require `stand.test.version: 3`,
+and the direct pair `auth.credentials-username`/`auth.credentials-password` requires
+`stand.test.version: 4`. Without that rule a configuration could carry a version-2 section
 while claiming version 1 — the very case the version key exists to diagnose.
 
 **UI applications** are addressed by alias exactly like services and topics; a scenario names
@@ -197,10 +203,19 @@ it has no twin, and writing the value spelling for it binds nothing (see the not
 | `token` | `token-ref` | auth (**secret**) |
 | `sasl-jaas-config` | `sasl-jaas-config-ref` | Kafka cluster (**secret**) |
 
-> **UI credentials are the deliberate exception.** `ui-applications.<alias>.auth.credentials-pool-ref`
-> and `discovery-account-ref` have **no** value twin: a UI account has no non-secret reading, and a twin
+> **UI credentials are the deliberate exception.** `ui-applications.<alias>.auth.credentials-pool-ref`,
+> `credentials-username`, `credentials-password` and `discovery-account-ref` have **no** value twin: a UI
+> account has no non-secret reading, and a twin
 > would materialise it in the Spring `Environment`. There is no `credentials-pool` / `discovery-account`
-> setter, so writing one binds nothing silently — use the `*-ref` spelling. The `auth.login.*-locator`
+> setter, so writing one binds nothing silently — use the `*-ref` spelling.
+>
+> **The placeholder trap applies to the direct pair too, and here it bites hardest.** In
+> `stand-test-environments.yml` the spelling `${web_password:value}` is legal and its default IS the
+> value. On this surface Spring expands the placeholder at context startup, so the SDK receives the
+> expanded text and reads it as the NAME of a variable that does not exist — a rejected sign-in that
+> looks like a wrong password. Write a bare variable name here.
+>
+> The `auth.login.*-locator`
 > fields are not references either: they address elements on the page, are required whenever the scheme
 > signs in, and are rejected unless spelled `<strategy>=<value>` — which is also what stops a credential
 > from being typed into `password-locator`.

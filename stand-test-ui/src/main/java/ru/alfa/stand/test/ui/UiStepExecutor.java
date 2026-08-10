@@ -80,6 +80,13 @@ public final class UiStepExecutor implements StepExecutor {
      */
     private static final Duration TRACE_TIMEOUT = Duration.ofSeconds(20);
 
+    /**
+     * The role given to a directly-named account when the application declares no roles at all. A
+     * {@link UiAccount} cannot exist without one, and a sign-in that names no role leases whatever the pool
+     * holds, so the value is never matched against anything a scenario writes.
+     */
+    private static final String DIRECT_ACCOUNT_ROLE = "default";
+
     private static final Logger LOG = LoggerFactory.getLogger(UiStepExecutor.class);
 
     private final UiDriverFactory driverFactory;
@@ -693,11 +700,40 @@ public final class UiStepExecutor implements StepExecutor {
         if (held != null) {
             return held;
         }
-        String poolRef = auth.credentialsPoolRef();
-        String roster = SecretReferences.resolve(poolRef, this.referenceLookup);
-        List<UiAccount> accounts = AccountRoster.parse(roster, application.alias(), poolRef, auth.discoveryAccountRef());
+        List<UiAccount> accounts = accountsOf(application, auth);
         AccountPool pool = this.accountPools.forApplication(environment, application.alias(), accounts);
         return pool.lease(application.alias(), role, accountTimeout);
+    }
+
+    /**
+     * The accounts an application offers: a roster behind {@code credentials-pool-ref}, or the one account
+     * it names directly.
+     *
+     * <p>The direct pair covers <strong>every declared role</strong>, and one account per role is what that
+     * means in the pool's vocabulary: there is nothing to choose between, so a scenario asking for any
+     * declared role must be answered. Each entry keeps its own {@code accountId} — the pool leases by role,
+     * and the browser session is stored per account, so one shared id would let a run holding the pair as
+     * {@code client} block the same pair as {@code manager}.
+     *
+     * <p>The references are passed through untouched; {@link UiLoginService} resolves them at the moment the
+     * form is filled, exactly as it resolves the ones a roster produced. That is why the {@code ${VAR:value}}
+     * spelling works here without a line of its own.
+     */
+    private List<UiAccount> accountsOf(ResolvedUiApplication application, UiAuthConfig auth) {
+        if (!auth.hasDirectCredentials()) {
+            String poolRef = auth.credentialsPoolRef();
+            String roster = SecretReferences.resolve(poolRef, this.referenceLookup);
+            return AccountRoster.parse(roster, application.alias(), poolRef, auth.discoveryAccountRef());
+        }
+        String alias = application.alias();
+        if (auth.roles().isEmpty()) {
+            return List.of(new UiAccount(alias + "-account", DIRECT_ACCOUNT_ROLE, auth.credentialsUsername(), auth.credentialsPassword()));
+        }
+        List<UiAccount> accounts = new ArrayList<>(auth.roles().size());
+        for (String declared : auth.roles()) {
+            accounts.add(new UiAccount(alias + "-" + declared, declared, auth.credentialsUsername(), auth.credentialsPassword()));
+        }
+        return List.copyOf(accounts);
     }
 
     /**
