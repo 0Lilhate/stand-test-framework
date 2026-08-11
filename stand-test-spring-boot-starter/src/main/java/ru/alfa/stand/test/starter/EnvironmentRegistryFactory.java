@@ -157,6 +157,11 @@ public final class EnvironmentRegistryFactory {
             EnvironmentConfigFormat.requireSectionSupported(
                     version, "auth.credentials-username/credentials-password", EnvironmentConfigFormat.UI_DIRECT_CREDENTIALS_SINCE_VERSION, location);
         }
+        if (auth.getCredentialsUsernameRef() != null || auth.getCredentialsPasswordRef() != null) {
+            EnvironmentConfigFormat.requireSectionSupported(
+                    version, "auth.credentials-username-ref/credentials-password-ref",
+                    EnvironmentConfigFormat.UI_CREDENTIAL_VALUE_TWINS_SINCE_VERSION, location);
+        }
         return new UiAuthConfig(
                 auth.getScheme(),
                 ref(auth.getCredentialsPoolRef(), "credentials-pool-ref", alias),
@@ -164,8 +169,8 @@ public final class EnvironmentRegistryFactory {
                 ref(auth.getDiscoveryAccountRef(), "discovery-account-ref", alias),
                 uiLogin(auth.getLogin()),
                 (auth.getChallenge() == null) ? UiLoginChallenge.NONE : auth.getChallenge(),
-                ref(auth.getCredentialsUsername(), "credentials-username", alias),
-                ref(auth.getCredentialsPassword(), "credentials-password", alias));
+                uiCredential(auth.getCredentialsUsername(), auth.getCredentialsUsernameRef(), "credentials-username", alias, location, version),
+                uiCredential(auth.getCredentialsPassword(), auth.getCredentialsPasswordRef(), "credentials-password", alias, location, version));
     }
 
     /**
@@ -205,6 +210,43 @@ public final class EnvironmentRegistryFactory {
                 refOrLiteral(auth.getUsername(), auth.getUsernameRef(), "username", "username-ref", alias),
                 refOrLiteral(auth.getPassword(), auth.getPasswordRef(), "password", "password-ref", alias),
                 refOrLiteral(auth.getToken(), auth.getTokenRef(), "token", "token-ref", alias));
+    }
+
+    /**
+     * One UI credential, by the rule the document's format version puts on it.
+     *
+     * <p><strong>Version 4 and below:</strong> the bare {@code credentials-username} is a REFERENCE — the
+     * name of an environment variable — and there is no value twin at all. That is the contract those
+     * documents were written against, and it keeps working unchanged.
+     *
+     * <p><strong>From version 5:</strong> the bare field is the VALUE, like {@code base-url} and every
+     * other twin here, and {@code *-ref} carries the reference. This is what makes
+     * {@code credentials-username: ${web_username:tks_Admin}} work on the starter at all: Spring resolves
+     * the placeholder before the SDK sees the field, so the SDK receives {@code tks_Admin} and cannot tell
+     * it from a variable name — the two meanings need two keys, and the registry's convention already says
+     * which is which.
+     *
+     * <p><strong>The cost of the value twin, stated where it is paid:</strong> a value routed this way
+     * lives in the Spring Environment for the life of the context, so actuator's {@code /env}, a heap dump
+     * and a context report can each show it, and any default written into the file stays in git history
+     * after the credential is rotated. For a PASSWORD that is a real exposure and {@code *-ref} remains the
+     * right spelling; for a login it is usually acceptable. The SDK offers both and refuses to decide for
+     * a consumer — but the kit's safety gate does have an opinion, and flags a password value in a registry
+     * document as a blocking finding.
+     */
+    private static String uiCredential(String value, String reference, String field, String alias, String location, int version) {
+        if (version < EnvironmentConfigFormat.UI_CREDENTIAL_VALUE_TWINS_SINCE_VERSION) {
+            return ref(value, field, alias);
+        }
+        if (value != null && reference != null && !reference.isBlank()) {
+            throw new IllegalArgumentException("ui application '" + alias + "' sets both '" + field + "' and '"
+                    + field + "-ref' — configure exactly one: the first is the value, the second the name of the variable holding it");
+        }
+        if (value == null) {
+            return ref(reference, field + "-ref", alias);
+        }
+        EnvironmentConfigFormat.rejectVariableNameAsCredentialValue(value, field, location);
+        return SecretReferences.literal(value);
     }
 
     private static Map<String, TopicDefinition> topics(StandTestProperties.Environment env) {

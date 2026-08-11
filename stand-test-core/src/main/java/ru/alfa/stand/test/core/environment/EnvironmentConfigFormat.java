@@ -46,7 +46,7 @@ public final class EnvironmentConfigFormat {
     public static final int INITIAL_VERSION = 1;
 
     /** The highest registry format version this SDK build can read. */
-    public static final int SUPPORTED_VERSION = 4;
+    public static final int SUPPORTED_VERSION = 5;
 
     /** Format version in which the per-environment {@code ui-applications} section was introduced. */
     public static final int UI_APPLICATIONS_SINCE_VERSION = 2;
@@ -75,6 +75,60 @@ public final class EnvironmentConfigFormat {
      * the example module's registry declares it — so a reader of the older contract really exists.
      */
     public static final int UI_DIRECT_CREDENTIALS_SINCE_VERSION = 4;
+
+    /**
+     * Format version in which the direct credential pair became a VALUE TWIN, with
+     * {@code auth.credentials-username-ref} / {@code auth.credentials-password-ref} taking over the
+     * reference spelling.
+     *
+     * <p>This is the one version so far that changes what an EXISTING key MEANS rather than adding a new
+     * one, which is why the change is bound to a version at all. Under version 4 the bare
+     * {@code credentials-username} is the NAME of an environment variable; from version 5 it is the value
+     * itself, exactly like {@code base-url}, {@code url} and every other twin in this registry. A document
+     * that declares 4 therefore keeps its meaning forever, and nothing in the field changes under anyone.
+     *
+     * <p>Why the flip rather than a third spelling: on the Spring starter a placeholder is resolved before
+     * the SDK sees the field, so {@code ${web_username:tks_Admin}} arrives as the plain string
+     * {@code tks_Admin} — indistinguishable from a variable name someone wrote by hand. The two meanings
+     * cannot share one key on that front-end, and the registry's own convention already says which is
+     * which: bare name is the value, {@code *-ref} is the reference.
+     *
+     * <p>Upgrading 4 → 5 is not silent. A version-5 document whose {@code credentials-username} or
+     * {@code credentials-password} looks like a bare environment-variable NAME is REFUSED with a message
+     * naming the {@code *-ref} spelling, because reading a variable name as a login is the one failure this
+     * flip could cause and refusing is the only safe way to be wrong.
+     */
+    public static final int UI_CREDENTIAL_VALUE_TWINS_SINCE_VERSION = 5;
+
+    /**
+     * The shape of a bare environment-variable name, used ONLY to refuse an ambiguous credential value on
+     * a version-5 document — never to reinterpret one.
+     *
+     * <p>Deliberately the strict spelling ({@code ^[A-Z][A-Z0-9_]{2,63}$}) that {@code envVarRef} uses
+     * across this SDK: a login that happens to be upper-case-with-underscores is possible in principle, and
+     * a consumer who has one writes it through {@code *-ref} or renames the account. Being told to choose
+     * costs a minute; signing in as the literal string {@code TAKSA_ADMIN_USERNAME} costs a debugging
+     * session, and the message would not say why.
+     */
+    public static final String ENVIRONMENT_VARIABLE_NAME_PATTERN = "^[A-Z][A-Z0-9_]{2,63}$";
+
+    /**
+     * Refuses a version-5 credential value that is shaped like an environment-variable name.
+     *
+     * @param value the configured value (may be null)
+     * @param field the field name, for the message
+     * @param location where the field sits, for the message
+     */
+    public static void rejectVariableNameAsCredentialValue(String value, String field, String location) {
+        if (value == null || !value.matches(ENVIRONMENT_VARIABLE_NAME_PATTERN)) {
+            return;
+        }
+        throw new StandTestException("Field '" + field + "' at " + location + " carries '" + value
+                + "', which is shaped like the NAME of an environment variable, while from format version "
+                + UI_CREDENTIAL_VALUE_TWINS_SINCE_VERSION + " this field holds the VALUE itself."
+                + " Signing in with that literal string is almost certainly not what was meant."
+                + " Use '" + field + "-ref: " + value + "' to keep it a reference, or write the credential value here.");
+    }
 
     private EnvironmentConfigFormat() {
     }

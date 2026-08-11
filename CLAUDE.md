@@ -165,10 +165,20 @@ YAML DSL ────────────────┘                    
   holding account ids, roles and the *names* of the credential variables. An application with exactly one
   account may instead name it directly with `credentials-username`/`credentials-password` (registry format
   **version 4**, mutually exclusive with the roster, answers every declared role, one `accountId` per role).
-  Both spellings are references, so a configuration written with bare variable names still holds no
-  credential — but the `${VAR:value}` spelling makes one *expressible*, which the roster never did: that is
-  a deliberate relaxation of ADR-UI-006 §5 accepted by the line owner, and "never give a default to a
-  password" is now a documented rule rather than a property of the construction. The lease is registered in
+  **From registry format version 5 that pair is a VALUE TWIN** — the bare key holds the value, and
+  `credentials-username-ref`/`credentials-password-ref` carry the reference, exactly as `base-url` and its
+  `-ref` twin do. That flip exists because on the Spring starter a `${VAR:default}` placeholder is resolved
+  before the SDK sees the field, so a value and a variable name arrive as the same string and cannot share
+  one key; under version 4 the same spelling worked on the FILE front-end and failed on the starter with
+  `variable 'tks_Admin' is not set`. A version-4 document keeps the old meaning forever, and a version-5
+  document whose value field looks like a bare env-var NAME is refused pointing at `*-ref` — the flip's one
+  silent failure, closed by refusing rather than guessing. The cost of the twin is the usual one: a value
+  routed through Spring lives in the Environment (actuator `/env`, dumps) and a default written into the
+  file stays in git after rotation, so `*-ref` remains the right spelling for a password — and the kit's
+  gate calls a password value in a registry document a blocking finding. Both are deliberate relaxations of
+  ADR-UI-006 §5 accepted by the line owner (version 4 made a credential *expressible*, version 5 made it
+  expressible on the starter too), and "never give a default to a password" is a documented rule rather
+  than a property of the construction. The lease is registered in
   the `ResourceScope`, so the runner's `finally`
   returns it on every outcome; waiting for a free account is bounded (`accountTimeout`, default 60 s,
   capped by `MAX_TIMEOUT_MILLIS`) and exhaustion is a `StandTestException` naming application, role, pool

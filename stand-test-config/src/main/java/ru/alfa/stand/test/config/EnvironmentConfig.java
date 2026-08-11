@@ -57,6 +57,7 @@ public final class EnvironmentConfig {
     private static final Set<String> UI_APPLICATION_KEYS = Set.of("base-url-ref", "baseUrlRef", "default-viewport", "defaultViewport", "viewport-profiles", "viewportProfiles", "trace", "auth");
     private static final Set<String> UI_AUTH_KEYS = Set.of(
             "scheme", "credentials-pool-ref", "credentialsPoolRef", "credentials-username", "credentialsUsername", "credentials-password", "credentialsPassword",
+            "credentials-username-ref", "credentialsUsernameRef", "credentials-password-ref", "credentialsPasswordRef",
             "roles", "discovery-account-ref", "discoveryAccountRef", "login", "challenge");
     private static final Set<String> UI_LOGIN_KEYS = Set.of(
             "path",
@@ -192,8 +193,14 @@ public final class EnvironmentConfig {
             EnvironmentConfigFormat.requireSectionSupported(
                     version, "auth.credentials-username/credentials-password", EnvironmentConfigFormat.UI_DIRECT_CREDENTIALS_SINCE_VERSION, location);
         }
-        String credentialsUsername = optionalReference(fields, "credentials-username", "credentialsUsername", location);
-        String credentialsPassword = optionalReference(fields, "credentials-password", "credentialsPassword", location);
+        if (fields.containsKey("credentials-username-ref") || fields.containsKey("credentialsUsernameRef")
+                || fields.containsKey("credentials-password-ref") || fields.containsKey("credentialsPasswordRef")) {
+            EnvironmentConfigFormat.requireSectionSupported(
+                    version, "auth.credentials-username-ref/credentials-password-ref",
+                    EnvironmentConfigFormat.UI_CREDENTIAL_VALUE_TWINS_SINCE_VERSION, location);
+        }
+        String credentialsUsername = uiCredential(fields, "credentials-username", "credentialsUsername", location, version);
+        String credentialsPassword = uiCredential(fields, "credentials-password", "credentialsPassword", location, version);
         String discoveryAccountRef = optionalReference(fields, "discovery-account-ref", "discoveryAccountRef", location);
         List<String> roles = stringList(fields.get("roles"), location + ".roles");
         if (fields.containsKey("login")) {
@@ -404,6 +411,33 @@ public final class EnvironmentConfig {
      */
     private static String requireReference(Map<String, Object> fields, String kebab, String camel, String location) {
         return SecretReferences.requireReferenceShape(requireString(fields, kebab, camel, location), kebab, location);
+    }
+
+    /**
+     * One UI credential, by the rule the document's format version puts on it — the same rule the Spring
+     * starter applies, so the two front-ends cannot drift apart on the one field where drift means signing
+     * in with the wrong string.
+     *
+     * <p>Up to version 4 the bare key is a REFERENCE and there is no twin. From version 5 the bare key is
+     * the VALUE and {@code *-ref} carries the reference. Here, unlike on the starter, a reference may still
+     * be written as {@code ${VAR:default}} — this loader resolves placeholders itself, which is precisely
+     * why the same spelling behaved differently on the two front-ends before version 5 existed.
+     */
+    private static String uiCredential(Map<String, Object> fields, String kebab, String camel, String location, int version) {
+        if (version < EnvironmentConfigFormat.UI_CREDENTIAL_VALUE_TWINS_SINCE_VERSION) {
+            return optionalReference(fields, kebab, camel, location);
+        }
+        String reference = optionalReference(fields, kebab + "-ref", camel + "Ref", location);
+        String value = optionalString(pick(fields, kebab, camel), location);
+        if (value != null && reference != null) {
+            throw new StandTestException("Fields '" + kebab + "' and '" + kebab + "-ref' at " + location
+                    + " are both set — configure exactly one: the first is the value, the second the name of the variable holding it");
+        }
+        if (value == null) {
+            return reference;
+        }
+        EnvironmentConfigFormat.rejectVariableNameAsCredentialValue(value, kebab, location);
+        return SecretReferences.literal(value);
     }
 
     private static String optionalReference(Map<String, Object> fields, String kebab, String camel, String location) {

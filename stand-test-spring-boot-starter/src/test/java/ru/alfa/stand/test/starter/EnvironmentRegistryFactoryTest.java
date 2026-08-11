@@ -282,6 +282,100 @@ class EnvironmentRegistryFactoryTest {
                 .hasMessageContaining("configure exactly one");
     }
 
+    @Test
+    @DisplayName("from version 5 a UI credential written as a value is a VALUE — that is what makes ${web_username:tks_Admin} work on the starter")
+    void uiCredentials_fromVersionFive_areValueTwins() {
+        // Spring has already resolved ${web_username:tks_Admin} by the time the factory sees the field, so
+        // what arrives is the plain string. Before version 5 that string was read as the NAME of a
+        // variable, and the sign-in failed with "variable 'tks_Admin' is not set" — the failure this pair
+        // of keys exists to end.
+        UiAuthConfig auth = uiCredentialAuth(5, credentials -> {
+            credentials.setCredentialsUsername("tks_Admin");
+            credentials.setCredentialsPassword("s3cret");
+        });
+
+        assertThat(resolveLiteral(auth.credentialsUsername())).isEqualTo("tks_Admin");
+        assertThat(resolveLiteral(auth.credentialsPassword())).isEqualTo("s3cret");
+    }
+
+    @Test
+    @DisplayName("the *-ref spelling keeps a credential out of the Spring Environment, and stays a reference")
+    void uiCredentials_refSpelling_staysAReference() {
+        UiAuthConfig auth = uiCredentialAuth(5, credentials -> {
+            credentials.setCredentialsUsernameRef("TAKSA_ADMIN_USERNAME");
+            credentials.setCredentialsPasswordRef("TAKSA_ADMIN_PASSWORD");
+        });
+
+        assertThat(SecretReferences.isLiteral(auth.credentialsUsername())).isFalse();
+        assertThat(auth.credentialsUsername()).isEqualTo("TAKSA_ADMIN_USERNAME");
+        assertThat(auth.credentialsPassword()).isEqualTo("TAKSA_ADMIN_PASSWORD");
+    }
+
+    @Test
+    @DisplayName("a version-4 document keeps the old meaning: the bare field is still a reference")
+    void uiCredentials_beforeVersionFive_remainReferences() {
+        UiAuthConfig auth = uiCredentialAuth(4, credentials -> {
+            credentials.setCredentialsUsername("BACK_OFFICE_USERNAME");
+            credentials.setCredentialsPassword("BACK_OFFICE_PASSWORD");
+        });
+
+        assertThat(SecretReferences.isLiteral(auth.credentialsUsername()))
+                .as("flipping the meaning of a key under documents already written against it is the one thing versioning exists to prevent")
+                .isFalse();
+        assertThat(auth.credentialsUsername()).isEqualTo("BACK_OFFICE_USERNAME");
+    }
+
+    @Test
+    @DisplayName("the *-ref keys are refused below version 5, by name and with the version to declare")
+    void uiCredentialRefs_areRefusedBeforeVersionFive() {
+        assertThatThrownBy(() -> uiCredentialAuth(4, credentials -> credentials.setCredentialsUsernameRef("TAKSA_ADMIN_USERNAME")))
+                .hasMessageContaining("credentials-username-ref")
+                .hasMessageContaining("5");
+    }
+
+    @Test
+    @DisplayName("a version-5 value shaped like a variable NAME is refused rather than used as a login")
+    void uiCredentials_variableNameShapedValue_isRefused() {
+        // The migration hazard of the flip, closed by refusing instead of guessing: somebody bumps 4 → 5
+        // and leaves TAKSA_ADMIN_USERNAME in the value field. Signing in as that literal string would fail
+        // at the IdP with a message about credentials, and nobody would look at the registry.
+        assertThatThrownBy(() -> uiCredentialAuth(5, credentials -> credentials.setCredentialsUsername("TAKSA_ADMIN_USERNAME")))
+                .hasMessageContaining("shaped like the NAME of an environment variable")
+                .hasMessageContaining("credentials-username-ref");
+    }
+
+    @Test
+    @DisplayName("value and reference together are refused — which of the two wins would be a coin toss")
+    void uiCredentials_bothSpellings_areRefused() {
+        assertThatThrownBy(() -> uiCredentialAuth(5, credentials -> {
+            credentials.setCredentialsUsername("tks_Admin");
+            credentials.setCredentialsUsernameRef("TAKSA_ADMIN_USERNAME");
+        }))
+                .hasMessageContaining("configure exactly one");
+    }
+
+    private static UiAuthConfig uiCredentialAuth(int version, java.util.function.Consumer<StandTestProperties.UiAuth> customiser) {
+        StandTestProperties properties = new StandTestProperties();
+        properties.setVersion(version);
+        final StandTestProperties.Environment ift = new StandTestProperties.Environment();
+        StandTestProperties.UiApplication application = new StandTestProperties.UiApplication();
+        application.setBaseUrlRef("CLIENT_PORTAL_IFT_URL");
+        StandTestProperties.UiAuth auth = new StandTestProperties.UiAuth();
+        auth.setScheme(UiAuthScheme.STORAGE_STATE);
+        auth.getRoles().add("admin");
+        StandTestProperties.UiLogin login = new StandTestProperties.UiLogin();
+        login.setSignedInLocator("testId=user-menu");
+        auth.setLogin(login);
+        customiser.accept(auth);
+        application.setAuth(auth);
+        ift.getUiApplications().put("client-portal", application);
+        properties.getEnvironments().put("ift", ift);
+        return EnvironmentRegistryFactory.build(properties)
+                .environment("ift").orElseThrow()
+                .uiApplication("client-portal").orElseThrow()
+                .auth();
+    }
+
     private static UiApplicationDefinition uiApplication(java.util.function.Consumer<StandTestProperties.UiApplication> customiser) {
         return EnvironmentRegistryFactory.build(uiProperties(customiser))
                 .environment("ift").orElseThrow()

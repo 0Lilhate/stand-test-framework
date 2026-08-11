@@ -318,6 +318,10 @@ public class StandTestProperties {
 
         private String credentialsPassword;
 
+        private String credentialsUsernameRef;
+
+        private String credentialsPasswordRef;
+
         private final List<String> roles = new ArrayList<>();
 
         private String discoveryAccountRef;
@@ -356,6 +360,32 @@ public class StandTestProperties {
 
         public void setCredentialsPassword(String credentialsPassword) {
             this.credentialsPassword = credentialsPassword;
+        }
+
+        /**
+         * The NAME of the environment variable holding the login, when the value must not pass through the
+         * Spring Environment. From format version 5 this is the reference spelling; the bare
+         * {@code credentials-username} beside it is the value itself.
+         */
+        public String getCredentialsUsernameRef() {
+            return credentialsUsernameRef;
+        }
+
+        public void setCredentialsUsernameRef(String credentialsUsernameRef) {
+            this.credentialsUsernameRef = credentialsUsernameRef;
+        }
+
+        /**
+         * The NAME of the environment variable holding the password. Preferred over the value twin for a
+         * secret: a resolved value materialises in the Spring Environment, which actuator, a heap dump and
+         * a context report can all show.
+         */
+        public String getCredentialsPasswordRef() {
+            return credentialsPasswordRef;
+        }
+
+        public void setCredentialsPasswordRef(String credentialsPasswordRef) {
+            this.credentialsPasswordRef = credentialsPasswordRef;
         }
 
         public List<String> getRoles() {

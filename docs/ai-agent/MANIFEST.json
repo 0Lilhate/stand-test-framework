@@ -1,6 +1,6 @@
 {
   "kit": "stand-test-ai-agent-kit",
-  "version": 15,
+  "version": 16,
   "files": {
     ".claude/.gitignore": "sha256:968175e913f53bbf53491eabafe13466899f81ef4d6dcdd81141169bf7ff70f9",
     ".claude/agents/stand-test-kb-resolver.md": "sha256:f010af0b66beafe4cd9577b4fbcb5a898ff89fd15a6b5136ab6ce6260661d579",
@@ -60,7 +60,7 @@
     ".claude/reference/stand-test-ui-guardrails-rationale.md": "sha256:8f84ade3e8ae3c6aeb43af4cf477b7ff4212db8e2ff195c9277b555d7c6d4af0",
     ".claude/rules/stand-test-guardrails.md": "sha256:82470235445155a9fe60f381768f648c36af52529cf4bca1ce5b43c8f38d0197",
     ".claude/rules/stand-test-pipeline.md": "sha256:0d346a14f16e5eda8a56a6a146e0d95b028045fc93e25f57d1e2e523fbdf6b0b",
-    ".claude/rules/stand-test-ui-guardrails.md": "sha256:e17ea082ada373e1c12afae82c2664f1267287336aa541efd70a28b0f6dca214",
+    ".claude/rules/stand-test-ui-guardrails.md": "sha256:98ab0e35974bdf5ae2e2f81e5e1676ed4beb62d8863be44b993ab87de66671d1",
     ".claude/settings.json": "sha256:447e494353c737aafa6adcea446e3f6ba70e59fb994280e19550ba90a84b655b",
     ".claude/skills/stand-test-case-analysis/SKILL.md": "sha256:505dc97b87415649937c8ea2b2a3f4a1b7cd4b90bfd073d7a1cf385d3d61acd5",
     ".claude/skills/stand-test-case-analysis/example-text-case.md": "sha256:8e0f2f9330159f5065d5930595f8ce985b197509c1637913e967938aa1c4814d",
@@ -201,7 +201,7 @@
     ".opencode/reference/stand-test-ui-guardrails-rationale.md": "sha256:8f84ade3e8ae3c6aeb43af4cf477b7ff4212db8e2ff195c9277b555d7c6d4af0",
     ".opencode/rules/stand-test-guardrails.md": "sha256:c8961d803d2884e4031b3a53c42c10149d8e50e0b0df02741d82748f485c117c",
     ".opencode/rules/stand-test-pipeline.md": "sha256:793030028124c83539fd7118a6befe59c4167edd9aee2d975a85f69c337a9eba",
-    ".opencode/rules/stand-test-ui-guardrails.md": "sha256:e17ea082ada373e1c12afae82c2664f1267287336aa541efd70a28b0f6dca214",
+    ".opencode/rules/stand-test-ui-guardrails.md": "sha256:98ab0e35974bdf5ae2e2f81e5e1676ed4beb62d8863be44b993ab87de66671d1",
     ".opencode/skills/stand-test-case-analysis/SKILL.md": "sha256:505dc97b87415649937c8ea2b2a3f4a1b7cd4b90bfd073d7a1cf385d3d61acd5",
     ".opencode/skills/stand-test-case-analysis/example-text-case.md": "sha256:8e0f2f9330159f5065d5930595f8ce985b197509c1637913e967938aa1c4814d",
     ".opencode/skills/stand-test-case-analysis/test-case-analysis-template.md": "sha256:ca90e79850cf094dba2951213de0d972f26d1ce53d36f5c44eeb65b24541c9df",

@@ -10,6 +10,7 @@ import ru.alfa.stand.test.core.environment.CorrelationSource;
 import ru.alfa.stand.test.core.environment.DatasourceDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentConfigFormat;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
+import ru.alfa.stand.test.core.environment.SecretReferences;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.UiApplicationDefinition;
 import ru.alfa.stand.test.core.environment.UiAuthConfig;
@@ -465,6 +466,79 @@ class EnvironmentConfigTest {
                 .isInstanceOf(StandTestException.class)
                 .hasMessageContaining("credentials-username")
                 .hasMessageContaining("format version 4");
+    }
+
+    @Test
+    @DisplayName("from version 5 the bare credential is a VALUE and *-ref carries the reference — the same rule the starter applies")
+    void uiApplicationCredentialTwinsFromVersionFive() {
+        EnvironmentDefinition ift = parse("""
+                version: 5
+                environments:
+                  ift:
+                    ui-applications:
+                      taksa:
+                        base-url-ref: TAKSA_IFT_URL
+                        auth:
+                          scheme: STORAGE_STATE
+                          credentials-username: tks_Admin
+                          credentials-password-ref: TAKSA_ADMIN_PASSWORD
+                          roles: [admin]
+                          login:
+                            signed-in-locator: text=Выйти
+                """).environment("ift").orElseThrow();
+
+        UiAuthConfig auth = ift.uiApplication("taksa").orElseThrow().auth();
+        assertThat(SecretReferences.isLiteral(auth.credentialsUsername()))
+                .as("a login written as a value is a value on both front-ends from version 5")
+                .isTrue();
+        assertThat(SecretReferences.resolve(auth.credentialsUsername(), name -> null)).isEqualTo("tks_Admin");
+        assertThat(auth.credentialsPassword())
+                .as("a secret keeps the reference spelling, and the reference is not wrapped")
+                .isEqualTo("TAKSA_ADMIN_PASSWORD");
+    }
+
+    @Test
+    @DisplayName("a version-4 document keeps the older meaning, so the flip cannot reach a file already written")
+    void uiApplicationCredentialsStayReferencesBeforeVersionFive() {
+        EnvironmentDefinition ift = parse("""
+                version: 4
+                environments:
+                  ift:
+                    ui-applications:
+                      taksa:
+                        base-url-ref: TAKSA_IFT_URL
+                        auth:
+                          scheme: STORAGE_STATE
+                          credentials-username: TAKSA_ADMIN_USERNAME
+                          credentials-password: TAKSA_ADMIN_PASSWORD
+                          roles: [admin]
+                          login:
+                            signed-in-locator: text=Выйти
+                """).environment("ift").orElseThrow();
+
+        assertThat(SecretReferences.isLiteral(ift.uiApplication("taksa").orElseThrow().auth().credentialsUsername())).isFalse();
+    }
+
+    @Test
+    @DisplayName("a version-5 value shaped like a variable NAME is refused, and the message names the *-ref spelling")
+    void uiApplicationRefusesVariableNameAsCredentialValue() {
+        assertThatThrownBy(() -> parse("""
+                version: 5
+                environments:
+                  ift:
+                    ui-applications:
+                      taksa:
+                        base-url-ref: TAKSA_IFT_URL
+                        auth:
+                          scheme: STORAGE_STATE
+                          credentials-username: TAKSA_ADMIN_USERNAME
+                          roles: [admin]
+                          login:
+                            signed-in-locator: text=Выйти
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("shaped like the NAME of an environment variable")
+                .hasMessageContaining("credentials-username-ref");
     }
 
     @Test

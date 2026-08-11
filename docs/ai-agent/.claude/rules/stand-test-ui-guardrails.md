@@ -256,7 +256,7 @@ name of a fallback variable. **A password is therefore never given a default** �
 credential to the file. A credential value in a registry document is caught by detector
 `SECRET_IN_SOURCE` (BLOCK); `${VAR}` without a default and a bare variable NAME stay silent because
 they are references. Proposing a registry addition is a human decision either way (§4), and proposing
-one that carries a password value is a finding, not a shortcut.
+one that carries a password value is a finding, not a shortcut. **From registry format version 5 that pair is a VALUE TWIN** and the reference moved to `credentials-username-ref`/`credentials-password-ref`: on the Spring starter a `${VAR:default}` is resolved before the SDK sees it, so a value and a variable name arrive indistinguishable and cannot share one key. Nothing about this rule changes — a password written as a VALUE is still `SECRET_IN_SOURCE` (BLOCK), and the twin only makes the login expressible on the front-end where it was not.
 
 There is **no MFA/OTP/CAPTCHA bypass** and there will not be one (external gate G-1). An application
 declaring a `challenge` either has a `UiLoginChallengeHandler` on the test classpath or is refused
