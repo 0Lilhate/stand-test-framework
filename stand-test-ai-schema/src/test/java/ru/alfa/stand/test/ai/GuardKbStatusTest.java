@@ -247,6 +247,53 @@ class GuardKbStatusTest {
     }
 
     @Test
+    @DisplayName("a service identity with no contracts is not an alias to register — nothing can be generated against it")
+    void aliasCheck_ignoresAnEntryThatDeclaresNoContract(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+        write(project, "src/test/resources/stand-test-environments.yml", REGISTRY);
+        // What a spec ingestion promotes when the document names the actors of a flow but resolves no
+        // path, topic or table: an identity, honestly incomplete. A step cannot be built against it,
+        // so it cannot fail at resolution — and reporting it leaves the check permanently red on a
+        // base that is doing exactly what the KB rules require.
+        write(project, "knowledge-base/services/actors.yml", """
+                services:
+                  - id: upstream-master-system
+                    name: "Мастер-система"
+                    environments:
+                      - ift
+                """);
+
+        JsonNode check = aliasCheck(project);
+
+        assertThat(textAt(check, "service", "unregistered")).isEmpty();
+        assertThat(check.path("findings")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the same identity with a contract IS reported — declaring one is saying you mean to call it")
+    void aliasCheck_reportsTheSameEntryOnceItDeclaresAContract(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+        write(project, "src/test/resources/stand-test-environments.yml", REGISTRY);
+        write(project, "knowledge-base/services/actors.yml", """
+                services:
+                  - id: upstream-master-system
+                    name: "Мастер-система"
+                    environments:
+                      - ift
+                    correlation:
+                      source: HEADER
+                      name: X-Correlation-Id
+                """);
+
+        JsonNode check = aliasCheck(project);
+
+        assertThat(textAt(check, "service", "unregistered"))
+                .as("a correlation carrier is a way to call it, so the registry gap is real again — and no marker had to be removed by hand")
+                .containsExactly("upstream-master-system");
+        assertThat(check.path("findings")).hasSize(1);
+    }
+
+    @Test
     @DisplayName("no registry is reported as no registry — there is nothing to bootstrap from, and that is the finding")
     void withoutARegistry_itSaysSo(@TempDir Path temporary) throws IOException {
         Path project = temporary.toRealPath();

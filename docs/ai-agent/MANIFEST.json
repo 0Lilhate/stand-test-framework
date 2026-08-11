@@ -1,6 +1,6 @@
 {
   "kit": "stand-test-ai-agent-kit",
-  "version": 12,
+  "version": 13,
   "files": {
     ".claude/.gitignore": "sha256:968175e913f53bbf53491eabafe13466899f81ef4d6dcdd81141169bf7ff70f9",
     ".claude/agents/stand-test-kb-resolver.md": "sha256:f010af0b66beafe4cd9577b4fbcb5a898ff89fd15a6b5136ab6ce6260661d579",
@@ -44,7 +44,7 @@
     ".claude/hooks/lib/fingerprint.mjs": "sha256:8f5ade2b63926d3ff4635926526b9dbee55d350c2fd32f04b229d36c6ee38b25",
     ".claude/hooks/lib/junit.mjs": "sha256:f872b134e2743d6cfa6a7c8493bc17e0d01e75e76e8bea37dc89c285f5bd7609",
     ".claude/hooks/lib/kb-checks.mjs": "sha256:6e39720540b3f93e3fe3c5215d52d76d315fa48f6074a62f63646c48e23b7507",
-    ".claude/hooks/lib/kb.mjs": "sha256:fd79164f0d974536a038307b3da64d249f33a4619dbed25e1f0e39b407a9dc38",
+    ".claude/hooks/lib/kb.mjs": "sha256:53816641a35c55c5a43e955eedb9c1f8244528b9e140c95257554366a5e1cf6e",
     ".claude/hooks/lib/locators.mjs": "sha256:7bf31ebd1dc76da55cf1d0a2b9bac3b8b925bf02d6953c874ed482d437f6de36",
     ".claude/hooks/lib/mapping.mjs": "sha256:9cb69487b33410d74de7fae08f5b4d65ca1260ee0229f039c551274b5c0f0de5",
     ".claude/hooks/lib/permit.mjs": "sha256:7f5098b09077437a9a38f48e783cc999634397ca1e5d2ead2799de136518afc5",
@@ -183,7 +183,7 @@
     ".opencode/hooks/lib/fingerprint.mjs": "sha256:8f5ade2b63926d3ff4635926526b9dbee55d350c2fd32f04b229d36c6ee38b25",
     ".opencode/hooks/lib/junit.mjs": "sha256:f872b134e2743d6cfa6a7c8493bc17e0d01e75e76e8bea37dc89c285f5bd7609",
     ".opencode/hooks/lib/kb-checks.mjs": "sha256:6e39720540b3f93e3fe3c5215d52d76d315fa48f6074a62f63646c48e23b7507",
-    ".opencode/hooks/lib/kb.mjs": "sha256:fd79164f0d974536a038307b3da64d249f33a4619dbed25e1f0e39b407a9dc38",
+    ".opencode/hooks/lib/kb.mjs": "sha256:53816641a35c55c5a43e955eedb9c1f8244528b9e140c95257554366a5e1cf6e",
     ".opencode/hooks/lib/locators.mjs": "sha256:7bf31ebd1dc76da55cf1d0a2b9bac3b8b925bf02d6953c874ed482d437f6de36",
     ".opencode/hooks/lib/mapping.mjs": "sha256:9cb69487b33410d74de7fae08f5b4d65ca1260ee0229f039c551274b5c0f0de5",
     ".opencode/hooks/lib/permit.mjs": "sha256:7f5098b09077437a9a38f48e783cc999634397ca1e5d2ead2799de136518afc5",

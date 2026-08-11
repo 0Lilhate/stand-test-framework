@@ -97,6 +97,46 @@ export function registryAliases(cwd) {
   return { path, aliases: found };
 }
 
+// A field whose presence means the entry can be ADDRESSED by a generated step: a contract to call, a
+// carrier to correlate on, or credentials to call it with.
+const CONTRACT_KEY = /^\s*(?:endpoints|grpcTargets|kafkaTopics|datasources|correlation|auth)\s*:/;
+
+/**
+ * The ids of entries that declare NO contract at all.
+ *
+ * <p>A spec ingestion legitimately promotes the IDENTITY of a system without its contracts — the ФС
+ * names the actors of a flow long before anyone resolves a path or a topic, and inventing those is
+ * exactly what the KB exists to prevent. Such an entry cannot appear in a generated test: there is
+ * nothing to call. So it cannot fail at resolution either, which is the whole justification of the
+ * "alias not in the registry" finding — and reporting it anyway makes a check that is permanently
+ * red for a base that is doing the right thing. A permanently red check is one people switch off.
+ *
+ * <p>Derived rather than declared, on purpose: the day someone adds an endpoint, a topic or a
+ * correlation header to the entry, they have said they intend to call it, and the finding comes back
+ * without anybody remembering to remove a marker.
+ */
+function contractlessIds(text) {
+  const lines = text.split('\n');
+  const found = [];
+  let current = null;
+  let hasContract = false;
+  const close = () => {
+    if (current !== null && !hasContract) found.push(current);
+  };
+  for (const line of lines) {
+    const start = /^\s*-\s+id:\s*["']?([A-Za-z0-9][A-Za-z0-9._-]*)["']?\s*$/.exec(line);
+    if (start !== null) {
+      close();
+      current = start[1];
+      hasContract = false;
+      continue;
+    }
+    if (current !== null && CONTRACT_KEY.test(line)) hasContract = true;
+  }
+  close();
+  return found;
+}
+
 /** Every curated KB file: where it is, what collection it declares, and the ids in it. */
 export function knowledgeBaseFiles(cwd) {
   const root = join(cwd, 'knowledge-base');
@@ -116,6 +156,7 @@ export function knowledgeBaseFiles(cwd) {
         key: key === null ? null : key[1],
         ids: [...text.matchAll(ENTRY_ID)].map((match) => match[1]),
         aliases: [...text.matchAll(ENTRY_ALIAS)].map((match) => match[1]),
+        contractless: contractlessIds(text),
         text,
       });
     }
@@ -158,7 +199,8 @@ export function knowledgeBase(cwd) {
       ids.add(id);
       if (file.key !== null) byKey[file.key].add(id);
     });
-    const declaredAliases = file.aliases.length > 0 ? file.aliases : file.ids;
+    const declaredAliases = (file.aliases.length > 0 ? file.aliases : file.ids)
+      .filter((alias) => !file.contractless.includes(alias));
     if (file.key !== null) declaredAliases.forEach((alias) => aliasesByKey[file.key].add(alias));
   }
   return { present, entries, ids, byKey, aliasesByKey };
