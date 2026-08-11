@@ -26,8 +26,12 @@ datasources:
   # the target schema in `allowedSchemas` — and the table it writes into must carry the marker column
   # (example-db-tables.yml). Missing either is a blocking question to a human, never a workaround:
   # the registry is stand configuration and only a person changes it.
+  # `id` and `alias` differ here on purpose, and the difference is the point: the id is the KB's own
+  # key and stays kebab-case, while the alias is a FOREIGN KEY into the environment registry and is
+  # spelled exactly as the registry spells it — here mirroring a database name, underscore and all.
+  # A KB that could not write that could not join to the registry, which is the one thing it is for.
   - id: client-test-data-db
-    alias: client-test-data-db
+    alias: client_test_data_db
     description: Same client stand, the test-data schema — the only place seed/cleanup may write
     access:
       mode: write-allowed

@@ -101,8 +101,16 @@ class GuardKbStatusTest {
         }
     }
 
+    private static JsonNode aliasCheck(Path project) {
+        return runGuard(project, "alias-check");
+    }
+
     private static JsonNode status(Path project) {
-        List<String> command = new ArrayList<>(List.of("node", repositoryRoot().resolve(GUARD).toString(), "kb-status", "--json"));
+        return runGuard(project, "kb-status");
+    }
+
+    private static JsonNode runGuard(Path project, String subcommand) {
+        List<String> command = new ArrayList<>(List.of("node", repositoryRoot().resolve(GUARD).toString(), subcommand, "--json"));
         try {
             Process process = new ProcessBuilder(command).directory(project.toFile()).redirectErrorStream(true).start();
             String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
@@ -180,6 +188,62 @@ class GuardKbStatusTest {
 
         assertThat(textAt(status, "service", "registry")).containsExactly("order-service");
         assertThat(textAt(status, "kafka-topic", "registry")).containsExactly("order-events");
+    }
+
+    @Test
+    @DisplayName("an entry whose id differs from its alias is judged by the ALIAS — the id is the base's own key, not a registry name")
+    void aliasCheck_readsTheAliasNotTheId(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+        write(project, "src/test/resources/stand-test-environments.yml", REGISTRY);
+        // `main-db` is what the registry above declares. The KB entry keeps a kebab-case id — its own
+        // key — while its alias is spelled as the registry spells it. Before this was separated, the
+        // id was compared against the registry too and the entry reported itself as unregistered.
+        write(project, "knowledge-base/db/main-db.yml", """
+                datasources:
+                  - id: main-db-entry
+                    alias: main-db
+                    access:
+                      mode: readonly
+                    allowedSchemas:
+                      - test_data
+                    allowedEnvironments:
+                      - ift
+                """);
+
+        JsonNode check = aliasCheck(project);
+
+        assertThat(textAt(check, "datasource", "unregistered"))
+                .as("the alias IS in the registry, so nothing is missing — an id that is not an alias must not be reported as one")
+                .isEmpty();
+        assertThat(textAt(check, "datasource", "missingFromKb"))
+                .as("and the other direction still sees the entry: either spelling answers 'does the KB know this alias'")
+                .isEmpty();
+        assertThat(check.path("findings")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("an alias no registry declares is still reported — the fix must not have bought silence")
+    void aliasCheck_stillReportsAnAliasTheRegistryDoesNotDeclare(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+        write(project, "src/test/resources/stand-test-environments.yml", REGISTRY);
+        write(project, "knowledge-base/db/other-db.yml", """
+                datasources:
+                  - id: other-db
+                    alias: other_db
+                    access:
+                      mode: readonly
+                    allowedSchemas:
+                      - test_data
+                    allowedEnvironments:
+                      - ift
+                """);
+
+        JsonNode check = aliasCheck(project);
+
+        assertThat(textAt(check, "datasource", "unregistered"))
+                .as("the underscore spelling is legal for an alias, and this one is genuinely absent from the registry")
+                .containsExactly("other_db");
+        assertThat(check.path("findings")).hasSize(1);
     }
 
     @Test

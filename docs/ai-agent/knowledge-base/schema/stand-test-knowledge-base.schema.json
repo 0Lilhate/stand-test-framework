@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://stand-test.alfa.ru/schema/stand-test-knowledge-base.schema.json",
   "title": "stand-test knowledge base",
-  "description": "Single contract for every stand-test knowledge-base file. A KB file is a YAML document with exactly ONE collection key (services / endpoints / kafkaTopics / datasources / dbProbes / grpcTargets / environments / testCaseMappings). The KB stores aliases, contracts and env-var REFERENCES only - never secret values, never URLs/hosts/ports/JDBC strings, never production configuration. Field names are camelCase; ids and aliases are kebab-case; SQL is canonical lowercase. On any conflict with the runtime, the SDK (EnvironmentRegistry, ForbiddenOperation, DefaultScenarioValidator) wins.",
+  "description": "Single contract for every stand-test knowledge-base file. A KB file is a YAML document with exactly ONE collection key (services / endpoints / kafkaTopics / datasources / dbProbes / grpcTargets / environments / testCaseMappings). The KB stores aliases, contracts and env-var REFERENCES only - never secret values, never URLs/hosts/ports/JDBC strings, never production configuration. Field names are camelCase; ids are kebab-case; an 'alias' is a foreign key into the environment registry and follows the REGISTRY's grammar (kebab-case plus '_', because a datasource alias often mirrors a database name); SQL is canonical lowercase. On any conflict with the runtime, the SDK (EnvironmentRegistry, ForbiddenOperation, DefaultScenarioValidator) wins.",
   "oneOf": [
     { "$ref": "#/$defs/servicesFile" },
     { "$ref": "#/$defs/endpointsFile" },
@@ -18,6 +18,13 @@
     "kebabId": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "minLength": 2,
+      "maxLength": 64
+    },
+    "registryAlias": {
+      "description": "An alias as the ENVIRONMENT REGISTRY spells it. This is a foreign key, not an identifier of the knowledge base: the registry owns the grammar, and a KB that cannot spell a legal registry alias breaks the very join it exists to make (the alias is what binds a KB entry, the registry and a generated test). Hence '_' is legal here and nowhere else - a datasource alias routinely mirrors the database name, which underscores. The entry's own 'id' stays kebab-case.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*([-_][a-z0-9]+)*$",
       "minLength": 2,
       "maxLength": 64
     },
@@ -224,7 +231,7 @@
       "required": ["id", "serviceId", "method", "path", "response", "allowedEnvironments"],
       "properties": {
         "id": { "$ref": "#/$defs/kebabId" },
-        "alias": { "$ref": "#/$defs/kebabId" },
+        "alias": { "$ref": "#/$defs/registryAlias" },
         "serviceId": { "$ref": "#/$defs/kebabId" },
         "method": { "enum": ["GET", "POST", "PUT", "DELETE"] },
         "path": { "$ref": "#/$defs/httpPath" },
@@ -307,7 +314,7 @@
       "required": ["id", "alias", "direction", "correlation", "timeout", "allowedEnvironments"],
       "properties": {
         "id": { "$ref": "#/$defs/kebabId" },
-        "alias": { "$ref": "#/$defs/kebabId" },
+        "alias": { "$ref": "#/$defs/registryAlias" },
         "direction": {
           "description": "'produced' = the system under test publishes here (tests use kafka.expect); 'consumed' = the system under test consumes from here (tests may kafka.send).",
           "enum": ["produced", "consumed"]
@@ -375,7 +382,7 @@
       "required": ["id", "alias", "access", "allowedSchemas", "allowedEnvironments"],
       "properties": {
         "id": { "$ref": "#/$defs/kebabId" },
-        "alias": { "$ref": "#/$defs/kebabId" },
+        "alias": { "$ref": "#/$defs/registryAlias" },
         "description": { "$ref": "#/$defs/freeText" },
         "access": {
           "type": "object",
@@ -437,7 +444,7 @@
       "required": ["id", "alias", "serviceName", "correlation", "methods", "allowedEnvironments"],
       "properties": {
         "id": { "$ref": "#/$defs/kebabId" },
-        "alias": { "$ref": "#/$defs/kebabId" },
+        "alias": { "$ref": "#/$defs/registryAlias" },
         "description": { "$ref": "#/$defs/freeText" },
         "serviceName": {
           "type": "string",

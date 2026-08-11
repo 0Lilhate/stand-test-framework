@@ -123,22 +123,45 @@ export function knowledgeBaseFiles(cwd) {
   return files;
 }
 
-/** Every `id:`/`alias:` the curated KB declares, by collection key and in total. */
+/**
+ * Every `id:`/`alias:` the curated KB declares, by collection key and in total.
+ *
+ * <p>Two questions are asked of this, and they need DIFFERENT sets — which is why `byKey` and
+ * `aliasesByKey` are both here rather than one being derived from the other:
+ *
+ * <ul>
+ *   <li>"does the KB already know this REGISTRY alias?" — either spelling answers it, so `byKey` is
+ *       the union. Missing an entry here would put a covered alias back on the bootstrap worklist.
+ *   <li>"which KB aliases does no registry declare?" — only `alias:` answers it. An entry's `id` is
+ *       the base's own key and is free to differ (a datasource id is kebab-case while its alias
+ *       mirrors an underscored database name), so counting ids as aliases reports the entry as
+ *       unregistered while its real alias sits in the registry. The union made that finding
+ *       unavoidable for every entry whose two spellings differ.
+ * </ul>
+ *
+ * <p>A file that declares no `alias:` at all falls back to its ids: going blind there would be worse
+ * than a false positive, because a collection with no alias field is exactly where a typo hides.
+ */
 export function knowledgeBase(cwd) {
   const present = existsSync(join(cwd, 'knowledge-base'));
   const entries = {};
   const ids = new Set();
   const byKey = {};
+  const aliasesByKey = {};
   for (const file of knowledgeBaseFiles(cwd)) {
     entries[file.collection] = (entries[file.collection] || 0) + file.ids.length;
-    if (file.key !== null) byKey[file.key] = byKey[file.key] || new Set();
-    // Both spellings answer "does the KB know this alias"; only `ids` answers "how many entries".
+    if (file.key !== null) {
+      byKey[file.key] = byKey[file.key] || new Set();
+      aliasesByKey[file.key] = aliasesByKey[file.key] || new Set();
+    }
     [...file.ids, ...file.aliases].forEach((id) => {
       ids.add(id);
       if (file.key !== null) byKey[file.key].add(id);
     });
+    const declaredAliases = file.aliases.length > 0 ? file.aliases : file.ids;
+    if (file.key !== null) declaredAliases.forEach((alias) => aliasesByKey[file.key].add(alias));
   }
-  return { present, entries, ids, byKey };
+  return { present, entries, ids, byKey, aliasesByKey };
 }
 
 /**

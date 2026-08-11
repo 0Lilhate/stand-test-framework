@@ -177,7 +177,12 @@ export function checkAliases(cwd) {
   for (const [kind, collection] of Object.entries(REGISTRY_COLLECTIONS)) {
     const declared = aliases[kind] || [];
     const known = [...(kb.byKey[collection] || new Set())].sort();
-    const unregistered = path === null ? [] : known.filter((alias) => !declared.includes(alias));
+    // The two directions read DIFFERENT sets on purpose. "Covered by the KB" accepts either spelling
+    // (`known`, the union of ids and aliases); "not in the registry" accepts only what the entry
+    // declares as its ALIAS, because an id is the base's own key and may legitimately differ — and
+    // when it does, the union reports the entry as unregistered while its alias sits in the registry.
+    const knownAliases = [...(kb.aliasesByKey[collection] || new Set())].sort();
+    const unregistered = path === null ? [] : knownAliases.filter((alias) => !declared.includes(alias));
     kinds[kind] = { collection, registry: declared, knowledgeBase: known, unregistered, missingFromKb: declared.filter((alias) => !known.includes(alias)) };
     for (const alias of unregistered) {
       findings.push(finding('KB_ALIAS_NOT_IN_REGISTRY', 'HIGH', `knowledge-base/*/${collection}`,
