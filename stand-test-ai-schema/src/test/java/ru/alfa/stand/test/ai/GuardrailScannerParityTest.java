@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import ru.alfa.stand.test.core.validation.ForbiddenOperation;
 
 /**
@@ -286,6 +287,69 @@ class GuardrailScannerParityTest {
                 assertThat(countsIn(scan(fixture)))
                         .as("%s: the fixture's own header enumerates the violations it plants, and how many of each", fixture)
                         .containsExactlyInAnyOrderEntriesOf(expected));
+    }
+
+    @Test
+    @DisplayName("an immutable constant is not shared mutable state — but only when it is also final")
+    void scanner_exemptsImmutableConstantsAndNothingElse(@TempDir Path temporary) throws IOException {
+        // Four declarations of the same collection TYPE, differing only in what makes them safe or not.
+        // The exemption reads the initialiser, so the first two are constants and silent; the third is
+        // a mutable list behind a final reference; the fourth is immutable CONTENTS behind a reference
+        // another thread can swap, which is the same race spelled differently. A probe caught the
+        // fourth escaping an earlier version of this exemption, which is why it is pinned here.
+        Path fixture = temporary.resolve("ImmutableConstantsTest.java");
+        Files.writeString(fixture, """
+                package ru.alfa.qa.test;
+
+                import java.util.ArrayList;
+                import java.util.List;
+                import java.util.Map;
+
+                class ImmutableConstantsTest {
+                    private static final List<String> IMMUTABLE = List.of("a", "b");
+                    private static final Map<String, String> IMMUTABLE_MAP = Map.of("k", "v");
+                    private static final List<String> MUTABLE = new ArrayList<>();
+                    private static List<String> REASSIGNABLE = List.of("a");
+                }
+                """, StandardCharsets.UTF_8);
+
+        List<String> messages = sharedStateMessages(scanPath(fixture.toString()));
+
+        assertThat(messages)
+                .as("the two constants must be silent, and both other shapes must not be")
+                .hasSize(2);
+        assertThat(String.join("\n", messages)).contains("MUTABLE").contains("REASSIGNABLE");
+    }
+
+    private static String scanPath(String absolutePath) {
+        Path root = repositoryRoot();
+        List<String> command = List.of("node", SCANNER, "scan", absolutePath, "--as", "ImmutableConstantsTest.java", "--json");
+        try {
+            Process process = new ProcessBuilder(command).directory(root.toFile()).redirectErrorStream(true).start();
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            Assumptions.assumeTrue(process.waitFor(60, TimeUnit.SECONDS), "the scanner did not finish in 60s");
+            return output;
+        } catch (IOException e) {
+            Assumptions.abort("node is not available on this machine, so the scanner could not be executed: " + e.getMessage());
+            return "";
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static List<String> sharedStateMessages(String json) {
+        List<String> messages = new ArrayList<>();
+        try {
+            for (JsonNode finding : new ObjectMapper().readTree(json).path("findings")) {
+                if ("SHARED_MUTABLE_TEST_STATE".equals(finding.path("ruleId").asText())) {
+                    messages.add(finding.path("message").asText());
+                }
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("the scanner did not return JSON: " + json, e);
+        }
+        return messages;
     }
 
     @Test

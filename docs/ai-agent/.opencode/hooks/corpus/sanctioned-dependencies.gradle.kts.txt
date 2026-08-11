@@ -7,4 +7,11 @@ dependencies {
     testImplementation("com.networknt:json-schema-validator:1.5.4")
     testImplementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
     testImplementation("org.postgresql:postgresql:42.7.4")
+    // Spring-трек, который кит предлагает сам, и его спутники: без starter-test нет @SpringBootTest,
+    // без launcher Gradle не запустит JUnit 5, без YAML-парсера не проверить схемой базу знаний,
+    // которая по контракту в YAML. Список запрещал собственную рекомендацию, пока их тут не было.
+    testImplementation(platform("org.springframework.boot:spring-boot-dependencies:3.5.14"))
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

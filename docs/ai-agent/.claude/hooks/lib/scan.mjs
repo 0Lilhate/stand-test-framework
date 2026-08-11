@@ -469,6 +469,10 @@ function runPatterns(detector, content, findings) {
     const exemptValueSpec = pattern.exemptValueRegex !== undefined ? pattern.exemptValueRegex : detector.exemptValueRegex;
     const exemptValue = exemptValueSpec ? new RegExp(exemptValueSpec) : null;
     const mutableType = pattern.mutableTypeRegex ? new RegExp(pattern.mutableTypeRegex) : null;
+    const immutableInitialiserSpec = pattern.immutableInitialiserRegex !== undefined
+      ? pattern.immutableInitialiserRegex
+      : detector.immutableInitialiserRegex;
+    const immutableInitialiser = immutableInitialiserSpec ? new RegExp(immutableInitialiserSpec) : null;
     let match;
     while ((match = regex.exec(haystack)) !== null) {
       if (match[0] === '') { regex.lastIndex += 1; continue; }
@@ -482,6 +486,21 @@ function runPatterns(detector, content, findings) {
         const isFinal = match[1] !== undefined && match[1] !== null && /final/.test(match[1]);
         const type = (match[2] || '').trim();
         if ((pattern.requireMutableType === true || isFinal) && !mutableType.test(type)) continue;
+        // The type says what the reference can hold; the INITIALISER can settle it. `List.of(...)` and
+        // its relatives are immutable by construction, so the field cannot be written by a second
+        // thread whatever its declared type — and a HIGH that fires on the canonical way to spell a
+        // constant is the kind of noise that gets a whole channel ignored. Only checked when the
+        // declaration actually assigns something: a bare `List<String> x;` ends at `;`, and the text
+        // after it belongs to the next statement, where an unrelated `List.of(` would exempt a field
+        // that was never initialised here at all.
+        // FINAL is half of the exemption and not a detail: a non-final field holding `List.of(...)`
+        // is still shared mutable state, because the RE-ASSIGNMENT is the race — one thread swaps the
+        // reference, another reads the old list. Only `final` + an immutable initialiser closes both
+        // halves. A probe found this: the first version of the exemption freed the non-final case too.
+        if (immutableInitialiser && isFinal && /=\s*$/.test(match[0])) {
+          const tail = haystack.slice(match.index + match[0].length, match.index + match[0].length + 120);
+          if (immutableInitialiser.test(tail)) continue;
+        }
         const evidence = `${type} ${match[3] || ''}`.trim();
         if (seen.has(evidence)) continue;
         seen.add(evidence);
