@@ -96,11 +96,11 @@
       "type": ["string", "number", "boolean"]
     },
     "valueHints": {
-      "description": "Per-field value semantics for generated test data. run-unique: derive from ${testRunId} or a capture, never a literal; current-date/future-date/past-date: compute in plain Java before the builder (Java track only - the AI format cannot express computed values); constant: a fixed business value from the case/KB verbatim; captured: comes from an earlier step's capture.",
+      "description": "Per-field value semantics for generated test data. run-unique: derive from ${testRunId} or a capture, never a literal; current-date/future-date/past-date: compute in plain Java before the builder (Java track only - the AI format cannot express computed values); constant: a fixed business value from the case/KB verbatim (reference/dictionary CODES, amounts, enum values); entity-handle: the value identifies a business ENTITY that must EXIST on the stand (client id, pin, account id/number, deal id) - it is provisioned via a create-API step and captured, or seeded on a write-allowed datasource, NEVER copied verbatim; if no provisioning path exists it is a blocking missing-info item, not a constant; captured: comes from an earlier step's capture.",
       "type": "object",
       "propertyNames": { "$ref": "#/$defs/fieldName" },
       "additionalProperties": {
-        "enum": ["constant", "run-unique", "current-date", "future-date", "past-date", "captured"]
+        "enum": ["constant", "entity-handle", "run-unique", "current-date", "future-date", "past-date", "captured"]
       },
       "maxProperties": 50
     },
