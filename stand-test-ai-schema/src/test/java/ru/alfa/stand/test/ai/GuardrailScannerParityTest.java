@@ -154,22 +154,11 @@ class GuardrailScannerParityTest {
         }
         // The findings the SDK has no runtime guardrail for carry names of the kit's own — that is
         // the point of several of them, and the analysis says so: nothing in the runtime can name a
-        // raw client or a shared static field, because neither ever enters the SDK pipeline.
-        TreeSet<String> kitOwn = new TreeSet<>(List.of(
-                "SCRIPT_IN_DECLARATIVE_DOCUMENT", "DIRECT_TRANSPORT_CLIENT", "VALIDATOR_BYPASS",
-                "HARDCODED_CORRELATION_ID", "SDK_EXCEPTION_SWALLOWED", "MASKED_SECRET", "PII_IN_FIXTURE",
-                "UNSANCTIONED_DEPENDENCY", "KAFKA_EXPECT_WITHOUT_DISCRIMINATOR", "SHARED_MUTABLE_TEST_STATE",
-                "FAILURE_CONCEALMENT",
-                // UI half of the safety gate (UITG-S020): these are kit-own findings — the SDK's runtime
-                // validator cannot name a static scan of a generated artifact, and no ForbiddenOperation
-                // constant backs them.
-                "XPATH_LOCATOR", "UI_LOCATOR_OUTSIDE_PAGES", "EXPECT_EVENTUALLY_WITHOUT_WITHIN",
-                "UI_LOGIN_WITHOUT_ROLE", "UI_OPEN_OR_ASSERT_TEMPLATE", "UI_REPORT_STAND_ADDRESS",
-                "UI_DISCOVERY_PARITY",
-                // Gate U16 (UITG-F006): the completeness of a generation report and the existence of its
-                // snapshot are properties of the deliverable, not of a scenario — nothing the runtime
-                // validator ever sees, so no constant backs it either.
-                "UI_GENERATION_REPORT_INCOMPLETE"));
+        // raw client or a shared static field, because neither ever enters the SDK pipeline. The list
+        // is READ from the table rather than written here: it is one half of a census whose other half
+        // (`withoutDetector`) lives there, and a census with its two halves in two files is one whose
+        // second half is found six months later.
+        TreeSet<String> kitOwn = kitOwnFindings();
 
         List<String> unknown = new ArrayList<>();
         detectorTable().path("detectors").forEach(detector -> {
@@ -182,6 +171,85 @@ class GuardrailScannerParityTest {
         assertThat(unknown)
                 .as("a rule id that names neither a ForbiddenOperation nor a declared kit-own finding is a second vocabulary of guardrail codes starting to form")
                 .isEmpty();
+        assertThat(kitOwn)
+                .as("the kit-own list must really have been read; an empty one would make the assertion above pass on nothing")
+                .isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("every guardrail code either has a detector or records, in the table, why it cannot have one")
+    void everyGuardrailCode_hasADetectorOrARecordedReason() {
+        TreeSet<String> covered = codesNamedByTheTable();
+        JsonNode reasons = detectorTable().path("guardrailVocabulary").path("withoutDetector");
+
+        List<String> unexplained = new ArrayList<>();
+        for (ForbiddenOperation operation : ForbiddenOperation.values()) {
+            String code = operation.code();
+            if (!covered.contains(code) && !reasons.has(code)) {
+                unexplained.add(code);
+            }
+        }
+
+        assertThat(unexplained)
+                .as("this is the direction nothing checked, and it is the direction a gap arrives from: a constant added to "
+                        + "ForbiddenOperation used to break nothing at all, so nine of sixteen codes sat without a static check "
+                        + "and never said so. Either write the detector, or record in guardrailVocabulary.withoutDetector which "
+                        + "layer catches it instead")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("nothing in the without-detector list is stale, invented, or excused without naming the layer that catches it")
+    void theWithoutDetectorList_staysHonest() {
+        TreeSet<String> codes = new TreeSet<>();
+        for (ForbiddenOperation operation : ForbiddenOperation.values()) {
+            codes.add(operation.code());
+        }
+        TreeSet<String> covered = codesNamedByTheTable();
+        JsonNode reasons = detectorTable().path("guardrailVocabulary").path("withoutDetector");
+
+        assertThat(reasons.isObject()).as("the table must carry the reverse half of the census at all").isTrue();
+        assertThat(reasons.size()).as("an empty list would make the census above vacuous").isPositive();
+
+        reasons.fieldNames().forEachRemaining(code -> {
+            assertThat(codes)
+                    .as("'%s' is excused from having a detector and is not a ForbiddenOperation constant at all — an entry for a "
+                            + "code that does not exist reads as coverage of something", code)
+                    .contains(code);
+            assertThat(covered)
+                    .as("'%s' now HAS a detector, so its entry is a standing claim that it does not. A stale excuse is worse "
+                            + "than none: it is the one thing a reader trusts without checking", code)
+                    .doesNotContain(code);
+            assertThat(reasons.path(code).asText())
+                    .as("'%s' must say which layer catches it instead — an excuse that names no substitute is a gap with better "
+                            + "wording", code)
+                    .hasSizeGreaterThan(40);
+        });
+    }
+
+    /** The kit-own findings the table declares: rule ids deliberately outside the SDK's vocabulary. */
+    private static TreeSet<String> kitOwnFindings() {
+        TreeSet<String> declared = new TreeSet<>();
+        detectorTable().path("guardrailVocabulary").path("kitOwnFindings").forEach(id -> declared.add(id.asText()));
+        return declared;
+    }
+
+    /**
+     * Every guardrail code the detector table names, by whichever route it names it.
+     *
+     * <p>A rule id is the obvious route; the keys of a detector's {@code imports.groups} are the other
+     * one, and they are not a technicality. Finding 8 is one detector over four transports, and it
+     * spells two of them with the enum's own codes — {@code RAW_KAFKA_CLIENT} and
+     * {@code RAW_JDBC_CLIENT} are checked, reported and fixed under those names. Deriving coverage
+     * from the table keeps them out of the excuse list, which must hold only real judgements.
+     */
+    private static TreeSet<String> codesNamedByTheTable() {
+        TreeSet<String> named = new TreeSet<>();
+        detectorTable().path("detectors").forEach(detector -> {
+            named.add(detector.path("ruleId").asText());
+            detector.path("imports").path("groups").fieldNames().forEachRemaining(named::add);
+        });
+        return named;
     }
 
     @Test

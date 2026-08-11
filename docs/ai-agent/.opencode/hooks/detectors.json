@@ -16,6 +16,52 @@
     "Регулярки в синтаксисе JS RegExp; флаги в поле flags."
   ],
   "version": 1,
+  "guardrailVocabulary": {
+    "$comment": [
+      "Словарь guardrail-кодов, который GuardrailScannerParityTest сверяет в ОБЕ стороны.",
+      "Прямое: ruleId, не названный ни ForbiddenOperation, ни kitOwnFindings, — это вторая",
+      "система кодов, начавшая формироваться рядом с первой.",
+      "Обратное: константа ForbiddenOperation, у которой нет ни детектора, ни записи здесь, —",
+      "тихий пробел. Именно оно и отсутствовало: новая константа в enum не роняла ничего, и",
+      "девять кодов из шестнадцати оказались без статической проверки, ни разу об этом не сказав.",
+      "Покрытие выводится там, где выводимо: код, названный ключом imports.groups, покрыт находкой,",
+      "которая эти группы объявляет, и записывать его в withoutDetector не нужно.",
+      "Запись здесь — это утверждение «статики нет и вот почему», а не разрешение: она обязана",
+      "называть слой, который ловит вместо неё."
+    ],
+    "kitOwnFindings": [
+      "SCRIPT_IN_DECLARATIVE_DOCUMENT",
+      "DIRECT_TRANSPORT_CLIENT",
+      "VALIDATOR_BYPASS",
+      "HARDCODED_CORRELATION_ID",
+      "SDK_EXCEPTION_SWALLOWED",
+      "MASKED_SECRET",
+      "PII_IN_FIXTURE",
+      "UNSANCTIONED_DEPENDENCY",
+      "KAFKA_EXPECT_WITHOUT_DISCRIMINATOR",
+      "SHARED_MUTABLE_TEST_STATE",
+      "FAILURE_CONCEALMENT",
+      "XPATH_LOCATOR",
+      "UI_LOCATOR_OUTSIDE_PAGES",
+      "EXPECT_EVENTUALLY_WITHOUT_WITHIN",
+      "UI_LOGIN_WITHOUT_ROLE",
+      "UI_OPEN_OR_ASSERT_TEMPLATE",
+      "UI_REPORT_STAND_ADDRESS",
+      "UI_DISCOVERY_PARITY",
+      "UI_GENERATION_REPORT_INCOMPLETE"
+    ],
+    "$kitOwnFindings": "находки, которым НЕ соответствует код ForbiddenOperation, потому что рантайм такого нарушения не видит вовсе: сырой клиент, статическое поле, проглоченное исключение и весь UI-слой в пайплайн SDK не попадают. Список объявлен здесь, а не в тесте: обе половины одной сверки должны лежать в одном месте, иначе вторую находят через полгода",
+    "withoutDetector": {
+      "NON_WHITELISTED_DATASOURCE": "принадлежность белому списку — вопрос к РЕЕСТРУ окружений, которого хук не читает: он видит один артефакт, а не конфигурацию проекта. Ловит DefaultScenarioValidator до первого запроса",
+      "NON_WHITELISTED_SERVICE": "то же: алиас сервиса проверяется по реестру, а не по тексту артефакта. Pre-flight в DefaultScenarioValidator",
+      "NON_WHITELISTED_TOPIC": "то же: топик проверяется по реестру. Pre-flight в DefaultScenarioValidator",
+      "NON_WHITELISTED_GRPC_TARGET": "то же: gRPC-таргет проверяется по реестру. Pre-flight в DefaultScenarioValidator",
+      "NON_WHITELISTED_UI_APPLICATION": "то же: алиас приложения проверяется по секции ui-applications реестра, и отказ приходит ДО старта браузера. Pre-flight в DefaultScenarioValidator",
+      "BUSINESS_LOGIC_IN_SDK": "нарушение — правка ИСХОДНИКОВ SDK, а у потребителя SDK это jar: вопрос про форму репозитория, а не про артефакт, который сканируют. Периметр хука закрывает запись в сам кит; исходники SDK держит ревью его собственного репозитория",
+      "IMPERATIVE_EAGER_IO": "по тексту не решается: «билдер сходил в сеть» требует знания, какие методы делают IO, а не регулярки. Держится конструкцией — билдеры ленивы, единственная точка исполнения stand.run(...) — и остаётся пунктом чек-листа"
+    },
+    "$withoutDetector": "NON_WHITELISTED_ENVIRONMENT — единственный из шести whitelist-кодов, у которого детектор ЕСТЬ, и по другой причине: продоподобие решается по самому имени окружения, а список разрешённых передаёт вызывающий. Остальные пять без реестра неразрешимы, и это граница инструмента, а не недоделка"
+  },
   "detectors": [
     {
       "finding": 1,

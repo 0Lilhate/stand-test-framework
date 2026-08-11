@@ -1,6 +1,6 @@
 {
   "kit": "stand-test-ai-agent-kit",
-  "version": 10,
+  "version": 11,
   "files": {
     ".claude/.gitignore": "sha256:968175e913f53bbf53491eabafe13466899f81ef4d6dcdd81141169bf7ff70f9",
     ".claude/agents/stand-test-kb-resolver.md": "sha256:f010af0b66beafe4cd9577b4fbcb5a898ff89fd15a6b5136ab6ce6260661d579",
@@ -36,7 +36,7 @@
     ".claude/hooks/corpus/ui-orphaned-wait.java.txt": "sha256:169afaf2193d7e0bbec954378a17eeecebfa1f9f44967dd1d9e9ea8042d1a7b4",
     ".claude/hooks/corpus/unsanctioned-dependencies.gradle.kts.txt": "sha256:71a38992636a9ec98db6ea1cfd367e74b08aac45032c246c8a24409553f69f36",
     ".claude/hooks/corpus/validator-bypass-test.java.txt": "sha256:701a7d37ca3e38ef9e389f80d99edeff6546b76023882392f48d9944e2e9930a",
-    ".claude/hooks/detectors.json": "sha256:ae7d3eaf81e24a028cbc408a137076e670259125701c5852ec1979e82ea8ee92",
+    ".claude/hooks/detectors.json": "sha256:e59bbbaa07a4892fd2dd54eeb93f093c448b3694d2f845790c4b0402dd0bf428",
     ".claude/hooks/lib/bundle.mjs": "sha256:f937e1dd35c8a9349e9e3e9d635deb4808f3385df845f474895869f816cf09e1",
     ".claude/hooks/lib/cases.mjs": "sha256:512637b7cc601d53db82135d0fa4b5dc78ccf1ea2c949a589b72117aef033607",
     ".claude/hooks/lib/conceal.mjs": "sha256:ea5ae94d665c08bec58ad0e5c35666099bc8b2d6cebe5873791ecf7a7b3b8ea6",
@@ -175,7 +175,7 @@
     ".opencode/hooks/corpus/ui-orphaned-wait.java.txt": "sha256:169afaf2193d7e0bbec954378a17eeecebfa1f9f44967dd1d9e9ea8042d1a7b4",
     ".opencode/hooks/corpus/unsanctioned-dependencies.gradle.kts.txt": "sha256:71a38992636a9ec98db6ea1cfd367e74b08aac45032c246c8a24409553f69f36",
     ".opencode/hooks/corpus/validator-bypass-test.java.txt": "sha256:701a7d37ca3e38ef9e389f80d99edeff6546b76023882392f48d9944e2e9930a",
-    ".opencode/hooks/detectors.json": "sha256:ae7d3eaf81e24a028cbc408a137076e670259125701c5852ec1979e82ea8ee92",
+    ".opencode/hooks/detectors.json": "sha256:e59bbbaa07a4892fd2dd54eeb93f093c448b3694d2f845790c4b0402dd0bf428",
     ".opencode/hooks/lib/bundle.mjs": "sha256:f937e1dd35c8a9349e9e3e9d635deb4808f3385df845f474895869f816cf09e1",
     ".opencode/hooks/lib/cases.mjs": "sha256:512637b7cc601d53db82135d0fa4b5dc78ccf1ea2c949a589b72117aef033607",
     ".opencode/hooks/lib/conceal.mjs": "sha256:ea5ae94d665c08bec58ad0e5c35666099bc8b2d6cebe5873791ecf7a7b3b8ea6",
