@@ -17,6 +17,8 @@ import { basename, join } from 'node:path';
 
 const ENTRY = /^\s*-\s+caseId:\s*["']?([A-Za-z0-9][A-Za-z0-9._-]*)["']?\s*$/;
 
+const REF = /^\s*ref:\s*["']?([^"'\s]+)["']?\s*$/;
+
 const CLASS_NAME = /^\s*className:\s*["']?([A-Za-z_$][A-Za-z0-9_$]*)["']?\s*$/;
 
 const STATUS = /^\s*status:\s*["']?([a-z]+)["']?\s*$/;
@@ -39,7 +41,7 @@ export function mappings(cwd) {
     for (const line of readFileSync(join(cwd, path), 'utf8').split('\n')) {
       const opener = ENTRY.exec(line);
       if (opener !== null) {
-        current = { caseId: opener[1], file: path, classNames: [], status: null };
+        current = { caseId: opener[1], file: path, classNames: [], status: null, ref: null };
         entries.push(current);
         continue;
       }
@@ -48,6 +50,11 @@ export function mappings(cwd) {
       if (className !== null) current.classNames.push(className[1]);
       const status = STATUS.exec(line);
       if (status !== null && current.status === null) current.status = status[1];
+      // `source.ref` is how an entry names the case it came FROM, and it is the only exact join
+      // between a text case on disk and what the base already knows about it. Without it the batch
+      // can see that a mapping mentions some class and not that it mentions THIS case.
+      const ref = REF.exec(line);
+      if (ref !== null && current.ref === null) current.ref = ref[1];
     }
   }
   return entries;

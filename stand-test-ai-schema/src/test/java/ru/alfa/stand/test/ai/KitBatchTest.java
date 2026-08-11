@@ -279,6 +279,63 @@ class KitBatchTest {
     }
 
     @Test
+    @DisplayName("a case the knowledge base already claims a test for reads as ALREADY-DONE, not as a question nobody asked")
+    void silentSession_onAnAlreadyAutomatedCase_isAlreadyDone(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+        write(project, "cases/order.md", "Заказ принимается\n");
+        // The mapping names the case it came from, which is the only exact join between a text file on
+        // disk and what the base already knows. Without it the batch could see a class name and not
+        // whether it belongs to THIS case.
+        write(project, "knowledge-base/mappings/order.yml", """
+                testCaseMappings:
+                  - caseId: order-scenario
+                    environment: ift
+                    source:
+                      type: file
+                      ref: cases/order.md
+                    matched: {}
+                    generatedTest:
+                      module: qa-tests
+                      package: ru.alfa.qa
+                      className: OrderScenarioTest
+                    status: generated
+                """);
+        Path runner = fakeRunner(project, "console.log('тест уже есть, писать нечего');\n");
+
+        Answer answer = batch(project, runner, "cases");
+
+        assertThat(answer.output())
+                .as("a corpus of solved cases must not read as a corpus of failures")
+                .contains("ALREADY-DONE", "OrderScenarioTest");
+        assertThat(answer.output()).doesNotContain("блокирующие вопросы стадии 3");
+        assertThat(reportOf(project))
+                .as("and the footer must say what the verdict means for a measurement")
+                .contains("ALREADY-DONE", "линии не даёт");
+    }
+
+    @Test
+    @DisplayName("a case the base declares blocked says so, instead of guessing at stage 3")
+    void silentSession_onABlockedCase_namesTheBlock(@TempDir Path temporary) throws IOException {
+        Path project = temporary.toRealPath();
+        write(project, "cases/carrier.md", "Кейс, для которого носитель не воспроизводится\n");
+        write(project, "knowledge-base/mappings/carrier.yml", """
+                testCaseMappings:
+                  - caseId: carrier-wall
+                    environment: ift
+                    source:
+                      type: file
+                      ref: cases/carrier.md
+                    matched: {}
+                    status: blocked
+                """);
+        Path runner = fakeRunner(project, "console.log('стоп на стадии 3');\n");
+
+        assertThat(batch(project, runner, "cases").output())
+                .as("no test is the CORRECT outcome here, and the base already says why")
+                .contains("NEEDS-HUMAN", "blocked", "carrier-wall");
+    }
+
+    @Test
     @DisplayName("an artifact written but never gated is NEEDS-HUMAN, not a generated test")
     void ungatedArtifact_needsHuman(@TempDir Path temporary) throws IOException {
         Path project = temporary.toRealPath();

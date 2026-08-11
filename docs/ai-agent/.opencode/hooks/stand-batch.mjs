@@ -68,13 +68,40 @@ function readState(project) {
  * content, and a mapping claims it. Anything less is reported as less, including the commonest outcome
  * of an honest run — the case named contracts the knowledge base does not have.
  */
-function verdict(project, before, after, exitCode) {
+function verdict(project, before, after, exitCode, item) {
   if (exitCode !== 0) return { verdict: 'FAILED', detail: `сессия завершилась с кодом ${exitCode}`, written: [] };
 
   const written = Object.keys(after.artifacts).filter((path) => before.artifacts[path] === undefined
     || before.artifacts[path].sha !== after.artifacts[path].sha);
   if (written.length === 0) {
-    return { verdict: 'NEEDS-HUMAN', detail: 'артефактов не появилось — обычно это блокирующие вопросы стадии 3', written };
+    // Nothing written has more than one cause, and the batch used to name only the commonest one:
+    // "обычно это блокирующие вопросы стадии 3". On a corpus of cases that are already automated that
+    // sentence is simply false — the session found a finished test, checked it and had nothing to
+    // write — and a report that elsewhere refuses to believe the model has no business guessing here.
+    // The knowledge base already holds the answer: a mapping entry names the case it came from.
+    const known = mappings(project).find((entry) => entry.ref !== null && sameCase(entry.ref, item));
+    if (known !== undefined && known.classNames.length > 0) {
+      return {
+        verdict: 'ALREADY-DONE',
+        detail: `кейс уже автоматизирован: ${known.caseId} → ${known.classNames.join(', ')}`
+          + `${known.status === null ? '' : ` (status ${known.status})`} — писать было нечего`,
+        written,
+      };
+    }
+    if (known !== undefined && known.status === 'blocked') {
+      return {
+        verdict: 'NEEDS-HUMAN',
+        detail: `кейс объявлен blocked в ${known.file} (${known.caseId}) — теста нет и не должно быть, пока не снято внешнее условие`,
+        written,
+      };
+    }
+    return {
+      verdict: 'NEEDS-HUMAN',
+      detail: known === undefined
+        ? 'артефактов не появилось, и маппинг про этот кейс ничего не знает — вероятно, блокирующие вопросы стадии 3'
+        : `артефактов не появилось; маппинг ${known.caseId} есть, но теста не называет — вероятно, блокирующие вопросы стадии 3`,
+      written,
+    };
   }
 
   const gate = after.gates['safety-review'];
@@ -94,6 +121,20 @@ function verdict(project, before, after, exitCode) {
     return { verdict: 'PARTIAL', detail: `${unclaimed.length} тестов не заявлены в mappings/`, written };
   }
   return { verdict: 'GENERATED', detail: `${tests.length} тестов, ${written.length - tests.length} прочих артефактов`, written };
+}
+
+/**
+ * Whether a mapping entry's `source.ref` points at the case this session was given.
+ *
+ * Compared by the path the batch was handed and by the file name, because a mapping is written
+ * relative to the project root while the batch may be pointed at a single file or a directory. The
+ * file name alone would be ambiguous across directories, so the full relative path wins when both
+ * are available; the name is the fallback that makes `--limit`-style invocations work.
+ */
+function sameCase(ref, item) {
+  if (item === undefined || item === null) return false;
+  const normalise = (value) => value.replace(/^\.\//, '');
+  return normalise(ref) === normalise(item.input) || basename(ref) === basename(item.input);
 }
 
 /** Expected against observed, for the two families a run can be checked against here. */
@@ -177,7 +218,7 @@ function main(argv) {
     writeFileSync(join(project, out, `${item.id}.log`),
       `${session.stdout || ''}${session.stderr ? `\n--- stderr ---\n${session.stderr}` : ''}`, 'utf8');
 
-    const outcome = verdict(project, before, readState(project), session.status === null ? 1 : session.status);
+    const outcome = verdict(project, before, readState(project), session.status === null ? 1 : session.status, item);
     const expected = expectations(item.spec);
     results.push({
       case: item.id,
@@ -209,6 +250,14 @@ function main(argv) {
     ...results.map((item) => `| ${item.case} | ${item.branch} | ${item.verdict} | ${item.detail} | `
       + `${item.expectation === null ? '—' : item.expectation.matched ? 'совпало' : item.expectation.notes.join('; ')} | ${item.log} |`),
     '',
+    '## Чего headless-сессия НЕ МОЖЕТ (а не забыла)',
+    '',
+    'Запись в `knowledge-base/**` требует подтверждения хоста, и в неинтерактивном прогоне его некому',
+    'дать: сессия, которая что-то УЗНАЛА про базу знаний — устаревшее допущение, опровергнутую',
+    'предпосылку, найденный носитель, — записать это не может, и её отказ выглядит как отсутствие',
+    'находки. Так что batch УЗНАЁТ, а записывает человек: читайте логи сессий, а не только вердикты.',
+    'Это следствие человеческого гейта на промоут KB, а не сбой, и снимать его не следует.',
+    '',
     '## Что здесь НЕ проверено',
     '',
     'Сверяются три семейства ожиданий: нужен ли был человек, не попало ли запрещённое содержимое в',
@@ -221,6 +270,9 @@ function main(argv) {
     '## Дальше',
     '',
     '- **NEEDS-HUMAN** — открой лог, ответь на вопросы, повтори кейс в обычной сессии.',
+    '- **ALREADY-DONE** — кейс уже автоматизирован: маппинг называет тест, и сессия ничего не писала.',
+    '  Это НЕ замер генерации: на таком кейсе измерять нечего, и корпус из решённых кейсов базовой',
+    '  линии не даёт, сколько его ни прогоняй.',
     '- **PARTIAL** — что-то записано, но набор неполон: нет теста либо он не заявлен в `mappings/`.',
     '- **GENERATED** — тест написан, покрыт safety-review и заявлен. Ревью человека всё ещё за тобой:',
     '  ни один гейт здесь не утверждает, что тест проверяет правильную вещь.',
