@@ -27,3 +27,19 @@ kafkaTopics:
     allowedEnvironments:
       - dev
       - ift
+  # A topic whose producer sets NO correlation header. The block is absent, exactly as it is absent in
+  # the registry (TopicDefinition.correlation is nullable), and the description carries the price:
+  # without a carrier, kafka.expect can select only by a per-run-derived key — and with neither, the
+  # topic cannot be awaited at all on this SDK. Recorded so that nobody spends an afternoon
+  # rediscovering it, and so that the entry is not mistaken for one somebody forgot to finish.
+  - id: audit-trail-topic
+    alias: audit-trail
+    direction: produced
+    description: "Audit trail, published by a legacy producer that sets no X-Correlation-Id. kafka.expect selects by the run-derived key below; were the key absent too, the topic would be unusable for awaiting and the case would need another observation point."
+    key:
+      strategy: variable
+      variable: requestId
+    timeout: 30s
+    allowedEnvironments:
+      - dev
+      - ift

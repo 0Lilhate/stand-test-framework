@@ -311,7 +311,7 @@
     "kafkaTopic": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "alias", "direction", "correlation", "timeout", "allowedEnvironments"],
+      "required": ["id", "alias", "direction", "timeout", "allowedEnvironments"],
       "properties": {
         "id": { "$ref": "#/$defs/kebabId" },
         "alias": { "$ref": "#/$defs/registryAlias" },
@@ -322,7 +322,7 @@
         "description": { "$ref": "#/$defs/freeText" },
         "cluster": { "$ref": "#/$defs/kebabId" },
         "correlation": {
-          "description": "Kafka correlation is HEADER-only in the SDK (KEY/PAYLOAD_FIELD carriers throw at run time).",
+          "description": "Kafka correlation is HEADER-only in the SDK (KEY/PAYLOAD_FIELD carriers throw at run time). OPTIONAL, and its ABSENCE is a fact worth recording rather than an unfinished entry: TopicDefinition.correlation is nullable, so a registry may legally declare a topic whose producer sets no correlation header, and the KB must be able to describe that registry. What absence COSTS belongs in 'description': without a header carrier, kafka.expect can only select by a per-run-derived key, and a topic with neither carrier nor keys cannot be awaited at all on this SDK (KafkaStep.validateExpect demands one of the two). Say which of those it is - an agent that reads only 'no correlation' will otherwise assume the second.",
           "type": "object",
           "additionalProperties": false,
           "required": ["source", "headerName"],
