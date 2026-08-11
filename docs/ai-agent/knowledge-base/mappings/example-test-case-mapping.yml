@@ -3,7 +3,9 @@
 # assumptions were recorded, and where the generated test lives. Written by the
 # stand-test-kb-lookup skill (matched/missing/assumptions) and updated by the authoring
 # and validation workflows (generatedTest/status). Status advances draft → generated →
-# validated → approved; only a human moves it to approved.
+# validated → approved; only a human moves it to approved. `blocked` is the interruption of that
+# line, not a stage of it: analysed, not automatable until an external precondition is met, reason in
+# missing[] and no generatedTest — see the second entry below.
 # This entry is the REAL projection of the chain-validation run performed in this repo
 # (kb-lookup → kb-update conflict resolution → Java draft in stand-test-example).
 testCaseMappings:
@@ -34,6 +36,10 @@ testCaseMappings:
       - Environment not named; matched entries allow {dev, ift}, ift chosen by the kb-lookup tie-break (integration over dev)
       - clientId derived from testRunId and accepted by the stand (human answer to the former blocking missing item)
       - amount sent as JSON number 100 (KB names the field without a type)
+      # Записанное допущение выглядит и так — с доказательством, а не одной строкой. Ровно эта форма
+      # не помещалась в прежние 500 знаков, и обрезанное допущение перестаёт быть проверяемым.
+      - "Услуга кейса на стенде до статуса AUTO не доходит (журнал показывает ERROR, ТУ по версиям индексов не найдена), поэтому подставлена рабочая услуга того же вида: секция-услуга-два индекса тарификации, утверждённая ТУ, фикс-тариф. Сверено по журналу обработки за 2026-07-20: у рабочих услуг этого вида утверждённые тарифы штатно несут флаг неполного тарифа (72 строки из 69 Approved), нулевое значение встречается только у неутверждённых. Структура кейса при подстановке сохранена, поэтому проверяемый алгоритм тот же; отличается только конкретная услуга. Тот же приём и та же причина, что в соседних кейсах этого набора — записано здесь, а не в комментарии теста, чтобы ревьюер видел допущение вместе с остальными."
+
     generatedTest:
       module: stand-test-example
       package: ru.alfa.stand.test.example
@@ -41,4 +47,26 @@ testCaseMappings:
       fixtures:
         - fixtures/grpc/check-result.json
     status: generated
+    updated: "2026-07-07"
+
+  # Второй вход — тот, ради которого в перечислении появился `blocked`. Кейс разобран до конца,
+  # носитель найден, но зелёный прогон невозможен без внешнего условия: причина лежит в missing[],
+  # generatedTest ОТСУТСТВУЕТ, потому что теста нет. Записать это как `draft` значило бы заявить
+  # работу, которой никто не ведёт, и превратить готовый вывод в незаконченный черновик.
+  - caseId: client-request-rejected-by-legacy-limit
+    title: "Отказ по лимиту, выставленному внешней системой"
+    source:
+      type: file
+      ref: docs/source/rejected-by-limit.md
+    environment: ift
+    matched:
+      services:
+        - client-service
+      endpoints:
+        - create-request
+    missing:
+      - field: "воспроизводимый носитель отказа по лимиту (лимит выставляется внешней системой, из теста не создаётся)"
+        reason: "Проверено на стенде: лимит приходит из смежной системы, у которой нет ни create-API, ни таблицы в whitelisted-схеме, поэтому ни provision+capture, ни db.seed не применимы. Разблокировка — договорённость с владельцем той системы о тестовом наборе лимитов; до неё кейс не автоматизируется, и это вывод, а не пауза."
+    assumptions: []
+    status: blocked
     updated: "2026-07-07"
