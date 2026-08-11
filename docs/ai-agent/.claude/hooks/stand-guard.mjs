@@ -349,7 +349,9 @@ function commandScan(argv) {
   }
   // The kinds actually scanned decide how much of the table could run. Reporting the table's own size
   // instead was the same overstatement this command exists to prevent one level down: a Java file is
-  // the subject of eleven findings, not seventeen, and a line saying otherwise reads as coverage.
+  // the subject of a subset of the table, not of all of it, and a line saying otherwise reads as
+  // coverage. The subset is derived rather than written here — a number in this comment is one more
+  // place to go stale, which is the failure the line itself is about.
   const kinds = Object.keys(contents).map((name) => kindOf(name));
   const summary = gates({ previousVersion: against !== null && files.length > 0, kinds });
   if (argumentValue(argv, '--format') === 'sarif') {

@@ -72,6 +72,19 @@ function appliesToKind(detector, kind) {
   return detector.appliesTo === 'any' || detector.appliesTo === kind;
 }
 
+/**
+ * Whether the RULE behind a detector addresses this kind of artifact, whatever the detector can read.
+ *
+ * The two are not the same question, and the difference is the only honest thing a coverage report has
+ * to say about a partial detector. `appliesTo` is the detector's reach; `appliesToRule` names the kinds
+ * the rule ALSO covers and this kit cannot check — a Java `rest.expectEventually` without a bound is
+ * the very violation finding 5 exists for, and finding 5 walks a declarative model only. Absent, the
+ * two coincide, which is the ordinary case.
+ */
+function ruleAppliesToKind(detector, kind) {
+  return (detector.appliesToRule || []).includes(kind);
+}
+
 function applies(detector, kind) {
   // A finding that needs a previous version is not part of a single-artifact scan. It is not absent
   // either — `gates()` reports it as not run, and `scanDiff` is where it does run.
@@ -439,28 +452,41 @@ function extractAll(content, spec) {
 function runPatterns(detector, content, findings) {
   const raw = content;
   const projected = withoutComments(content);
+  // One `seen` for the whole detector, not one per pattern. Two spellings of the same rule routinely
+  // match the same text — a six-digit id is both a whole string literal and a digit run inside one,
+  // and a credential field is found by both the JSON and the block-YAML pattern of finding 2 — and
+  // reporting it twice reads as two violations where a person wrote one thing once. Different
+  // evidence from different patterns is still two findings; only the identical text is folded.
+  const seen = new Set();
   for (const pattern of detector.patterns || []) {
     const haystack = pattern.projection === 'withoutComments' ? projected : raw;
     const regex = new RegExp(pattern.regex, pattern.flags || 'g');
     const exemptKey = pattern.exemptKeyRegex ? new RegExp(pattern.exemptKeyRegex) : null;
-    const exemptValue = pattern.exemptValueRegex ? new RegExp(pattern.exemptValueRegex) : null;
+    // The exemption may be declared per pattern or once for the detector. The detector-level fallback
+    // is not a convenience: finding 10 carried `exemptValueRegex` at the detector level from the start
+    // and nothing ever read it, so the `${…}`-derived values it promised to spare were spared only by
+    // the accident that the patterns of the day could not match them anyway.
+    const exemptValueSpec = pattern.exemptValueRegex !== undefined ? pattern.exemptValueRegex : detector.exemptValueRegex;
+    const exemptValue = exemptValueSpec ? new RegExp(exemptValueSpec) : null;
     const mutableType = pattern.mutableTypeRegex ? new RegExp(pattern.mutableTypeRegex) : null;
-    const seen = new Set();
     let match;
     while ((match = regex.exec(haystack)) !== null) {
       if (match[0] === '') { regex.lastIndex += 1; continue; }
 
       // Shared-mutable-state carries its own question: a static FINAL field is a finding only when
       // the type it holds can change behind the reference. `final` binds the reference and says
-      // nothing about the contents.
+      // nothing about the contents. An INSTANCE field asks the type question always — `requireMutableType`
+      // — because a test class legitimately holds `private int expectedStatus = 200`, and only a field
+      // whose CONTENTS can change is the captured value or reused builder the rule is about.
       if (mutableType) {
         const isFinal = match[1] !== undefined && match[1] !== null && /final/.test(match[1]);
         const type = (match[2] || '').trim();
-        if (isFinal && !mutableType.test(type)) continue;
+        if ((pattern.requireMutableType === true || isFinal) && !mutableType.test(type)) continue;
         const evidence = `${type} ${match[3] || ''}`.trim();
         if (seen.has(evidence)) continue;
         seen.add(evidence);
-        findings.push(finding(detector, `static mutable field '${match[3]}' of type ${type}`, evidence));
+        const scope = /\bstatic\b/.test(match[0]) ? 'static' : 'instance';
+        findings.push(finding(detector, `${scope} mutable field '${match[3]}' of type ${type}`, evidence));
         continue;
       }
 
@@ -1015,6 +1041,12 @@ export const NOT_RUN_REASONS = {
   unimplemented: 'не реализована',
   previousVersion: 'нет прежней версии артефакта',
   kind: 'вид артефакта не является предметом находки',
+  // The two below used to be one line, and merging them said the more comforting of the two things.
+  // "Вид артефакта не является предметом находки" is a statement about the RULE, and it was printed
+  // over java files for UNBOUNDED_TIMEOUT and KAFKA_EXPECT_WITHOUT_DISCRIMINATOR — rules that address
+  // a Java test exactly as they address a declarative one, and simply have no Java branch here. The
+  // reader was told there was nothing to check where the truth was that nothing checks it.
+  ruleWithoutDetector: 'правило распространяется на этот вид, но детектора для него в ките нет — остаётся ревью и рантайм',
 };
 
 /**
@@ -1046,7 +1078,7 @@ export function gates(options = {}) {
     } else if (detector.requires === 'previousVersion' && options.previousVersion !== true) {
       reasons[detector.ruleId] = 'previousVersion';
     } else if (kinds.length > 0 && !kinds.some((kind) => appliesToKind(detector, kind))) {
-      reasons[detector.ruleId] = 'kind';
+      reasons[detector.ruleId] = kinds.some((kind) => ruleAppliesToKind(detector, kind)) ? 'ruleWithoutDetector' : 'kind';
     } else {
       ran.push(detector.ruleId);
     }

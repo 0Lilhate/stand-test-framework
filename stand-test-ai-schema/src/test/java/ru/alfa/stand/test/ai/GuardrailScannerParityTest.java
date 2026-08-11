@@ -69,6 +69,12 @@ class GuardrailScannerParityTest {
             "raw-transport-test.java.txt", Map.of("HARDCODED_STAND_URL", 1L, "DIRECT_TRANSPORT_CLIENT", 3L),
             "validator-bypass-test.java.txt", Map.of("VALIDATOR_BYPASS", 2L),
             "shared-state-test.java.txt", Map.of("HARDCODED_CORRELATION_ID", 1L, "SDK_EXCEPTION_SWALLOWED", 1L, "SHARED_MUTABLE_TEST_STATE", 2L),
+            // The java half of two findings that read documents only until now. The fixture carries its
+            // clean values in the same file deliberately: an id and a sum are both long runs of digits,
+            // so the forms are anchored on the POSITION of the value, and only a fixture holding both
+            // can show that the anchor works. The fourth FIXED_TEST_DATA_ID is the declared cost of
+            // that anchor, enumerated in the fixture's header rather than tuned away.
+            "fixed-ids-and-instance-state-test.java.txt", Map.of("FIXED_TEST_DATA_ID", 4L, "SHARED_MUTABLE_TEST_STATE", 2L),
             "destructive-sql-test.java.txt", Map.of("DESTRUCTIVE_SQL_WITHOUT_ALLOW", 4L),
             "sanctioned-db-writes.java.txt", Map.of(),
             "clean-declarative-test.java.txt", Map.of(),

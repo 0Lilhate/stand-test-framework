@@ -43,9 +43,12 @@ registry additions, build-file diffs.
 | 18 | Failure concealment — a check that stopped running | the ONLY finding that needs BOTH versions of the artifact, because a deleted assertion is not in the file and a grown timeout looks exactly like a timeout. Compare against the previous version (the write hook holds the file on disk; in CI pass `scan --against <base>`): fewer assertions than before, a new `@Disabled`, a new `catch`, a timeout raised at an unchanged number of waits | **BLOCK** for a dropped assertion or a `@Disabled` with no ticket; HIGH (heuristic — confirm) for a new `catch` or a grown timeout, which can be legitimate work |
 
 **What the automated half does NOT cover, so the eye covers it.** The write hook runs this table as
-`detectors.json`, and coverage depends on the artifact: findings 1, 3, 6, 8 and 11 are about DELIVERY
-and do not run over prose (`.md`/`.txt`) — an address in an ordinary document is a quotation, not a
-route to a stand. **7 of the 26 run over prose: 2, 4, 13, 14, 18, 24 and 26.** Disclosure travels with
+`detectors.json`, and coverage depends on the artifact: **findings 1, 3, 6, 8, 10 and 11 do not run
+over prose** (`.md`/`.txt`). Five of them ask whether the artifact DELIVERS something to a stand, and
+an address in an ordinary document is a quotation rather than a route to one; the sixth, 10, is off
+prose for the mirror image of that reason — the stage-1 case analysis QUOTES the case's own client
+id, and a document describing a value is not a test carrying one. **7 of the 26 run over prose:
+2, 4, 13, 14, 18, 24 and 26.** Disclosure travels with
 the file, so a credential (2, 13) and a real person (14) are findings wherever they are written, and
 so is a production stand named in a design (4); 18 runs whenever the artifact's previous version is
 available; 24 and 26 have no other kind at all — they exist for the UI reports, and 24 is where the

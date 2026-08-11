@@ -441,9 +441,12 @@ class GuardDetectorCoverageTest {
         assertThat(skipsProse)
                 .as("these ask whether an artifact DELIVERS something to a stand, which markdown cannot — plus the "
                         + "transport detector, whose only two branches are java imports and parsed documents, so on "
-                        + "prose it was present and inert while the coverage line counted it as run")
+                        + "prose it was present and inert while the coverage line counted it as run; plus the fixed-id "
+                        + "heuristic, which the same argument reaches from the other side: the case analysis of stage 1 "
+                        + "QUOTES the case's client id, and that is the pipeline's own deliverable describing a value, "
+                        + "not a test carrying one")
                 .containsExactlyInAnyOrder("HARDCODED_STAND_URL", "DESTRUCTIVE_SQL_WITHOUT_ALLOW",
-                        "THREAD_SLEEP", "DIRECT_TRANSPORT_CLIENT", "HARDCODED_CORRELATION_ID");
+                        "THREAD_SLEEP", "DIRECT_TRANSPORT_CLIENT", "HARDCODED_CORRELATION_ID", "FIXED_TEST_DATA_ID");
         assertThat(skipsProse)
                 .as("a disclosure finding must never be waived on prose: the file is committed either way, and this "
                         + "is the line between a distinction and an exemption")
@@ -709,6 +712,103 @@ assertThat(blocking(temporary, "safety-review-report.md",
                 .as("the SDK's rule is about the PASSWORD. A login with a default is a documented trade-off, not a leak, and a finding "
                         + "here would be the detector inventing a rule the SDK does not have")
                 .doesNotContain("SECRET_IN_SOURCE");
+    }
+
+    @Test
+    @DisplayName("an id copied into a Java test is found — the java half of a finding that read documents only")
+    void javaFixedIds_areFoundWhereThePositionSaysIdentifier(@TempDir Path temporary) {
+        String test = "class OrderTest {\n"
+                + "    void t() {\n"
+                + "        var byPath = RestStep.get(\"svc\").path(\"/v1/clients/1234567/orders\").build();\n"
+                + "        var byValue = RestStep.get(\"svc\").query(\"accountNumber\", \"40817810099910004312\").build();\n"
+                + "        var handle = RestStep.get(\"svc\").query(\"pinEq\", \"A1B2C3\").build();\n"
+                + "    }\n"
+                + "}\n";
+        assertThat(reported(temporary, "OrderTest.java", test))
+                .as("the default authoring track is Java, and this finding is the ONE item of the checklist with no other layer: "
+                        + "the SDK raises FIXED_TEST_DATA_ID nowhere at run time, so before the java forms nothing checked a "
+                        + "business id transcribed from the case into a test")
+                .contains("FIXED_TEST_DATA_ID");
+    }
+
+    @Test
+    @DisplayName("a money amount in a Java test is not an id — the forms read the position, not the number")
+    void javaBusinessConstants_stayClean(@TempDir Path temporary) {
+        String test = "class AmountTest {\n"
+                + "    void t() {\n"
+                + "        var typed = NewApplicationPage.fillAmount(\"100000\");\n"
+                + "        var body = RestStep.post(\"svc\").body(\"{\\\"amount\\\":5100000,\\\"currency\\\":\\\"RUR\\\"}\").build();\n"
+                + "        var wait = Duration.ofMillis(600000);\n"
+                + "        var run = RestStep.get(\"svc\").path(\"/v1/orders/${testRunId}\").build();\n"
+                + "    }\n"
+                + "}\n";
+        assertThat(reported(temporary, "AmountTest.java", test))
+                .as("the checklist exempts monetary amounts and numeric business constants outright. An earlier draft of the java "
+                        + "forms reported the first two of these — and both are lines of the kit's OWN worked examples, which is "
+                        + "the state where a team switches the detector off and loses the accurate findings with it")
+                .doesNotContain("FIXED_TEST_DATA_ID");
+    }
+
+    @Test
+    @DisplayName("an instance field that accumulates is shared state too — the half of finding 17 the regex could not see")
+    void instanceMutableFields_areFound(@TempDir Path temporary) {
+        String test = "class StateTest {\n"
+                + "    private final List<String> captured = new ArrayList<>();\n"
+                + "    private StringBuilder trace = new StringBuilder();\n"
+                + "}\n";
+        assertThat(reported(temporary, "StateTest.java", test))
+                .as("the checklist names these verbatim — 'counters, captured values, reused builders' — and the pattern demanded "
+                        + "`static`, so the two spellings a generated test actually reaches for were silent")
+                .contains("SHARED_MUTABLE_TEST_STATE");
+    }
+
+    @Test
+    @DisplayName("an ordinary field of a test class is not shared state — the type decides, not the modifier")
+    void instanceFieldsOfImmutableOrUninitialisedShape_stayClean(@TempDir Path temporary) {
+        String test = "class CleanStateTest {\n"
+                + "    private int expectedStatus = 200;\n"
+                + "    private final String scenarioId = \"order-flow\";\n"
+                + "    private final StandClient stand;\n"
+                + "    CleanStateTest(StandClient stand) {\n"
+                + "        this.stand = stand;\n"
+                + "    }\n"
+                + "}\n";
+        assertThat(reported(temporary, "CleanStateTest.java", test))
+                .as("a business constant, a scenario id and an injected client are what every test class has. A finding here would "
+                        + "make the rule unusable, which is why the instance form asks the mutable-type question always")
+                .doesNotContain("SHARED_MUTABLE_TEST_STATE");
+    }
+
+    @Test
+    @DisplayName("a rule with no detector for this kind says exactly that, instead of calling the kind irrelevant")
+    void ruleWithoutADetectorForThisKind_isNotReportedAsInapplicable(@TempDir Path temporary) {
+        Path file = temporary.resolve("AwaitTest.java");
+        try {
+            Files.writeString(file, "class AwaitTest {\n    void t() {\n        stand.run(scenario);\n    }\n}\n", StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException("could not stage " + file, e);
+        }
+
+        JsonNode reasons;
+        try {
+            reasons = MAPPER.readTree(run(temporary, List.of("scan", "AwaitTest.java", "--json"))).path("gatesNotRunReasons");
+        } catch (IOException e) {
+            throw new UncheckedIOException("the scan did not answer with JSON", e);
+        }
+
+        for (String rule : List.of("UNBOUNDED_TIMEOUT", "KAFKA_EXPECT_WITHOUT_DISCRIMINATOR")) {
+            assertThat(reasons.path(rule).asText())
+                    .as("%s addresses a Java test exactly as it addresses a declarative document — an unbounded await and a "
+                            + "constant kafka key are the same violation on either track — and this kit walks a model, so it has "
+                            + "no Java branch. Printing 'вид артефакта не является предметом находки' told the reader there was "
+                            + "nothing to check where the truth is that nothing checks it", rule)
+                    .isEqualTo("ruleWithoutDetector");
+        }
+
+        assertThat(reasons.path("UNSANCTIONED_DEPENDENCY").asText())
+                .as("the distinction must stay a distinction: a test class really is not the place a dependency is declared, and "
+                        + "that is the reason this one keeps")
+                .isEqualTo("kind");
     }
 
     /** Runs the scanner against a staged directory and returns its JSON output, or aborts if node is absent. */

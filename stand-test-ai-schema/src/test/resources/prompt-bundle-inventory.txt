@@ -43,6 +43,7 @@
 .claude/hooks/corpus/clean-declarative-test.java.txt
 .claude/hooks/corpus/clean-ui-page.java.txt
 .claude/hooks/corpus/destructive-sql-test.java.txt
+.claude/hooks/corpus/fixed-ids-and-instance-state-test.java.txt
 .claude/hooks/corpus/raw-transport-test.java.txt
 .claude/hooks/corpus/sanctioned-db-writes.java.txt
 .claude/hooks/corpus/sanctioned-dependencies.gradle.kts.txt
@@ -180,6 +181,7 @@
 .opencode/hooks/corpus/clean-declarative-test.java.txt
 .opencode/hooks/corpus/clean-ui-page.java.txt
 .opencode/hooks/corpus/destructive-sql-test.java.txt
+.opencode/hooks/corpus/fixed-ids-and-instance-state-test.java.txt
 .opencode/hooks/corpus/raw-transport-test.java.txt
 .opencode/hooks/corpus/sanctioned-db-writes.java.txt
 .opencode/hooks/corpus/sanctioned-dependencies.gradle.kts.txt
