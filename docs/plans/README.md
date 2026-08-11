@@ -9,7 +9,7 @@
 
 | План | Область | Статус | Кратко |
 |------|---------|--------|--------|
-| [ai-agent-kit-implementation.md](ai-agent-kit-implementation.md) | кит `docs/ai-agent/` | этапы 0-3 сделаны, дальше 4-5 и бэклог | периметр записи и слой энфорсмента уже работают; впереди субагенты, холодный старт KB, цикл обучения сигнатурам |
+| [ai-agent-kit-implementation.md](ai-agent-kit-implementation.md) | кит `docs/ai-agent/` | этапы плана закрыты; в списке «дальше» два пункта, и оба ждут данных | периметр записи, слой энфорсмента, субагенты в обеих копиях бандла и холодный старт KB сделаны; цикл обучения сигнатурам ждёт накопленного журнала прогонов, субагент `failure-analyst` — его. Первое по отдаче лежит вне списка: прогнать batch по датасету у потребителя и получить базовый замер |
 | [stand-test-ai-schema-followups.md](stand-test-ai-schema-followups.md) | `stand-test-ai-schema` | реализован (MVP+remediation) | закрыть schema↔runtime расхождения; часть зависит от grpc |
 | [stand-test-grpc-implementation.md](stand-test-grpc-implementation.md) | `stand-test-grpc` | реализован (MVP: `grpc.unary` через server reflection + `DynamicMessage`) | новый gRPC-адаптер по образцу kafka; unary + metadata + deadlines |
 | [stand-test-spring-boot-starter-implementation.md](stand-test-spring-boot-starter-implementation.md) | `stand-test-spring-boot-starter` | реализован (Boot-3 auto-configuration, адаптеры — `compileOnly`-опционалы, включая gRPC) | auto-configuration: `@Autowired StandClient` + биндинг окружений |
