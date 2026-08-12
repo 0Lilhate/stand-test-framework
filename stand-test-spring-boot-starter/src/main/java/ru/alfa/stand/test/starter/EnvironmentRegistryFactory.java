@@ -246,6 +246,7 @@ public final class EnvironmentRegistryFactory {
             return ref(reference, field + "-ref", alias);
         }
         EnvironmentConfigFormat.rejectVariableNameAsCredentialValue(value, field, location);
+        SecretReferences.rejectLiteralMarkerInValue(value, field, location);
         return SecretReferences.literal(value);
     }
 
@@ -318,6 +319,7 @@ public final class EnvironmentRegistryFactory {
             throw new IllegalArgumentException(
                     "alias '" + alias + "' sets both '" + valueField + "' and '" + refField + "' — configure exactly one");
         }
+        SecretReferences.rejectLiteralMarkerInValue(value, valueField, "alias '" + alias + "'");
         return SecretReferences.literal(value);
     }
 

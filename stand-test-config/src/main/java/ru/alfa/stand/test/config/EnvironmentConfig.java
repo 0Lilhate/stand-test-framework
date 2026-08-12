@@ -437,6 +437,7 @@ public final class EnvironmentConfig {
             return reference;
         }
         EnvironmentConfigFormat.rejectVariableNameAsCredentialValue(value, kebab, location);
+        SecretReferences.rejectLiteralMarkerInValue(value, kebab, location);
         return SecretReferences.literal(value);
     }
 

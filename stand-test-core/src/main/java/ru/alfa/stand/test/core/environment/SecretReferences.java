@@ -77,6 +77,30 @@ public final class SecretReferences {
     }
 
     /**
+     * Refuses a configured VALUE that already carries the SDK-internal marker, before a mapper wraps it.
+     *
+     * <p>{@link #requireReferenceShape} refuses the marker in a {@code *-ref} field. The value twins had
+     * no such guard, and the marker is not self-cancelling: wrapping {@code literal://hunter2} yields
+     * {@code literal://literal://hunter2}, and {@link #resolve} strips one prefix, so the adapter is
+     * handed {@code literal://hunter2} as the credential. The sign-in then fails at the identity provider
+     * talking about the credential, with nothing pointing back at the configuration — the failure mode
+     * the marker's "never appears in configuration" rule exists to prevent. Both front-ends call this, so
+     * the guard cannot cover one surface and miss the other.
+     *
+     * @param value the configured value (may be null — nothing to refuse)
+     * @param field the surface field name, for the message
+     * @param location the configuration location, for the message
+     * @throws StandTestException if the value carries the marker
+     */
+    public static void rejectLiteralMarkerInValue(String value, String field, String location) {
+        if (value != null && isLiteral(value.trim())) {
+            throw new StandTestException("Field '" + field + "' at " + location
+                    + " carries the SDK-internal literal marker — it must never appear in configuration."
+                    + " Write the value itself here, without the marker.");
+        }
+    }
+
+    /**
      * Resolves a reference through the given lookup, honouring the placeholder syntax. A bare
      * {@code NAME} and {@code ${NAME}} return {@code lookup(NAME)} as-is (possibly null when the
      * variable is missing — the caller owns that error, as before); {@code ${NAME:default}} returns

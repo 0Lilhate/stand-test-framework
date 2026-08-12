@@ -492,6 +492,46 @@ class EnvironmentRegistryParityTest {
                 .hasMessageContaining("Unknown field");
     }
 
+    @Test
+    @DisplayName("both surfaces refuse the SDK-internal marker in a credential VALUE, not just in a *-ref — the newer guard is not one-sided either")
+    void bothSurfacesRejectTheLiteralMarkerInAValue() {
+        StandTestProperties properties = new StandTestProperties();
+        properties.setVersion(5);
+        StandTestProperties.UiApplication application = new StandTestProperties.UiApplication();
+        application.setBaseUrlRef("TAKSA_IFT_URL");
+        StandTestProperties.UiAuth auth = new StandTestProperties.UiAuth();
+        auth.setScheme(UiAuthScheme.STORAGE_STATE);
+        auth.setCredentialsUsername("admin");
+        auth.setCredentialsPassword("literal://s3cret");
+        auth.getRoles().add("admin");
+        StandTestProperties.UiLogin login = new StandTestProperties.UiLogin();
+        login.setSignedInLocator("text=Выйти");
+        auth.setLogin(login);
+        application.setAuth(auth);
+        StandTestProperties.Environment ift = new StandTestProperties.Environment();
+        ift.getUiApplications().put("taksa", application);
+        properties.getEnvironments().put("ift", ift);
+
+        assertThatThrownBy(() -> EnvironmentRegistryFactory.build(properties))
+                .hasMessageContaining("SDK-internal literal marker");
+        assertThatThrownBy(() -> loadFromYaml("""
+                version: 5
+                environments:
+                  ift:
+                    ui-applications:
+                      taksa:
+                        base-url-ref: TAKSA_IFT_URL
+                        auth:
+                          scheme: STORAGE_STATE
+                          credentials-username: admin
+                          credentials-password: literal://s3cret
+                          roles: [admin]
+                          login:
+                            signed-in-locator: text=Выйти
+                """))
+                .hasMessageContaining("SDK-internal literal marker");
+    }
+
     private static StandTestProperties standTestProperties() {
         final StandTestProperties properties = new StandTestProperties();
         final StandTestProperties.Environment ift = new StandTestProperties.Environment();

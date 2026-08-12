@@ -243,6 +243,18 @@ class StandTestAutoConfigurationTest {
                 });
     }
 
+    @Test
+    @DisplayName("the same marker smuggled into the VALUE twin fails the context too — wrapping it again would have left one prefix on the wire")
+    void literalMarkerInValueField_failsContext() {
+        runner.withPropertyValues(
+                "stand.test.environments.ift.services.client-service.base-url=literal://https://stand.example").run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("literal marker");
+                });
+    }
+
     private static String resolveLiteral(String reference) {
         assertThat(SecretReferences.isLiteral(reference)).as("expected a literal-wrapped reference but got: %s", reference).isTrue();
         return SecretReferences.resolve(reference, name -> null);

@@ -542,6 +542,31 @@ class EnvironmentConfigTest {
     }
 
     @Test
+    @DisplayName("the SDK-internal literal marker is refused in a credential VALUE too, not only in a *-ref")
+    void uiApplicationRefusesLiteralMarkerAsCredentialValue() {
+        // requireReferenceShape has always refused the marker in a *-ref. The value twin had no guard, and
+        // the marker does not cancel itself: wrapping it again leaves one prefix behind after resolve, so
+        // the sign-in would have been attempted with 'literal://s3cret' as the password.
+        assertThatThrownBy(() -> parse("""
+                version: 5
+                environments:
+                  ift:
+                    ui-applications:
+                      taksa:
+                        base-url-ref: TAKSA_IFT_URL
+                        auth:
+                          scheme: STORAGE_STATE
+                          credentials-username: admin
+                          credentials-password: literal://s3cret
+                          roles: [admin]
+                          login:
+                            signed-in-locator: text=Выйти
+                """))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("SDK-internal literal marker");
+    }
+
+    @Test
     @DisplayName("a roster and a direct pair together are refused by the loader, naming both spellings")
     void uiApplicationRefusesPoolAndDirectPairTogether() {
         assertThatThrownBy(() -> parse("""
