@@ -42,7 +42,7 @@
 
 - JSON Schema over touched files: <PASS/FAIL + messages>
 - Referential integrity (service rollups, environment bindings): <PASS/FAIL + gaps>
-- KB validation tests (`:stand-test-ai-schema:test` or consumer equivalent): <PASS/FAIL/NOT-RUN + why>
+- KB validation (`stand-guard.mjs kb-validate --exit-code`): <PASS/FAIL/NOT-RUN + why>
 - Secret/URL scan of the diff: <CLEAN/findings>
 
 ## Files changed

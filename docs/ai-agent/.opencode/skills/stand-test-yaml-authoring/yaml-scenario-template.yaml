@@ -1,10 +1,11 @@
-# AI-format (steps/type) scenario template — stand-test-ai-schema.
+# AI-format (steps/type) scenario template.
 # YAML spelling; JSON is equally valid (AiScenarioParser loads both).
 # Rules: SKILL.md in this directory (stand-test-yaml-authoring)
-# Source of truth: /ai/stand-test-ai-generation-rules.md + /schema/stand-test-scenario.schema.json
-#   (in the stand-test-ai-schema jar; on conflict the jar resources win).
+# Source of truth: AiScenarioParser in stand-test-scenario-yaml — what it accepts IS the format.
+#   The JSON Schema and the generation-rules catalogue shipped in stand-test-ai-schema, removed
+#   on 2026-08-12; on conflict the parser wins, and it is the only pre-runtime check there is.
 #
-# HARD RULES (schema is additionalProperties:false — unknown fields FAIL):
+# HARD RULES (the parser checks known keys at every level — unknown fields FAIL the parse):
 #   * top-level key is "environment" (NOT "env" — that belongs to the given/then surface)
 #   * aliases only (service/topic/datasource/target) — never URLs/hosts/JDBC
 #   * every async step has "timeout": <n>ms (1-99999) | <n>s (1-999) | <n>m (1-60)

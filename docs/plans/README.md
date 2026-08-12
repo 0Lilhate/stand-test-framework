@@ -15,6 +15,7 @@
 | [stand-test-spring-boot-starter-implementation.md](stand-test-spring-boot-starter-implementation.md) | `stand-test-spring-boot-starter` | реализован (Boot-3 auto-configuration, адаптеры — `compileOnly`-опционалы, включая gRPC) | auto-configuration: `@Autowired StandClient` + биндинг окружений |
 | [stand-test-config-implementation.md](stand-test-config-implementation.md) | `stand-test-config` | реализован (SPI-провайдер `FileEnvironmentRegistry`) | файловый загрузчик `stand-test-environments.yml`; закрывает known-gap пустого реестра |
 | [stand-test-grpc-integration.md](stand-test-grpc-integration.md) | `stand-test-grpc` | реализован | интеграция адаптера: регистрация executor'а, реестр gRPC-таргетов |
+| [alfalab-configurer-adoption.md](alfalab-configurer-adoption.md) | сборка (Gradle) | черновик, ждёт решений D1–D9 | переход на плагин-конфигурер `ru.alfalab.*` по образцу `card-info-service`: для библиотек это `library-configurer`, а не `microservice-configurer`; 17 конфликтов с текущей сборкой (Gradle 9.6.1, Spring BOM в `api`, владелец checkstyle-конфига, публикация) |
 
 **Порядок (только модули SDK).** ai-schema-followups (часть) → grpc → затем финальные пункты ai-schema
 (`grpc.unary` execution) и starter (регистрация `GrpcStepExecutor`). starter может делаться параллельно

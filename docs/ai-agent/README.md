@@ -173,8 +173,11 @@ checklists and worked example by relative path, so the bundle works wherever it 
 3. Verify the consumer project has: the SDK modules on the test classpath (BOM + junit or
    starter + adapters + config/allure) and its environment registry
    (`stand-test-environments.yml` or `application.yml` `stand.test.environments.*`).
-4. For the JSON track additionally approve/add `com.networknt:json-schema-validator:1.5.6`
-   + `jackson-databind` as test dependencies (the SDK ships only the schema resource).
+4. The JSON track needs **no extra dependency**. It used to need
+   `com.networknt:json-schema-validator` + `jackson-databind` to run the schema resource the SDK
+   shipped; that resource went with `stand-test-ai-schema` on 2026-08-12, and an AI document is now
+   gated by `AiScenarioParser` (fail-closed) plus `DefaultScenarioValidator` — both **after** the
+   document is loaded, so there is no pre-flight gate for it any more.
 5. Start with `/stand-test-design` on a real text case.
 6. For a folder of cases at once:
    `node .claude/hooks/stand-batch.mjs cases/ --dry-run`, then without `--dry-run`. One headless
@@ -290,8 +293,10 @@ The agent never invents endpoints, topics, DB queries, gRPC methods or environme
 Contract details resolve through the **schema-validated knowledge base**
 ([`knowledge-base/README.md`](knowledge-base/README.md)): a consumer project keeps YAML entries
 at `knowledge-base/` (same layout as the shipped examples), validated by
-[`knowledge-base/schema/stand-test-knowledge-base.schema.json`](knowledge-base/schema/stand-test-knowledge-base.schema.json)
-and pinned by the KB validation tests in `stand-test-ai-schema`. `stand-test-kb-lookup` resolves a
+[`knowledge-base/schema/stand-test-knowledge-base.schema.json`](knowledge-base/schema/stand-test-knowledge-base.schema.json).
+The schema tests that used to pin it lived in `stand-test-ai-schema` and went with that module, so the
+KB is now checked **where it is used**: `node .claude/hooks/stand-guard.mjs kb-validate` (plus
+`kb-status` and `alias-check`), which travels with the bundle. `stand-test-kb-lookup` resolves a
 case against it (unknowns become `missing`, never guesses); `/stand-test-kb-update` feeds it from
 OpenAPI/AsyncAPI/proto/SQL specs (dry-run first, human-approved); `/stand-test-generate-env`
 renders its environment entries into the registry formats below. The KB stores aliases, contracts
@@ -320,9 +325,16 @@ The JSON Schema accepts slightly more than the runtime executes ("schema ⊇ exe
 | `grpc.unary` | `timeout` required; `request.fixture` only; all five matchers; `expect.status` rejected (a non-OK status is an infra failure) |
 
 Not in the AI format at all: `db.query`/`db.seed`/`db.cleanup`, `rest.put`/`rest.delete`,
-gRPC custom metadata. Source of truth: `ai/stand-test-ai-generation-rules.md` +
-`/schema/stand-test-scenario.schema.json` inside the published `stand-test-ai-schema` jar
-(`ru.alfa.stand.test.ai.AiSchemaResources`). **On any conflict, the jar resources win.**
+gRPC custom metadata.
+
+**Source of truth: `AiScenarioParser` itself** (`stand-test-scenario-yaml`), and on any conflict the
+parser wins. The JSON Schema and the generation-rules catalogue that used to state this surface before
+a document was ever loaded shipped in `stand-test-ai-schema`, removed on 2026-08-12 — so **there is no
+pre-flight gate for an AI document any more**: what the parser accepts defines the format, its
+fail-closed rejections are the only pre-runtime check, and its class javadoc is the written description
+that survives. Two constructs it refuses outright: an inline `body.json`/`request.json` (a payload must
+be a classpath `.fixture`) and `expect.rowExists` on `db.expectEventually` (only `expect.singleValue`
+executes).
 
 ## SDK modules an agent touches
 
@@ -335,8 +347,7 @@ gRPC custom metadata. Source of truth: `ai/stand-test-ai-generation-rules.md` +
 | `stand-test-junit` | `@StandTest`/`@StandEnv`/`@StandScenarioId`, `StandClient` injection |
 | `stand-test-spring-boot-starter` | `@SpringBootTest` + `@Autowired StandClient`, `stand.test.*` config |
 | `stand-test-config` | `stand-test-environments.yml` file registry |
-| `stand-test-scenario-yaml` | `AiScenarioParser` (AI format, JSON or YAML), `YamlScenarioParser` (given/then) |
-| `stand-test-ai-schema` | JSON Schema + generation-rules resources |
+| `stand-test-scenario-yaml` | `AiScenarioParser` (AI format, JSON or YAML — **and the format's only remaining contract**), `YamlScenarioParser` (given/then) |
 | `stand-test-allure` | Automatic Allure reporting via SPI (consumer adds `io.qameta.allure:allure-junit5:2.29.1`) |
 
 ## Safety constraints and prohibitions
@@ -355,23 +366,23 @@ tests in-JVM concurrently — classes concurrent, methods same_thread): all test
 
 ## How to run validation
 
-**AI JSON/YAML document** (before it is ever executed):
+**AI JSON/YAML document** — two gates, both **after** the document is loaded. The schema gate that ran
+before loading went with `stand-test-ai-schema`; nothing replaced it, so a malformed document is now
+caught by the parser rather than by a validator reading it as data:
 
 ```java
-// Schema gate — requires com.networknt:json-schema-validator (2020-12) + jackson (test classpath)
-JsonSchemaFactory factory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
-JsonSchema schema = factory.getSchema(AiSchemaResources.scenarioSchemaJson());
-Set<ValidationMessage> messages = schema.validate(new ObjectMapper().readTree(documentJson));
-// must be EMPTY
-
-// Parse gate (parser fails closed on non-executable constructs)
-Scenario scenario = new AiScenarioParser().parse(documentJson);
+// Parse gate — fails closed on unknown fields at every level, unknown step types, and
+// constructs no adapter executes (inline body.json/request.json, expect.rowExists)
+Scenario scenario = new AiScenarioParser().parse(documentJson);   // stand-test-scenario-yaml
 
 // Guardrail self-check — REQUIRES the registry overload; the one-arg validate(Scenario)
 // checks structure only and runs zero guardrails
 EnvironmentRegistry registry = new FileEnvironmentRegistry();   // stand-test-config
 new DefaultScenarioValidator().validate(scenario, registry).throwIfInvalid();
 ```
+
+`com.networknt:json-schema-validator` + `jackson-databind` are therefore **no longer needed** for the
+AI track — the dependency existed only to run the removed schema resource.
 
 **Java test**: `./gradlew compileTestJava checkstyleTest` in the consumer project.
 `DefaultScenarioValidator` runs automatically inside `stand.run(...)`.

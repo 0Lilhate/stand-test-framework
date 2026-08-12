@@ -297,16 +297,35 @@ public class StandTestProperties {
 
     /**
      * Sign-in configuration of a {@link UiApplication}. The scheme is spelled {@code scheme} — the same key
-     * a service's {@link Auth} uses — and every credential is a reference, never a value: there is
-     * deliberately no value twin here, because a UI credential has no non-secret reading.
+     * a service's {@link Auth} uses.
+     *
+     * <p>The account roster ({@code credentialsPoolRef}) and the discovery account
+     * ({@code discoveryAccountRef}) are references and only references: there is deliberately no value twin
+     * for either, because a roster routed through the Spring {@code Environment} would sit there for the
+     * life of the context. There is no {@code credentialsPool} / {@code discoveryAccount} setter, so the
+     * value spelling binds nothing rather than binding something weaker.
      *
      * <p>{@code credentialsUsername}/{@code credentialsPassword} name one account directly, for an
-     * application that has exactly one; they exclude {@code credentialsPoolRef}. Both are references
-     * too, and on this surface that matters more than it does for the file: <strong>write a bare
-     * variable NAME, never {@code ${VAR:default}}</strong>. Spring expands a placeholder at context
-     * startup, so the SDK would receive the expanded value and read it as the name of a variable that
-     * does not exist. The {@code ${VAR:value}} spelling belongs to {@code stand-test-environments.yml},
-     * where nothing expands it before the SDK does.
+     * application that has exactly one; they exclude {@code credentialsPoolRef}. <strong>What that pair
+     * means depends on the declared format version</strong>, and the rule lives in one place —
+     * {@code EnvironmentRegistryFactory.uiCredential}, which the file front-end mirrors exactly:
+     *
+     * <ul>
+     *   <li><b>Version 4:</b> the bare field is a REFERENCE — the name of an environment variable — and
+     *       {@code *Ref} does not exist yet. Such a document keeps that meaning forever.</li>
+     *   <li><b>From version 5:</b> the bare field is the VALUE, resolved by Spring like {@code baseUrl} and
+     *       every other twin, while {@code credentialsUsernameRef}/{@code credentialsPasswordRef} carry the
+     *       reference. This is what makes {@code credentials-username: ${web_username:tks_Admin}} work here
+     *       at all: Spring expands the placeholder before the SDK sees the field, so a value and a variable
+     *       name arrive as the same string and cannot share one key.</li>
+     * </ul>
+     *
+     * <p>The placeholder trap therefore applies to every {@code *Ref} field on this surface, this pair
+     * included: <strong>a {@code *Ref} takes a bare variable NAME, never {@code ${VAR:default}}</strong>.
+     * Spring expands the placeholder at context startup, and the SDK then reads the expanded text as the
+     * name of a variable that does not exist — a rejected sign-in that looks like a wrong password. The
+     * {@code ${VAR:value}} spelling belongs in the value field here, and in either field of
+     * {@code stand-test-environments.yml}, whose loader expands placeholders itself.
      */
     public static class UiAuth {
 

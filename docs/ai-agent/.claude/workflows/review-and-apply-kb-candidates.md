@@ -30,8 +30,8 @@ human-gated; the only writer of the curated KB is `stand-test-kb-update`.
   4. co-update owning-service rollups (BLOCK orphan promotion)
   5. append promotion-log.yml (fail-closed); stamp candidate status: applied
   6. /stand-test-generate-env for new env-var refs
-  7. ./gradlew :stand-test-ai-schema:test  (curated KB validation)
-  8. kb-validate --exit-code, then record-gate --gate kb-write --verdict PASS <files>
+  7. kb-validate --exit-code                (curated KB validation)
+  8. alias-check, then record-gate --gate kb-write --verdict PASS <files>
      (until this verdict is recorded the session will not end)
 ```
 

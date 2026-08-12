@@ -8,8 +8,8 @@ The agent authors CONSUMER tests. It never crosses into the SDK. Verify on every
 - [ ] No new `StepExecutor`/adapter implementation added to run a business test
       (`GenericStep` probes like the example module's `VariableSnapshotProbe` are an
       SDK-example pattern, not a consumer-test tool).
-- [ ] No core API change, no new wire keys, no `ForbiddenOperation` edits, no schema edits
-      (`stand-test-scenario.schema.json` belongs to the SDK).
+- [ ] No core API change, no new wire keys, no `ForbiddenOperation` edits, no change to
+      `AiScenarioParser` — the declarative format belongs to the SDK.
 - [ ] No SDK version bumps / publishing config changes smuggled into a test change.
 
 ## Only sanctioned entry points used

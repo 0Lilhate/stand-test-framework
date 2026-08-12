@@ -83,9 +83,9 @@ parse → candidates → validate → diff → report pipeline. The KB is stand 
    split is preserved, not reshuffled.
 7. **Cross-check**: after apply, referential integrity must hold (service rollups list new child
    ids; environments bind new entries or the report lists the binding as a follow-up).
-8. **Validate the result**: run the KB validation tests
-   (`./gradlew :stand-test-ai-schema:test` in this repo; the consumer's KB check where one
-   exists) and re-run the schema over every touched file.
+8. **Validate the result**: `node <bundle>/hooks/stand-guard.mjs kb-validate --exit-code` (the check
+   that travels with the bundle and runs in both repositories — the Gradle KB validation tests lived
+   in `stand-test-ai-schema` and went with it), and re-run the schema over every touched file.
 9. **Report** per [`kb-update-report-template.md`](kb-update-report-template.md), then apply
    [`kb-entry-review-checklist.md`](kb-entry-review-checklist.md) to every added/updated entry.
 

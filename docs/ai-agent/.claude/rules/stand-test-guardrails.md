@@ -121,13 +121,15 @@ Which layer enforces each rule, and what it defends against:
 - Never hide a failure: no assertion deletion, no `@Disabled` without a ticket, no blind
   timeout inflation.
 - Do not modify SDK modules, add adapters, or change core APIs while authoring tests; new
-  consumer dependencies limited to `allure-junit5:2.29.1`, a JSON-Schema 2020-12 validator
-  (+ jackson) for the JSON track, and the JDBC driver — each human-approved.
+  consumer dependencies limited to `allure-junit5:2.29.1` and the JDBC driver — each
+  human-approved. The JSON track needs none: the JSON-Schema validator was required only for the
+  schema resource that shipped in `stand-test-ai-schema`, removed on 2026-08-12.
 
 ## Definition of done for a generated test
 
 - Java: compiles + checkstyle-clean; gated with `@EnabledIfEnvironmentVariable` (skips
   without stand config); AssertJ-only assertions.
-- AI-format document: JSON Schema validation EMPTY + `AiScenarioParser` parse clean +
-  `DefaultScenarioValidator().validate(scenario, registry)` clean.
+- AI-format document: `AiScenarioParser` parse clean + `DefaultScenarioValidator().validate(scenario,
+  registry)` clean. **Both gates run after the document is loaded** — the pre-flight JSON Schema pass
+  no longer exists, so a document that has not been parsed has not been checked at all.
 - Safety review PASS + quality review APPROVE + human approval on the validation report.

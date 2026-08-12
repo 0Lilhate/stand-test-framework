@@ -1,5 +1,5 @@
 ---
-description: 'Final readiness gate for a generated stand-test artifact: schema/compile/run(skip-gate)/safety/quality reviews producing a READY/NOT-READY report for human approval.'
+description: 'Final readiness gate for a generated stand-test artifact: parse+guardrail validation, compile, run (skip-gate), safety and quality reviews, producing a READY/NOT-READY report for human approval.'
 version: 1
 ---
 
@@ -19,11 +19,14 @@ Validation report: verdict `READY` / `READY-WITH-NOTES` / `NOT-READY`, evidence 
 
 ## Steps
 
-1. **Schema validation** (AI-format artifacts only):
-   - networknt `V202012` vs `AiSchemaResources.scenarioSchemaJson()` → empty message set;
+1. **Parse + guardrail validation** (AI-format artifacts only):
    - `new AiScenarioParser().parse(...)` → no exception;
    - `new DefaultScenarioValidator().validate(scenario, registry).throwIfInvalid()` → no
      exception (registry overload only — the one-arg form skips all guardrails).
+
+   Both gates run **after** the document is loaded. The pre-flight JSON Schema pass went with
+   `stand-test-ai-schema` (removed 2026-08-12) and nothing replaced it, so report this stage as the
+   two gates it is — claiming a schema gate that did not run is a false READY.
 2. **Compile** — `./gradlew compileTestJava checkstyleTest` in the consumer project
    (Java artifacts; the runner test for AI-format artifacts counts too).
 3. **Run the module test** — `./gradlew test --tests '<generated class>'`:

@@ -33,13 +33,15 @@ stretching the format.
 2. **Generate fixtures** — run
    [`stand-test-fixture-authoring`](../skills/stand-test-fixture-authoring/SKILL.md) for every
    `fixture:` reference (same change set; no dangling references).
-3. **Validate against the schema** — networknt `V202012` over
-   `AiSchemaResources.scenarioSchemaJson()`; the validation message set must be EMPTY.
-   Then the **parse gate**: `new AiScenarioParser().parse(document)` must not throw, and
-   `new DefaultScenarioValidator().validate(scenario, registry).throwIfInvalid()` must pass
+3. **Parse gate, then guardrail gate** — `new AiScenarioParser().parse(document)` must not throw,
+   and `new DefaultScenarioValidator().validate(scenario, registry).throwIfInvalid()` must pass
    (registry overload — the one-arg `validate(scenario)` is structural-only).
    A parser rejection ("not executable yet", "only executable for REST assertions") means the
    document left the executable subset — fix or fall back to Workflow 3.
+   **There is no schema gate before this one.** The JSON Schema that used to state the surface
+   before a document was loaded shipped in `stand-test-ai-schema`, removed on 2026-08-12. The
+   parser is now the format's first and only pre-runtime check, so a document is not "valid" until
+   it has been LOADED — read its fail-closed rejections as the schema errors used to be read.
 4. **Safety review** — run
    [`stand-test-safety-review`](../skills/stand-test-safety-review/SKILL.md) over document +
    fixtures + runner test, in the `stand-test-safety-reviewer` SUBAGENT. Any BLOCK finding →
@@ -53,13 +55,14 @@ stretching the format.
 
 ## Mandatory checks
 
-- [ ] Schema validation empty; parse gate green; guardrail self-check green.
+- [ ] Parse gate green; guardrail self-check green (registry overload).
 - [ ] Every fixture referenced exists; paths relative, no `..`.
-- [ ] Step ids unique (schema does not check this — verify manually).
+- [ ] Step ids unique — **nothing checks this**; verify manually.
 - [ ] Safety review verdict PASS / PASS-WITH-NOTES.
 
 ## Human approval points (blocking)
 
-- Adding the JSON-Schema validator dependency (`com.networknt:json-schema-validator` +
-  `jackson-databind`) to the consumer build, if not already present.
 - Final artifact approval before commit (via Workflow 4's report).
+
+The JSON track needs **no extra build dependency**. `com.networknt:json-schema-validator` +
+`jackson-databind` were required only to run the removed schema resource.

@@ -135,9 +135,15 @@ public final class EnvironmentRegistryFactory {
     }
 
     /**
-     * Maps a UI application's sign-in section. Credentials here are references only — there is deliberately
-     * no value twin, so a UI credential cannot be routed through the Spring Environment the way an endpoint
-     * value can.
+     * Maps a UI application's sign-in section, refusing any field whose format version the document does not
+     * declare — {@code auth.login}/{@code auth.challenge} arrived in version 3, the direct credential pair in
+     * version 4, its {@code *-ref} twins in version 5.
+     *
+     * <p>The account roster and the discovery account are references only: there is deliberately no value
+     * twin for either, so neither can be routed through (and left in) the Spring Environment the way an
+     * endpoint value can. The single-account pair is the one credential that has a twin here, and what its
+     * two spellings mean depends on the declared version — see {@link #uiCredential}, which owns that rule
+     * for both front-ends.
      */
     private static UiAuthConfig uiAuth(StandTestProperties.UiAuth auth, String alias, String environment, int version) {
         if (auth == null) {

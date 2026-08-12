@@ -89,15 +89,21 @@ The KB mirrors the `EnvironmentRegistry` model — on any conflict **the SDK win
    its `serviceId`/`datasourceId` (validation cross-checks this).
 4. Add the environment binding (`environments/*.yml`) for every `allowedEnvironments` entry —
    an entry without a binding cannot run anywhere.
-5. Validate before committing. In THIS repo: the KB validation tests in `stand-test-ai-schema`
-   (`./gradlew :stand-test-ai-schema:test`) check schema conformance, referential integrity and
-   scan every string for secret/URL shapes. In a CONSUMER repo: copy
-   `stand-test-ai-schema/src/test/java/ru/alfa/stand/test/ai/KnowledgeBaseSchemaValidationTest.java`
-   as a starting point (test deps: `com.networknt:json-schema-validator` + `jackson-databind` +
-   `org.yaml:snakeyaml`), point it at `knowledge-base/`, and keep it in the
-   regular test run; until that test exists, the schema check is manual and
+5. Validate before committing — with the kit's own tooling, which travels with the bundle and needs
+   no build dependency:
+
+   ```bash
+   node .claude/hooks/stand-guard.mjs kb-validate    # schema conformance + secret/URL scan
+   node .claude/hooks/stand-guard.mjs kb-status      # what the KB holds; aliases the registry has and it lacks
+   node .claude/hooks/stand-guard.mjs alias-check    # registry ⇄ KB aliases
+   ```
+
+   The Gradle KB validation tests (`:stand-test-ai-schema:test`) and the
+   `KnowledgeBaseSchemaValidationTest` this section used to point at were removed with that module on
+   2026-08-12 — do not look for them. `kb-validate` is now the check in BOTH repositories, which is
+   also the point: it runs where the KB is used rather than only where the SDK is built.
    [`kb-entry-review-checklist.md`](../.claude/skills/stand-test-kb-update/kb-entry-review-checklist.md)
-   is the gate.
+   remains the human half of the gate.
 6. A KB change is stand configuration — a HUMAN approves it, like a registry addition.
 
 ## Secrets: what may never appear here

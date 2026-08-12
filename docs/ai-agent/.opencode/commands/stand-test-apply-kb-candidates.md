@@ -41,9 +41,10 @@ is reported and skipped.
 7. **Update provenance links** — append `promotion-log.yml` (curatedId → documentId/version/date/
    promotedAt). A skipped append fails the apply closed. Stamp promoted candidates `status: applied`.
 8. **Produce the diff**; run `/stand-test-generate-env` for any new env-var refs.
-9. **Run KB validation** — `./gradlew :stand-test-ai-schema:test` (this repo).
-10. **Close the write.** At a consumer, where the schema tests do not exist:
-   `node <bundle>/hooks/stand-guard.mjs kb-validate --exit-code` and `alias-check`, then
+9. **Run KB validation** — `node <bundle>/hooks/stand-guard.mjs kb-validate --exit-code`, in this
+   repo and at a consumer alike (the Gradle schema tests went with `stand-test-ai-schema`).
+10. **Close the write.**
+   `node <bundle>/hooks/stand-guard.mjs alias-check`, then
    `node <bundle>/hooks/stand-guard.mjs record-gate --gate kb-write --verdict PASS <files>` — until
    that verdict is recorded the session will not end, because a curated write nobody re-read breaks
    not this session but the next generated test.

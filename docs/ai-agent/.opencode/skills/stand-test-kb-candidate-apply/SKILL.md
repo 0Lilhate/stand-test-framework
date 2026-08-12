@@ -62,10 +62,11 @@ Anything failing a precondition is reported and skipped; it is never written.
    promoted candidate `status: applied`.
 8. **Produce the diff** (kb-update's report) and, for any new env-var refs the promoted entries
    introduce, run `/stand-test-generate-env` (refs only, diff before apply).
-9. **Run KB validation** — `./gradlew :stand-test-ai-schema:test` (this repo); re-run the schema over
+9. **Run KB validation** — `node <bundle>/hooks/stand-guard.mjs kb-validate --exit-code` (both
+   repositories; the Gradle schema tests went with `stand-test-ai-schema`); re-run the schema over
    every touched curated file.
-10. **Close the write.** At a consumer, where the schema tests do not exist:
-   `node <bundle>/hooks/stand-guard.mjs kb-validate --exit-code` and `alias-check`, then
+10. **Close the write.**
+   `node <bundle>/hooks/stand-guard.mjs alias-check`, then
    `node <bundle>/hooks/stand-guard.mjs record-gate --gate kb-write --verdict PASS <files>` — until
    that verdict is recorded the session will not end, because a curated write nobody re-read breaks
    not this session but the next generated test.
