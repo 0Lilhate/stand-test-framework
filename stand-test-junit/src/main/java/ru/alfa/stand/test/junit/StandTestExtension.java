@@ -20,9 +20,9 @@ import ru.alfa.stand.test.core.StandClient;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.event.NoOpReportingEventPublisher;
 import ru.alfa.stand.test.core.event.ReportingEventPublisher;
+import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.execution.DefaultScenarioRunner;
 import ru.alfa.stand.test.core.execution.ScenarioRunner;
-import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.execution.StepExecutor;
 import ru.alfa.stand.test.core.validation.DefaultScenarioValidator;
 
@@ -86,18 +86,28 @@ public final class StandTestExtension implements ParameterResolver {
 
     @Override
     public Object resolveParameter(ParameterContext parameterContext, ExtensionContext extensionContext) {
+        boolean asStandScenarioId = parameterContext.isAnnotated(StandScenarioId.class);
+        boolean asEnvironment = parameterContext.isAnnotated(StandEnv.class);
+        // The misuse checks run BEFORE the injectable types, so that `@StandEnv StandClient` is refused
+        // rather than quietly given a client. Dispatching on the type first would exempt exactly the two
+        // types this extension injects — the ones a reader is most likely to annotate by mistake.
+        if (asStandScenarioId || asEnvironment) {
+            return declaredString(parameterContext, extensionContext, asStandScenarioId, asEnvironment);
+        }
         Class<?> type = parameterContext.getParameter().getType();
         if (type == Awaiter.class) {
             return Awaiter.create();
         }
-        if (type == StandClient.class) {
-            return standClient(extensionContext);
-        }
-        boolean asStandScenarioId = parameterContext.isAnnotated(StandScenarioId.class);
-        boolean asEnvironment = parameterContext.isAnnotated(StandEnv.class);
+        // The only remaining type supportsParameter claims.
+        return standClient(extensionContext);
+    }
+
+    private static String declaredString(
+            ParameterContext parameterContext, ExtensionContext extensionContext, boolean asStandScenarioId, boolean asEnvironment) {
         if (asStandScenarioId && asEnvironment) {
             throw new ParameterResolutionException("A parameter must not carry both @StandScenarioId and @StandEnv");
         }
+        Class<?> type = parameterContext.getParameter().getType();
         if (type != String.class) {
             throw new ParameterResolutionException(
                     "@StandScenarioId and @StandEnv may only annotate a String parameter, but found " + type.getTypeName());
@@ -166,14 +176,14 @@ public final class StandTestExtension implements ParameterResolver {
     }
 
     private static StandClient buildStandClient() {
-        List<StepExecutor> executors = new ArrayList<>();
-        ServiceLoader.load(StepExecutor.class).forEach(executors::add);
-        // Reporting and environment wiring are discovered through the same SPI as the executors, so junit
-        // gains no compile-time edge to any adapter (plan §8.5/§17). Exactly ONE provider is allowed per
-        // SPI: with more than one the pick would be silently classpath-order-dependent, so the build of
-        // the client fails loudly instead. With no reporting provider the NoOp publisher keeps behaviour
-        // unchanged; with no registry provider the fallback raises a distinct "no provider on the test
-        // classpath" diagnostic at first lookup instead of a misleading "not whitelisted" failure.
+        // All three collaborators are discovered through the same SPI, so junit gains no compile-time edge
+        // to any adapter (plan §8.5/§17). Executors are a list by design — every adapter contributes one.
+        // The other two are singular, and exactly ONE provider is allowed: with more than one the pick
+        // would be silently classpath-order-dependent, so building the client fails loudly instead. With
+        // no reporting provider the NoOp publisher keeps behaviour unchanged; with no registry provider
+        // the fallback raises a distinct "no provider on the test classpath" diagnostic at first lookup
+        // instead of a misleading "not whitelisted" failure.
+        List<StepExecutor> executors = providers(StepExecutor.class);
         ReportingEventPublisher publisher = uniqueProvider(providers(ReportingEventPublisher.class), ReportingEventPublisher.class)
                 .orElse(NoOpReportingEventPublisher.INSTANCE);
         EnvironmentRegistry registry = uniqueProvider(providers(EnvironmentRegistry.class), EnvironmentRegistry.class)

@@ -1,16 +1,7 @@
-// stand-test-junit — JUnit 5 integration layer: the bridge between the JUnit lifecycle and the SDK.
-//
-// It registers a StandTestExtension that resolves a StandClient (assembled from StepExecutor SPI
-// implementations discovered on the classpath) and an Awaiter as test parameters, without Spring.
-// SDK failures need no translation: StandTestAssertionError extends AssertionError and
-// StandTestException extends RuntimeException, so the runner's thrown failures are native JUnit
-// failures/errors.
-//
-// Internal dependencies follow the target graph (docs/arch §4, §5): junit -> core, junit -> await.
-// Both are `api`: the resolved StandClient/Scenario and Awaiter parameter types are part of this
-// module's public test API.
-//
-// Shared Java / checkstyle / jacoco / publishing configuration comes from the root `subprojects { }`.
+// stand-test-junit — the JUnit 5 ↔ SDK bridge; see README.md. One dependency decision worth stating:
+// core and await are `api`, not `implementation`, because the types this extension RESOLVES INTO a
+// consumer's test signature (StandClient, Scenario, Awaiter) come from them — a consumer cannot write
+// `void test(StandClient stand)` without them on its compile classpath.
 
 dependencies {
   api(platform(libs.junit.bom))

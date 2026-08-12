@@ -53,8 +53,8 @@ The cached `StandClient` lives at the JUnit **engine-root** store, so under
 `junit.jupiter.execution.parallel.enabled=true` the same runner/executors serve every test thread. That is
 safe because the runner keeps per-run state thread-confined (unique `testRunId`/`correlationId`, per-run
 `VariableStore`); parallelise at the scenario/class level, never the steps of one scenario (see the root
-README's *Parallel execution* and plan §15). This module ships three thin opt-out facades over JUnit's own
-annotations for tests that cannot be `testRunId`-isolated:
+README's *Parallel execution* and plan §15). This module ships three thin facades over JUnit's own
+annotations — one stating the intent, two opting out for tests that cannot be `testRunId`-isolated:
 
 - `@StandParallelSafe` → `@Execution(CONCURRENT)` — explicit "safe to run concurrently".
 - `@StandSerial` → `@Execution(SAME_THREAD)` — serialise one class's methods.

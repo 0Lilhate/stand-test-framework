@@ -205,6 +205,17 @@ class StandTestExtensionTest {
     }
 
     @Test
+    @DisplayName("the misuse check wins over the injectable types: @StandEnv on a StandClient (or @StandScenarioId on an Awaiter) fails instead of quietly injecting one")
+    void annotatedInjectableType_failsResolution() {
+        EngineTestKit.engine("junit-jupiter")
+                .selectors(selectClass(AnnotatedInjectableTypeFixture.class))
+                .execute()
+                .testEvents()
+                .assertThatEvents()
+                .haveExactly(2, finishedWithFailure(instanceOf(ParameterResolutionException.class)));
+    }
+
+    @Test
     @DisplayName("@StandTest(env) does not leak into @StandScenarioId resolution")
     void standTestEnv_doesNotLeakIntoStandScenarioId() {
         EngineTestKit.engine("junit-jupiter")
@@ -433,6 +444,22 @@ class StandTestExtensionTest {
         @Test
         void rejectsNonString(@StandEnv int env) {
             assertThat(env).isZero();
+        }
+    }
+
+    @StandTest
+    @StandEnv("ift")
+    @Tag("standtest-fixture")
+    static class AnnotatedInjectableTypeFixture {
+
+        @Test
+        void rejectsAnnotatedStandClient(@StandEnv StandClient stand) {
+            assertThat(stand).isNull();
+        }
+
+        @Test
+        void rejectsAnnotatedAwaiter(@StandScenarioId Awaiter awaiter) {
+            assertThat(awaiter).isNull();
         }
     }
 
