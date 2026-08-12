@@ -74,6 +74,18 @@ class AwaitResultTest {
     }
 
     @Test
+    @DisplayName("a mapper that built its exception with an explicit null cause still raises that exception, not the JDK's refusal to re-initialise it")
+    void orElseThrow_mapperPassedAnExplicitNullCause() {
+        RuntimeException probeError = new IllegalStateException("probe");
+        AwaitResult<String> result = AwaitResult.timedOut("PENDING", 3, Duration.ofSeconds(1), probeError, diagnostics());
+
+        assertThatThrownBy(() -> result.orElseThrow(diag -> new StandTestException(diag.summary(), null)))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("not satisfied within")
+                .hasNoCause();
+    }
+
+    @Test
     @DisplayName("a satisfied result may not carry diagnostics or a last error")
     void satisfiedInvariant_isEnforced() {
         TimeoutDiagnostics diagnostics = diagnostics();

@@ -1,15 +1,9 @@
-// stand-test-await — polling / retry / wait-for-condition primitives built on top of core.
+// stand-test-await — the SDK's single await mechanism; see README.md. Two dependency decisions:
 //
-// Transport-agnostic by contract: the awaiter waits on a caller-supplied probe/predicate and knows
-// nothing about REST/Kafka/DB/gRPC (plan §4 stand-test-await). It is the single mechanism every
-// adapter uses instead of `Thread.sleep` (plan §2.4/§2.5).
-//
-// Runtime dependencies are intentionally limited to `stand-test-core`: no third-party polling engine
-// (Awaitility) is pulled in, so consumers of the SDK never inherit/conflict with a transitive
-// Awaitility version. `api` is used because await re-exposes core types (e.g. StandTestException) on
-// its public surface and every adapter that depends on await also needs core.
-//
-// Shared Java / checkstyle / jacoco / publishing configuration comes from the root `subprojects { }`.
+//  - no third-party polling engine (Awaitility): a consumer of the SDK never inherits or conflicts with
+//    a transitive version of one, which is worth more than the ~100 lines the engine costs to own.
+//  - core is `api`, not `implementation`: await re-exposes core types (StandTestException) on its own
+//    public surface, and every adapter depending on await needs core anyway.
 
 dependencies {
   api(project(":stand-test-core"))

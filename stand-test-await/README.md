@@ -28,7 +28,7 @@ in, so consumers never inherit/conflict with a transitive version).
 | `DefaultAwaiter` | Minimal polling loop; constructed with a `TimeSource` (defaults to the system one). |
 | `AwaitPolicy` | Immutable timing/behaviour: `description`, `timeout`, `pollInterval`, `pollDelay`, `ignoreExceptions`. |
 | `AwaitResult<T>` | Outcome: `satisfied`, `value`, `attempts`, `elapsed`, `lastError`, `timeoutDiagnostics`. |
-| `TimeoutDiagnostics` | Why it timed out: description, timeout, interval, attempts, elapsed, last value/error, free-form `attributes` (scenarioId/testRunId/correlationId/probe details). `toMap()`/`summary()` for reporting. |
+| `TimeoutDiagnostics` | Why it timed out: description, timeout, interval, attempts, elapsed, last value/error, free-form `attributes`. `summary()` renders one line for an exception message; `toMap()` renders the structured form. |
 | `TimeSource` | Monotonic reading + sleep seam; `TimeSource.system()` in production. |
 
 ## Usage sketch
@@ -49,5 +49,11 @@ String status = awaiter
 ## Not here
 
 No transport logic, no reporting/Allure wiring, no scenario execution — the awaiter is a primitive the
-adapters and runner build on. Diagnostics are surfaced via `TimeoutDiagnostics` (its `toMap()` feeds a
-`StepEvent`/`StepResult` diagnostics map); the awaiter does not publish reporting events itself.
+adapters and runner build on. It publishes no reporting events itself: it returns `TimeoutDiagnostics`
+and the caller decides what to do with them.
+
+> **Known gap.** Every adapter (`rest`, `kafka`, `db`, `ui`) takes only `summary()` and embeds it in the
+> failure message, so a timed-out await reaches a report as prose. `toMap()` and `withAttribute(...)` —
+> the structured form and the slot for `scenarioId`/`testRunId`/`correlationId` — have no production
+> caller, and `DefaultAwaiter` always builds an empty attribute map. The types are designed for a
+> `StepResult`/`StepEvent` diagnostics map that nothing currently fills from here.

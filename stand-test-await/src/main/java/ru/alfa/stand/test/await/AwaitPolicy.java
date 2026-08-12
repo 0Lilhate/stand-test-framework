@@ -10,16 +10,20 @@ import java.util.Objects;
  * <p>{@code description} is the human-readable name of the await (for example
  * {@code "kafka.expect response-topic"}); it is carried into {@link TimeoutDiagnostics} and timeout
  * messages so a failure is self-explanatory. {@code timeout} and {@code pollInterval} must be strictly
- * positive; {@code pollDelay} is an optional non-negative initial wait performed before the first
- * probe. When {@code ignoreExceptions} is {@code true} (the default) a probe/predicate that throws is
- * treated as "not satisfied yet" and polling continues — the last error is captured in diagnostics;
- * when {@code false} such an exception aborts the await and propagates to the caller.
+ * positive; {@code pollDelay} is an optional non-negative initial wait performed before the first probe
+ * and is spent out of the timeout rather than added to it (see {@link DefaultAwaiter}). When
+ * {@code ignoreExceptions} is {@code true} (the default) a probe/predicate that throws a
+ * {@link RuntimeException} is treated as "not satisfied yet" and polling continues — the last error is
+ * captured in diagnostics; when {@code false} it aborts the await and propagates to the caller. An
+ * {@link Error} (an {@code AssertionError} from a probe that asserts, say) always propagates, whichever
+ * way the flag is set: the await engine retries transient failures, not broken expectations.
  *
  * @param description the human-readable name of what is being awaited
  * @param timeout the maximum total time to wait (strictly positive)
  * @param pollInterval the wait between consecutive probes (strictly positive)
- * @param pollDelay the initial wait before the first probe (non-negative)
- * @param ignoreExceptions whether a throwing probe/predicate is treated as "not yet satisfied"
+ * @param pollDelay the initial wait before the first probe (non-negative), taken out of the timeout
+ * @param ignoreExceptions whether a probe/predicate throwing a {@link RuntimeException} is treated as
+ *     "not yet satisfied"
  */
 public record AwaitPolicy(
         String description,
@@ -132,7 +136,7 @@ public record AwaitPolicy(
         }
 
         /**
-         * Sets the initial wait before the first probe.
+         * Sets the initial wait before the first probe. It is spent out of the timeout, not added to it.
          *
          * @param pollDelay the initial delay
          * @return this builder
@@ -143,8 +147,8 @@ public record AwaitPolicy(
         }
 
         /**
-         * Sets whether a throwing probe/predicate is treated as "not yet satisfied" (true) or aborts
-         * the await (false).
+         * Sets whether a probe/predicate throwing a {@link RuntimeException} is treated as "not yet
+         * satisfied" (true) or aborts the await (false). An {@link Error} propagates either way.
          *
          * @param ignoreExceptions the exception-handling flag
          * @return this builder
