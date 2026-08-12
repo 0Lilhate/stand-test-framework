@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -39,6 +40,9 @@ public final class SecretMasker {
     private static final List<String> SENSITIVE_MARKERS =
             List.of("password", "secret", "token", "authorization", "apikey", "cookie");
 
+    /** Everything a key may spell a marker with — {@code X-Api-Key} and {@code apiKey} both reduce to {@code apikey}. */
+    private static final Pattern KEY_SEPARATORS = Pattern.compile("[^a-z0-9]");
+
     private static final Pattern CREDENTIAL_SHAPED_VALUE =
             Pattern.compile("^\\s*(?i:bearer|basic)\\s+[A-Za-z0-9+/=_.\\-]{8,}\\s*$");
 
@@ -59,7 +63,7 @@ public final class SecretMasker {
         if (key == null) {
             return false;
         }
-        String normalized = key.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
+        String normalized = KEY_SEPARATORS.matcher(key.toLowerCase(Locale.ROOT)).replaceAll("");
         for (String marker : SENSITIVE_MARKERS) {
             if (normalized.contains(marker)) {
                 return true;
@@ -122,26 +126,22 @@ public final class SecretMasker {
     }
 
     private String maskJsonScalarFields(String content) {
-        Matcher matcher = JSON_SCALAR_FIELD.matcher(content);
-        StringBuilder masked = new StringBuilder();
-        while (matcher.find()) {
-            String replacement = isSensitive(matcher.group(1))
-                    ? "\"" + matcher.group(1) + "\"" + matcher.group(2) + "\"" + MASK + "\""
-                    : matcher.group();
-            matcher.appendReplacement(masked, Matcher.quoteReplacement(replacement));
-        }
-        matcher.appendTail(masked);
-        return masked.toString();
+        return replaceEach(JSON_SCALAR_FIELD, content, match -> isSensitive(match.group(1))
+                ? "\"" + match.group(1) + "\"" + match.group(2) + "\"" + MASK + "\""
+                : match.group());
     }
 
     private String maskEmbeddedCredentials(String content) {
-        Matcher matcher = EMBEDDED_CREDENTIAL.matcher(content);
+        return replaceEach(EMBEDDED_CREDENTIAL, content, match -> looksLikeCredentialToken(match.group(3))
+                ? match.group(1) + match.group(2) + MASK
+                : match.group());
+    }
+
+    private static String replaceEach(Pattern pattern, String content, Function<Matcher, String> replacement) {
+        Matcher matcher = pattern.matcher(content);
         StringBuilder masked = new StringBuilder();
         while (matcher.find()) {
-            String replacement = looksLikeCredentialToken(matcher.group(3))
-                    ? matcher.group(1) + matcher.group(2) + MASK
-                    : matcher.group();
-            matcher.appendReplacement(masked, Matcher.quoteReplacement(replacement));
+            matcher.appendReplacement(masked, Matcher.quoteReplacement(replacement.apply(matcher)));
         }
         matcher.appendTail(masked);
         return masked.toString();

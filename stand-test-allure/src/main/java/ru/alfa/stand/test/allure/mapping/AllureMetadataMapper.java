@@ -55,10 +55,8 @@ public final class AllureMetadataMapper {
      * @return the ordered, masked parameter map
      */
     public Map<String, String> scenarioParameters(ScenarioEvent event) {
-        Map<String, String> parameters = new LinkedHashMap<>();
-        parameters.put("scenarioId", event.scenarioId().value());
-        parameters.put("testRunId", event.testRunId().value());
-        parameters.put("correlationId", event.correlationId().value());
+        Map<String, String> parameters = identity(
+                event.scenarioId().value(), event.testRunId().value(), event.correlationId().value());
         parameters.put("environment", event.environment());
         return secretMasker.mask(parameters);
     }
@@ -71,12 +69,19 @@ public final class AllureMetadataMapper {
      * @return the ordered, masked parameter map
      */
     public Map<String, String> stepParameters(StepEvent event) {
-        Map<String, String> parameters = new LinkedHashMap<>();
-        parameters.put("scenarioId", event.scenarioId().value());
-        parameters.put("testRunId", event.testRunId().value());
-        parameters.put("correlationId", event.correlationId().value());
+        Map<String, String> parameters = identity(
+                event.scenarioId().value(), event.testRunId().value(), event.correlationId().value());
         parameters.put("stepId", event.stepId());
         parameters.put("stepType", event.stepType());
         return secretMasker.mask(parameters);
+    }
+
+    /** The run identity both surfaces open with, in the order the report shows it. */
+    private static Map<String, String> identity(String scenarioId, String testRunId, String correlationId) {
+        Map<String, String> parameters = new LinkedHashMap<>();
+        parameters.put("scenarioId", scenarioId);
+        parameters.put("testRunId", testRunId);
+        parameters.put("correlationId", correlationId);
+        return parameters;
     }
 }

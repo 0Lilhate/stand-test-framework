@@ -5,6 +5,8 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Objects;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ru.alfa.stand.test.allure.attachment.AllureAttachmentPublisher;
 import ru.alfa.stand.test.allure.lifecycle.AllureLifecycleFacade;
 import ru.alfa.stand.test.allure.lifecycle.AllureStatus;
@@ -42,6 +44,8 @@ import ru.alfa.stand.test.core.event.StepPhase;
  */
 public final class AllureReportingEventPublisher implements ReportingEventPublisher {
 
+    private static final Logger LOG = LoggerFactory.getLogger(AllureReportingEventPublisher.class);
+
     private final AllureLifecycleFacade lifecycle;
     private final AllureStepMapper stepMapper;
     private final AllureMetadataMapper metadataMapper;
@@ -69,13 +73,11 @@ public final class AllureReportingEventPublisher implements ReportingEventPublis
     /**
      * Creates a publisher reading file attachments from an explicitly given artefacts directory.
      *
-     * <p>The directory is what makes the file channel usable at all: the attachment publisher refuses
-     * every file it cannot prove belongs to the run, so a publisher built without one silently drops every
-     * screenshot. That is not a hypothetical — it is what the SPI-constructed publisher did until
-     * UITG-F003's manual run, because the only production constructor passed no directory and no test
-     * covered the composition. Both other constructors now resolve it through {@link RunArtifacts}, the
-     * single definition the producing adapter reads too; this one exists for a consumer that keeps its
-     * artefacts somewhere else, and for tests that want a temporary directory.
+     * <p>The directory is what makes the file channel usable at all: the attachment publisher refuses every
+     * file it cannot prove belongs to the run, so a publisher built without one silently drops every
+     * screenshot (UITG-F003). The other constructors resolve it through {@link RunArtifacts}, the single
+     * definition the producing adapter reads too; this one exists for a consumer that keeps its artefacts
+     * somewhere else, and for tests that want a temporary directory.
      *
      * @param lifecycle the Allure lifecycle facade
      * @param artifactsRoot the run's artefacts directory; null refuses every file attachment
@@ -94,19 +96,14 @@ public final class AllureReportingEventPublisher implements ReportingEventPublis
             if (event.phase() == ScenarioPhase.STARTED) {
                 lifecycle.updateTestCase(metadataMapper.scenarioLabels(event), metadataMapper.scenarioParameters(event));
             } else if (event.phase() == ScenarioPhase.FINISHED) {
-                // Bind per-thread cleanup to the run boundary (plan §15). The runner always emits
-                // ScenarioPhase.FINISHED (in a finally), so the per-thread step stack is reset between runs
-                // even if a mid-run lifecycle call threw and left an orphaned uuid — a reused pool thread
-                // under JUnit parallel execution never inherits a stale entry. Closing the Allure test case
+                // The runner always emits FINISHED (in a finally), so binding the cleanup here resets the
+                // per-thread stack between runs even when a mid-run lifecycle call left an orphaned uuid —
+                // a reused pool thread never inherits a stale entry (plan §15). Closing the Allure test case
                 // itself stays with the JUnit/Allure integration.
                 stepUuids.remove();
             }
         } catch (Throwable reportingFailure) {
-            // Reporting is a best-effort side-channel (plan §17): a rendering error must never change the
-            // test outcome. Throwable (not just RuntimeException) is swallowed so an Error from a
-            // version-skewed allure-model (LinkageError/NoClassDefFoundError on the consumer classpath)
-            // cannot escape this sink and replace the primary test failure. Swallowed; becomes a WARN log
-            // once SLF4J is wired.
+            swallow(reportingFailure);
         }
     }
 
@@ -119,19 +116,26 @@ public final class AllureReportingEventPublisher implements ReportingEventPublis
                 finishStep(event);
             }
         } catch (Throwable reportingFailure) {
-            // Reporting is a best-effort side-channel (plan §17): a rendering error must never change the
-            // test outcome (and must never hide an SDK failure). Throwable (not just RuntimeException) is
-            // swallowed so an Error from a version-skewed allure-model cannot escape this sink and replace
-            // the primary test failure. Swallowed; becomes a WARN log later.
+            swallow(reportingFailure);
         }
+    }
+
+    /**
+     * Reporting is a best-effort side-channel (plan §17): a rendering error must never change the test
+     * outcome or hide an SDK failure. {@link Throwable} rather than {@link RuntimeException}, so an Error
+     * from a version-skewed allure-model on the consumer classpath (LinkageError/NoClassDefFoundError)
+     * cannot escape this sink either. The failure is logged, never rethrown.
+     */
+    private static void swallow(Throwable reportingFailure) {
+        LOG.warn("Allure reporting failed and was ignored so the test outcome stays untouched", reportingFailure);
     }
 
     private void startStep(StepEvent event) {
         String uuid = UUID.randomUUID().toString();
         lifecycle.startStep(uuid, stepMapper.stepName(event));
-        // Push only after the lifecycle accepted the step, so a thrown startStep (swallowed by the publish()
-        // guard) leaves the per-thread stack balanced: the paired FINISHED then synthesises its own step
-        // rather than closing a step Allure never opened.
+        // Push only after the lifecycle accepted the step: a thrown startStep then leaves the per-thread
+        // stack balanced, and the paired FINISHED synthesises its own step rather than closing one Allure
+        // never opened.
         stepUuids.get().push(uuid);
     }
 
@@ -153,9 +157,8 @@ public final class AllureReportingEventPublisher implements ReportingEventPublis
             }
             lifecycle.stopStep(uuid);
         } finally {
-            // Guarantee the per-thread stack is cleaned up even if a (best-effort) lifecycle call throws,
-            // so a reused pool thread never inherits an orphaned entry. The publish() guard swallows the
-            // throwable; this finally only restores the ThreadLocal invariant.
+            // Restores the ThreadLocal invariant even when a lifecycle call threw, so a reused pool thread
+            // never inherits an orphaned entry.
             if (stack.isEmpty()) {
                 stepUuids.remove();
             }

@@ -36,18 +36,8 @@ public final class AllureAttachmentPublisher {
     private final Path artifactsRoot;
 
     /**
-     * Creates a publisher writing through the given lifecycle facade and masking with the given masker.
-     *
-     * @param lifecycle the lifecycle facade to write attachments through
-     * @param secretMasker the masker applied to rendered key/value blocks
-     */
-    public AllureAttachmentPublisher(AllureLifecycleFacade lifecycle, SecretMasker secretMasker) {
-        this(lifecycle, secretMasker, null);
-    }
-
-    /**
-     * Creates a publisher that may additionally publish FILE-backed attachments, but only those living
-     * inside {@code artifactsRoot}.
+     * Creates a publisher that may publish FILE-backed attachments, but only those living inside
+     * {@code artifactsRoot}.
      *
      * @param lifecycle the lifecycle facade to write attachments through
      * @param secretMasker the masker applied to textual bodies and rendered key/value blocks
@@ -78,19 +68,17 @@ public final class AllureAttachmentPublisher {
     }
 
     /**
-     * Publishes a file-backed attachment, refusing anything the run did not produce.
+     * Publishes a file-backed attachment, refusing anything the run did not produce (ADR-UI-005).
      *
-     * <p>The channel became file-backed with ADR-UI-005, and that turned a reporting sink into something
-     * that opens a path somebody else chose. Left unguarded it is a file-disclosure channel: a path
-     * containing {@code ../}, or a symlink pointing out of the run directory, would put an arbitrary file
-     * into a report that is then attached to a ticket. So the path is resolved to its real location —
-     * which is what follows symlinks — and must lie inside the run's artefacts directory.
+     * <p>A sink that opens a path somebody else chose is a file-disclosure channel: a path containing
+     * {@code ../}, or a symlink pointing out of the run directory, would put an arbitrary file into a
+     * report that is then attached to a ticket. So the path is resolved to its real location — which is
+     * what follows symlinks — and must lie inside the run's artefacts directory. With no artefacts root
+     * configured EVERY file is refused: a sink that does not know which directory belongs to the run
+     * cannot tell an artefact from {@code /etc/passwd}.
      *
-     * <p>Fail-closed twice over. With no artefacts root configured, EVERY file attachment is refused
-     * rather than published: a sink that does not know which directory belongs to the run cannot tell an
-     * artefact from {@code /etc/passwd}. And every refusal is a WARN plus a skipped attachment, never an
-     * exception — reporting is a side-channel and must not change a test outcome (plan §17). A missing
-     * file is the same: the run keeps going without the picture.
+     * <p>Every refusal is a WARN plus a skipped attachment, never an exception — reporting is a
+     * side-channel and must not change a test outcome (plan §17). A missing file is the same.
      */
     private void publishFile(Attachment attachment) {
         Path file = attachment.file();
@@ -123,26 +111,6 @@ public final class AllureAttachmentPublisher {
     }
 
     /**
-     * Publishes a plain-text attachment.
-     *
-     * @param name the attachment name
-     * @param content the text content (ignored when null)
-     */
-    public void publishText(String name, String content) {
-        publishTyped(name, AttachmentType.TEXT, content);
-    }
-
-    /**
-     * Publishes a JSON attachment.
-     *
-     * @param name the attachment name
-     * @param content the JSON content (ignored when null)
-     */
-    public void publishJson(String name, String content) {
-        publishTyped(name, AttachmentType.JSON, content);
-    }
-
-    /**
      * Publishes a step's diagnostics map as a masked key/value attachment named {@code diagnostics}.
      * Empty or null diagnostics produce no attachment.
      *
@@ -170,13 +138,6 @@ public final class AllureAttachmentPublisher {
         entries.forEach((key, value) -> stringified.put(key, String.valueOf(value)));
         String rendered = render(secretMasker.mask(stringified));
         lifecycle.addAttachment(name, AttachmentType.KEY_VALUE.mediaType(), AttachmentType.KEY_VALUE.fileExtension(), rendered);
-    }
-
-    private void publishTyped(String name, AttachmentType type, String content) {
-        if (content == null) {
-            return;
-        }
-        lifecycle.addAttachment(name, type.mediaType(), type.fileExtension(), secretMasker.maskText(content));
     }
 
     private static String render(Map<String, String> entries) {

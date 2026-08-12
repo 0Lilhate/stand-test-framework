@@ -20,7 +20,8 @@ import ru.alfa.stand.test.core.event.Attachment;
 class AllureAttachmentPublisherTest {
 
     private final FakeAllureLifecycleFacade lifecycle = new FakeAllureLifecycleFacade();
-    private final AllureAttachmentPublisher publisher = new AllureAttachmentPublisher(lifecycle, new SecretMasker());
+    /** No artefacts root: the fail-closed publisher, which refuses every file attachment. */
+    private final AllureAttachmentPublisher publisher = new AllureAttachmentPublisher(lifecycle, new SecretMasker(), null);
 
     @Test
     @DisplayName("a non-secret core attachment is published unchanged with an extension derived from its media type")
@@ -57,36 +58,6 @@ class AllureAttachmentPublisherTest {
         publisher.publish(null);
 
         assertThat(lifecycle.attachments()).isEmpty();
-    }
-
-    @Test
-    @DisplayName("text and json helpers publish with the right media type and extension")
-    void publishText_andJson() {
-        publisher.publishText("note", "hello");
-        publisher.publishJson("body", "{}");
-
-        assertThat(lifecycle.attachments()).containsExactly(
-                new RecordedAttachment("note", "text/plain", "txt", "hello"),
-                new RecordedAttachment("body", "application/json", "json", "{}"));
-    }
-
-    @Test
-    @DisplayName("a null text content publishes nothing")
-    void publishText_null_isIgnored() {
-        publisher.publishText("note", null);
-
-        assertThat(lifecycle.attachments()).isEmpty();
-    }
-
-    @Test
-    @DisplayName("text and json helpers also mask secret content at the sink")
-    void publishText_andJson_maskSecrets() {
-        publisher.publishText("note", "auth was Basic dXNlcjpwYXNzd29yZA==");
-        publisher.publishJson("body", "{\"apiKey\":\"k-123\"}");
-
-        assertThat(lifecycle.attachments()).satisfiesExactly(
-                note -> assertThat(note.content()).contains("Basic ***").doesNotContain("dXNlcjpwYXNzd29yZA=="),
-                body -> assertThat(body.content()).contains("\"apiKey\":\"***\"").doesNotContain("k-123"));
     }
 
     @Test

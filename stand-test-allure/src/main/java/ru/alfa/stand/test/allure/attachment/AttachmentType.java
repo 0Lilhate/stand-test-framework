@@ -8,8 +8,7 @@ import java.util.Locale;
  * <p>Deliberately generic (plan §8.9): there are no REST/Kafka/DB-specific attachment kinds. Each value
  * carries the media type Allure stores and the file extension used for the rendered source file. The
  * producing adapter chooses a media type when it builds a core {@code Attachment}; this enum is how the
- * reporting side maps that media type to a file extension and how the adapter's own helpers
- * ({@code publishJson}/{@code publishKeyValue}/…) name their content.
+ * reporting side maps that media type back to a file extension.
  */
 public enum AttachmentType {
 
@@ -25,7 +24,7 @@ public enum AttachmentType {
     /** SQL statement text. */
     SQL("application/sql", "sql"),
 
-    /** Arbitrary bytes carried as text (the core attachment contract is textual). */
+    /** Arbitrary bytes, and the fallback for a file body whose media type is unknown. */
     BINARY("application/octet-stream", "bin"),
 
     /** A rendered key/value diagnostics block. */
@@ -88,12 +87,11 @@ public enum AttachmentType {
      * Derives the file extension for a FILE-backed attachment (ADR-UI-005).
      *
      * <p>Separate from {@link #extensionForMediaType(String)} because the two fall back in opposite
-     * directions, and getting that backwards is exactly the defect this method exists to avoid: an
-     * unknown media type on a text body is most usefully {@code txt}, while an unknown media type on a
-     * binary body must be {@code bin} — naming a screenshot {@code .txt} makes the report offer it as
-     * text. The known types are the ones wave 1 actually produces (UITG-S013…S016): a PNG screenshot, a
-     * WebM video, a trace ZIP, plus the text-shaped artefacts (console log, network log) that travel as
-     * files when they are large.
+     * directions: an unknown media type on a text body is most usefully {@code txt}, while on a binary
+     * body it must be {@code bin} — naming a screenshot {@code .txt} makes the report offer it as text.
+     * The known types are the ones wave 1 produces (UITG-S013…S016): a PNG screenshot, a WebM video, a
+     * trace ZIP, plus the text-shaped artefacts (console log, network log) that travel as files when they
+     * are large.
      *
      * @param mediaType the media type (may be null)
      * @return the file extension without a leading dot; {@code bin} when the type is unknown

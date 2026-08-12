@@ -197,6 +197,8 @@ JUnit/Allure execution order (no flakiness).
 Reporting is a best-effort side-channel (plan §17): every mapping call is wrapped, so a rendering error
 is swallowed and **never** replaces the test's real outcome, hides an SDK assertion failure, or turns a
 failed step green. The runner additionally swallows publisher exceptions — two independent guards.
+Swallowed is not silent: the publisher logs each such failure at WARN with its stack trace, so a broken
+Allure classpath shows up in the log instead of as an empty report.
 
 ## Limitations
 
