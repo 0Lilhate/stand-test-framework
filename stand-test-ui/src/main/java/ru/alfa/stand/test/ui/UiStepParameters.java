@@ -197,18 +197,16 @@ public final class UiStepParameters {
     }
 
     static List<UiAssertion> assertions(Map<String, Object> parameters) {
-        List<UiAssertion> result = new ArrayList<>();
-        for (Map<String, Object> entry : entryList(parameters, ASSERTIONS)) {
-            UiProperty property = enumValue(UiProperty.class, entry.get(PROPERTY), PROPERTY);
-            Object expected = entry.get(EXPECTED_VALUE);
-            if (expected == null) {
-                throw new StandTestException("UI assertion '" + EXPECTED_VALUE + "' must not be null");
-            }
-            AssertionMatcher matcher = matcher(entry);
-            String attribute = optionalNestedString(entry, ATTRIBUTE);
-            result.add(new UiAssertion(property, attribute, expected, matcher));
-        }
-        return result;
+        return entryList(parameters, ASSERTIONS).stream()
+                .map(entry -> {
+                    UiProperty property = enumValue(UiProperty.class, entry.get(PROPERTY), PROPERTY);
+                    Object expected = entry.get(EXPECTED_VALUE);
+                    if (expected == null) {
+                        throw new StandTestException("UI assertion '" + EXPECTED_VALUE + "' must not be null");
+                    }
+                    return new UiAssertion(property, optionalNestedString(entry, ATTRIBUTE), expected, matcher(entry));
+                })
+                .toList();
     }
 
     static Map<String, Object> writeAssertion(UiAssertion assertion) {
@@ -223,20 +221,20 @@ public final class UiStepParameters {
     }
 
     static List<UiCapture> captures(Map<String, Object> parameters) {
-        List<UiCapture> result = new ArrayList<>();
-        for (Map<String, Object> entry : entryList(parameters, CAPTURES)) {
-            Object variableName = entry.get(VARIABLE_NAME);
-            if (!(variableName instanceof String name) || name.isBlank()) {
-                throw new StandTestException("UI capture '" + VARIABLE_NAME + "' must be a non-blank string");
-            }
-            Object locator = entry.get(LOCATOR);
-            if (!(locator instanceof Map<?, ?> raw)) {
-                throw new StandTestException("UI capture '" + LOCATOR + "' must be a map");
-            }
-            UiCaptureSource source = enumValue(UiCaptureSource.class, entry.get(SOURCE), SOURCE);
-            result.add(new UiCapture(name, readLocator(raw), source, optionalNestedString(entry, ATTRIBUTE)));
-        }
-        return result;
+        return entryList(parameters, CAPTURES).stream()
+                .map(entry -> {
+                    Object variableName = entry.get(VARIABLE_NAME);
+                    if (!(variableName instanceof String name) || name.isBlank()) {
+                        throw new StandTestException("UI capture '" + VARIABLE_NAME + "' must be a non-blank string");
+                    }
+                    Object locator = entry.get(LOCATOR);
+                    if (!(locator instanceof Map<?, ?> raw)) {
+                        throw new StandTestException("UI capture '" + LOCATOR + "' must be a map");
+                    }
+                    UiCaptureSource source = enumValue(UiCaptureSource.class, entry.get(SOURCE), SOURCE);
+                    return new UiCapture(name, readLocator(raw), source, optionalNestedString(entry, ATTRIBUTE));
+                })
+                .toList();
     }
 
     static Map<String, Object> writeCapture(UiCapture capture) {
