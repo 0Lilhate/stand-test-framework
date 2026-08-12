@@ -1,6 +1,5 @@
 package ru.alfa.stand.test.grpc;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -141,21 +140,24 @@ public final class GrpcStepParameters {
     }
 
     static List<GrpcAssertion> assertions(Map<String, Object> parameters) {
-        List<GrpcAssertion> result = new ArrayList<>();
-        for (Map<String, Object> entry : entryList(parameters, ASSERTIONS)) {
-            Object path = entry.get(JSON_PATH);
-            Object expected = entry.get(EXPECTED_VALUE);
-            if (!(path instanceof String text)) {
-                throw new StandTestException("gRPC assertion '" + JSON_PATH + "' must be a string");
-            }
-            if (expected == null) {
-                throw new StandTestException("gRPC assertion '" + EXPECTED_VALUE + "' must not be null");
-            }
-            AssertionMatcher matcher = matcher(entry);
-            validateMatcherOperand(matcher, expected, text);
-            result.add(new GrpcAssertion(text, expected, matcher));
+        return entryList(parameters, ASSERTIONS).stream()
+                .map(GrpcStepParameters::assertion)
+                .toList();
+    }
+
+    /** Reads one assertion, including its matcher — grpc.unary runs the full five-matcher set, at parity with REST. */
+    private static GrpcAssertion assertion(Map<String, Object> entry) {
+        Object path = entry.get(JSON_PATH);
+        Object expected = entry.get(EXPECTED_VALUE);
+        if (!(path instanceof String text)) {
+            throw new StandTestException("gRPC assertion '" + JSON_PATH + "' must be a string");
         }
-        return result;
+        if (expected == null) {
+            throw new StandTestException("gRPC assertion '" + EXPECTED_VALUE + "' must not be null");
+        }
+        AssertionMatcher matcher = matcher(entry);
+        validateMatcherOperand(matcher, expected, text);
+        return new GrpcAssertion(text, expected, matcher);
     }
 
     private static AssertionMatcher matcher(Map<String, Object> entry) {
@@ -190,16 +192,16 @@ public final class GrpcStepParameters {
     }
 
     static List<GrpcCapture> captures(Map<String, Object> parameters) {
-        List<GrpcCapture> result = new ArrayList<>();
-        for (Map<String, Object> entry : entryList(parameters, CAPTURES)) {
-            Object name = entry.get(VARIABLE_NAME);
-            Object path = entry.get(JSON_PATH);
-            if (!(name instanceof String variableName) || !(path instanceof String jsonPath)) {
-                throw new StandTestException("gRPC capture requires string '" + VARIABLE_NAME + "' and '" + JSON_PATH + "'");
-            }
-            result.add(new GrpcCapture(variableName, jsonPath));
-        }
-        return result;
+        return entryList(parameters, CAPTURES).stream()
+                .map(entry -> {
+                    Object name = entry.get(VARIABLE_NAME);
+                    Object path = entry.get(JSON_PATH);
+                    if (!(name instanceof String variableName) || !(path instanceof String jsonPath)) {
+                        throw new StandTestException("gRPC capture requires string '" + VARIABLE_NAME + "' and '" + JSON_PATH + "'");
+                    }
+                    return new GrpcCapture(variableName, jsonPath);
+                })
+                .toList();
     }
 
     @SuppressWarnings("unchecked")
@@ -211,13 +213,13 @@ public final class GrpcStepParameters {
         if (!(value instanceof List<?> list)) {
             throw new StandTestException("gRPC step parameter '" + key + "' must be a list");
         }
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (Object item : list) {
-            if (!(item instanceof Map<?, ?>)) {
-                throw new StandTestException("gRPC step parameter '" + key + "' entries must be maps");
-            }
-            result.add((Map<String, Object>) item);
-        }
-        return result;
+        return list.stream()
+                .map(item -> {
+                    if (!(item instanceof Map<?, ?>)) {
+                        throw new StandTestException("gRPC step parameter '" + key + "' entries must be maps");
+                    }
+                    return (Map<String, Object>) item;
+                })
+                .toList();
     }
 }

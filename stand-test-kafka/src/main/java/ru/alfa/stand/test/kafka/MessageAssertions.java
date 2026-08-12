@@ -30,7 +30,10 @@ final class MessageAssertions {
         try {
             return JsonPath.parse(value);
         } catch (InvalidJsonException | IllegalArgumentException invalid) {
-            throw new StandTestAssertionError("Message value is not valid JSON: " + invalid.getMessage());
+            // Deliberately does NOT echo the parser's message: json-smart quotes a fragment of the
+            // offending value, and a message value read off a shared stand topic is real payload that
+            // must not travel into a report. The length is safe context; the value itself stays out.
+            throw new StandTestAssertionError("Message value is not valid JSON (" + value.length() + " characters, parse failed)");
         }
     }
 

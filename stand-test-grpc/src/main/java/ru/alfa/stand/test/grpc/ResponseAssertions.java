@@ -30,7 +30,11 @@ final class ResponseAssertions {
         try {
             return JsonPath.parse(value);
         } catch (InvalidJsonException | IllegalArgumentException invalid) {
-            throw new StandTestAssertionError("Response is not valid JSON: " + invalid.getMessage());
+            // Same rule as the REST and Kafka adapters: json-smart quotes a fragment of the offending
+            // value, so the parser's message stays out of the failure text. Near-unreachable here (the
+            // response is rendered from a protobuf message and is well-formed by construction), but the
+            // three JSON entry points fail the same way on purpose.
+            throw new StandTestAssertionError("Response is not valid JSON (" + value.length() + " characters, parse failed)");
         }
     }
 
