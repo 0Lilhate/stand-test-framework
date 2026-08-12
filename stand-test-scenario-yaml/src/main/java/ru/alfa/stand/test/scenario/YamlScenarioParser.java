@@ -45,29 +45,11 @@ public final class YamlScenarioParser {
         Map<String, Object> document = SurfaceValues.asMap(SafeYaml.load(yaml), "<document>");
         SurfaceValues.checkKnownKeys(document, KNOWN_TOP_LEVEL, "<document>");
 
-        var builder = Scenario.builder(SurfaceValues.requireString(document, "id", "<document>"))
-                .environment(SurfaceValues.requireString(document, "env", "<document>"));
-        String title = SurfaceValues.optionalString(document, "title", "<document>");
-        if (title != null) {
-            builder.title(title);
-        }
-        String description = SurfaceValues.optionalString(document, "description", "<document>");
-        if (description != null) {
-            builder.description(description);
-        }
-        for (Object tag : tags(document)) {
-            if (!(tag instanceof String text) || text.isBlank()) {
-                throw new StandTestException("Each entry in 'tags' must be a non-blank string, but found " + tag);
-            }
-            builder.tag(text);
-        }
-
+        var builder = ScenarioDocuments.startBuilder(document, "env");
         List<GenericStep> steps = new ArrayList<>();
-        appendSteps(steps, document.get("given"), "given");
-        appendSteps(steps, document.get("then"), "then");
-        if (steps.isEmpty()) {
-            throw new StandTestException("A scenario must declare at least one step under 'given'/'then'");
-        }
+        steps.addAll(phaseSteps(document.get("given"), "given"));
+        steps.addAll(phaseSteps(document.get("then"), "then"));
+        ScenarioDocuments.requireAtLeastOneStep(steps, "'given'/'then'");
         builder.steps(steps);
         return builder.build();
     }
@@ -91,18 +73,11 @@ public final class YamlScenarioParser {
         }
     }
 
-    private static void appendSteps(List<GenericStep> steps, Object phaseNode, String phase) {
+    private static List<GenericStep> phaseSteps(Object phaseNode, String phase) {
         if (phaseNode == null) {
-            return;
+            return List.of();
         }
-        List<Object> nodes = SurfaceValues.asList(phaseNode, phase);
-        for (int index = 0; index < nodes.size(); index++) {
-            steps.add(StepNodeTranslator.translate(nodes.get(index), phase, index));
-        }
-    }
-
-    private static List<Object> tags(Map<String, Object> document) {
-        Object tags = document.get("tags");
-        return (tags == null) ? List.of() : SurfaceValues.asList(tags, "tags");
+        return ScenarioDocuments.translateSteps(
+                SurfaceValues.asList(phaseNode, phase), (node, index) -> StepNodeTranslator.translate(node, phase, index));
     }
 }

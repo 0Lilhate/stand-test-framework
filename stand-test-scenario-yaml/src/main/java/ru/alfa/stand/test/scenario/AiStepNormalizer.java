@@ -4,20 +4,23 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 import ru.alfa.stand.test.core.exception.StandTestException;
 
 /**
  * Normalizes one AI-format step — a flat object with a {@code type} field and ergonomic nested fields — into
  * the yaml-surface field map the existing {@code RestStepTranslator}/{@code KafkaStepTranslator}/
- * {@code DbStepTranslator} already consume. The JSON Schema that used to describe this surface shipped in
- * {@code stand-test-ai-schema}, a module removed deliberately; the rules below are now the description.
+ * {@code GrpcStepTranslator}/{@code DbStepTranslator} already consume. The JSON Schema that used to describe
+ * this surface shipped in {@code stand-test-ai-schema}, a module removed deliberately; the rules below are
+ * now the description.
  *
  * <p>Fail-closed: unknown AI fields and constructs that no adapter can execute yet are rejected here with
  * a clear {@link StandTestException} naming the supported alternative. The returned map is intermediate —
  * the per-family translator validates it and emits the final wire keys. This normalizer checks structure
- * only; the value-level guardrails the JSON Schema expresses statically (secret headers, SQL sleep
- * functions, timeout bounds) are re-enforced at run time by the core {@code DefaultScenarioValidator}
- * inside the runner, so a document that skips the schema pass still meets the same net.
+ * only; the value-level guardrails (secret headers, SQL sleep functions, timeout bounds) are enforced at
+ * run time by the core {@code DefaultScenarioValidator} inside the runner.
  */
 final class AiStepNormalizer {
 
@@ -33,86 +36,62 @@ final class AiStepNormalizer {
             Set.of("id", "type", "description", "datasource", "timeout", "query", "params", "expect");
     private static final Set<String> GRPC_UNARY_KNOWN =
             Set.of("id", "type", "description", "target", "method", "correlation", "request", "timeout", "expect", "capture");
-    private static final Set<String> ASSERT_KNOWN = Set.of("path", "equals", "exists", "notNull", "contains", "matches");
 
     private AiStepNormalizer() {
     }
 
     static Map<String, Object> normalize(String type, Map<String, Object> fields, String location) {
-        if ("rest.expectEventually".equals(type)) {
-            return restExpectEventually(fields, location);
-        }
-        if (type.startsWith("rest.")) {
-            return rest(fields, location);
-        }
-        if ("kafka.send".equals(type)) {
-            return kafkaSend(fields, location);
-        }
-        if ("kafka.expect".equals(type)) {
-            return kafkaExpect(fields, location);
-        }
-        if ("db.expectEventually".equals(type)) {
-            return dbExpectEventually(fields, location);
-        }
-        if ("grpc.unary".equals(type)) {
-            return grpcUnary(fields, location);
-        }
-        throw new StandTestException("Unsupported AI step type '" + type + "' at " + location + " (supported: rest.get/post, rest.expectEventually, kafka.send, kafka.expect, db.expectEventually, grpc.unary)");
+        return switch (type) {
+            case "rest.expectEventually" -> restExpectEventually(fields, location);
+            case "kafka.send" -> kafkaSend(fields, location);
+            case "kafka.expect" -> kafkaExpect(fields, location);
+            case "db.expectEventually" -> dbExpectEventually(fields, location);
+            case "grpc.unary" -> grpcUnary(fields, location);
+            default -> {
+                if (type.startsWith("rest.")) {
+                    yield rest(fields, location);
+                }
+                throw new StandTestException("Unsupported AI step type '" + type + "' at " + location
+                        + " (supported: rest.get/post, rest.expectEventually, kafka.send, kafka.expect, db.expectEventually, grpc.unary)");
+            }
+        };
     }
 
     private static Map<String, Object> rest(Map<String, Object> fields, String location) {
         SurfaceValues.checkKnownKeys(fields, REST_KNOWN, location);
-        Map<String, Object> out = new LinkedHashMap<>();
-        copyIfPresent(fields, out, "service");
-        copyIfPresent(fields, out, "path");
-        copyIfPresent(fields, out, "query");
-        copyIfPresent(fields, out, "headers");
-        copyIfPresent(fields, out, "capture");
-        applyCorrelation(fields, out, "inject", YamlStepKeys.INJECT_CORRELATION_ID, location);
+        Map<String, Object> out = restCommon(fields, location);
         applyPayload(fields, out, "body", YamlStepKeys.BODY_RESOURCE, location);
-        applyExpectStatus(fields, out, location);
-        applyRestAssert(fields, out, location);
         return out;
     }
 
     private static Map<String, Object> restExpectEventually(Map<String, Object> fields, String location) {
         SurfaceValues.checkKnownKeys(fields, REST_EXPECT_KNOWN, location);
-        Map<String, Object> out = new LinkedHashMap<>();
-        copyIfPresent(fields, out, "service");
-        copyIfPresent(fields, out, "path");
-        copyIfPresent(fields, out, "query");
-        copyIfPresent(fields, out, "headers");
+        Map<String, Object> out = restCommon(fields, location);
         copyIfPresent(fields, out, "timeout");
-        copyIfPresent(fields, out, "capture");
-        applyCorrelation(fields, out, "inject", YamlStepKeys.INJECT_CORRELATION_ID, location);
-        applyExpectStatus(fields, out, location);
-        applyRestAssert(fields, out, location);
         return out;
     }
 
     /**
-     * REST assertions keep their full matcher form as the surface list — {@code RestStepTranslator}
-     * routes them through {@code SurfaceValues.assertionsWithMatchers}, so all five schema matchers
-     * are executable for the REST family. grpc.unary now does the same (see {@link #applyGrpcExpect});
-     * only kafka.expect stays equals-only (see {@link #equalsAssertions}).
+     * The fields both REST shapes carry. Assertions keep their full matcher form as the surface list —
+     * {@code RestStepTranslator} routes them through {@code SurfaceValues.assertionsWithMatchers}, so all
+     * five matchers are executable for the REST family, as they are for {@code grpc.unary}. Only
+     * {@code kafka.expect} stays equals-only (see {@link #equalsAssertions}).
      */
-    private static void applyRestAssert(Map<String, Object> fields, Map<String, Object> out, String location) {
-        if (!fields.containsKey("assert")) {
-            return;
+    private static Map<String, Object> restCommon(Map<String, Object> fields, String location) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        copyIfPresent(fields, out, "service", "path", "query", "headers", "capture");
+        applyCorrelation(fields, out, "inject", YamlStepKeys.INJECT_CORRELATION_ID, location);
+        applyExpectStatus(fields, out, location);
+        if (fields.containsKey("assert")) {
+            out.put("assert", checkedAssertItems(fields.get("assert"), location + ".assert"));
         }
-        String assertLoc = location + ".assert";
-        List<Object> items = SurfaceValues.asList(fields.get("assert"), assertLoc);
-        for (int i = 0; i < items.size(); i++) {
-            SurfaceValues.checkKnownKeys(SurfaceValues.asMap(items.get(i), assertLoc + "[" + i + "]"), ASSERT_KNOWN, assertLoc + "[" + i + "]");
-        }
-        out.put("assert", items);
+        return out;
     }
 
     private static Map<String, Object> kafkaSend(Map<String, Object> fields, String location) {
         SurfaceValues.checkKnownKeys(fields, KAFKA_SEND_KNOWN, location);
         Map<String, Object> out = new LinkedHashMap<>();
-        copyIfPresent(fields, out, "topic");
-        copyIfPresent(fields, out, "key");
+        copyIfPresent(fields, out, "topic", "key");
         applyCorrelation(fields, out, "inject", YamlStepKeys.INJECT_CORRELATION_ID, location);
         applyPayload(fields, out, "payload", YamlStepKeys.BODY_RESOURCE, location);
         return out;
@@ -121,21 +100,18 @@ final class AiStepNormalizer {
     private static Map<String, Object> kafkaExpect(Map<String, Object> fields, String location) {
         SurfaceValues.checkKnownKeys(fields, KAFKA_EXPECT_KNOWN, location);
         Map<String, Object> out = new LinkedHashMap<>();
-        copyIfPresent(fields, out, "topic");
-        copyIfPresent(fields, out, "timeout");
-        copyIfPresent(fields, out, "capture");
+        copyIfPresent(fields, out, "topic", "timeout", "capture");
         applyCorrelation(fields, out, "fromContext", YamlStepKeys.CORRELATION_FROM_CONTEXT, location);
-        applyAssert(fields, out, location);
+        if (fields.containsKey("assert")) {
+            out.put("assert", equalsAssertions(fields.get("assert"), location + ".assert"));
+        }
         return out;
     }
 
     private static Map<String, Object> grpcUnary(Map<String, Object> fields, String location) {
         SurfaceValues.checkKnownKeys(fields, GRPC_UNARY_KNOWN, location);
         Map<String, Object> out = new LinkedHashMap<>();
-        copyIfPresent(fields, out, "target");
-        copyIfPresent(fields, out, "method");
-        copyIfPresent(fields, out, "timeout");
-        copyIfPresent(fields, out, "capture");
+        copyIfPresent(fields, out, "target", "method", "timeout", "capture");
         applyCorrelation(fields, out, "inject", YamlStepKeys.INJECT_CORRELATION_ID, location);
         applyPayload(fields, out, "request", YamlStepKeys.REQUEST_RESOURCE, location);
         applyGrpcExpect(fields, out, location);
@@ -145,9 +121,7 @@ final class AiStepNormalizer {
     private static Map<String, Object> dbExpectEventually(Map<String, Object> fields, String location) {
         SurfaceValues.checkKnownKeys(fields, DB_EXPECT_KNOWN, location);
         Map<String, Object> out = new LinkedHashMap<>();
-        copyIfPresent(fields, out, "datasource");
-        copyIfPresent(fields, out, "timeout");
-        copyIfPresent(fields, out, "params");
+        copyIfPresent(fields, out, "datasource", "timeout", "params");
         if (fields.containsKey("query")) {
             out.put("sql", fields.get("query"));
         }
@@ -190,13 +164,6 @@ final class AiStepNormalizer {
         out.put("expectStatus", SurfaceValues.requireInteger(expect, "status", expectLoc));
     }
 
-    private static void applyAssert(Map<String, Object> fields, Map<String, Object> out, String location) {
-        if (!fields.containsKey("assert")) {
-            return;
-        }
-        out.put("assert", equalsAssertions(fields.get("assert"), location + ".assert"));
-    }
-
     private static void applyGrpcExpect(Map<String, Object> fields, Map<String, Object> out, String location) {
         if (!fields.containsKey("expect")) {
             return;
@@ -208,37 +175,49 @@ final class AiStepNormalizer {
             throw new StandTestException("'expect.status' at " + expectLoc + " is not executable yet: the gRPC status is surfaced as an exception, not a declarative assertion");
         }
         if (expect.containsKey("assert")) {
-            // grpc.unary executes the full REST matcher set, so its assertions keep their full surface form
-            // (GrpcStepTranslator routes them through SurfaceValues.assertionsWithMatchers) — unlike
-            // kafka.expect, which stays equals-only via equalsAssertions.
-            String assertLoc = expectLoc + ".assert";
-            List<Object> items = SurfaceValues.asList(expect.get("assert"), assertLoc);
-            for (int i = 0; i < items.size(); i++) {
-                SurfaceValues.checkKnownKeys(SurfaceValues.asMap(items.get(i), assertLoc + "[" + i + "]"), ASSERT_KNOWN, assertLoc + "[" + i + "]");
-            }
-            out.put("assert", items);
+            out.put("assert", checkedAssertItems(expect.get("assert"), expectLoc + ".assert"));
         }
     }
 
+    /**
+     * Validates every item of a matcher-form {@code assert} list and returns it unchanged, for the two
+     * surfaces that execute the full matcher set (REST and {@code grpc.unary}). The translator does the
+     * surface→wire mapping later, through {@code SurfaceValues.assertionsWithMatchers}.
+     */
+    private static List<Object> checkedAssertItems(Object value, String assertLoc) {
+        List<Object> items = SurfaceValues.asList(value, assertLoc);
+        return IntStream.range(0, items.size())
+                .mapToObj(index -> {
+                    String itemLoc = assertLoc + "[" + index + "]";
+                    SurfaceValues.checkKnownKeys(SurfaceValues.asMap(items.get(index), itemLoc), SurfaceValues.ASSERT_ITEM_KEYS, itemLoc);
+                    return items.get(index);
+                })
+                .toList();
+    }
+
+    /**
+     * Folds a matcher-form {@code assert} list into the equals-only map shorthand {@code kafka.expect}
+     * executes, refusing any matcher its executor cannot run.
+     */
     private static Map<String, Object> equalsAssertions(Object value, String assertLoc) {
         List<Object> items = SurfaceValues.asList(value, assertLoc);
-        Map<String, Object> equalsMap = new LinkedHashMap<>();
-        for (int i = 0; i < items.size(); i++) {
-            String itemLoc = assertLoc + "[" + i + "]";
-            Map<String, Object> item = SurfaceValues.asMap(items.get(i), itemLoc);
-            SurfaceValues.checkKnownKeys(item, ASSERT_KNOWN, itemLoc);
-            String path = SurfaceValues.requireString(item, "path", itemLoc);
-            if (item.containsKey("exists") || item.containsKey("notNull")
-                    || item.containsKey("contains") || item.containsKey("matches")) {
-                throw new StandTestException("Assertion at " + itemLoc + " uses a matcher that kafka.expect cannot execute: kafka.expect runs 'equals' only (REST and grpc.unary support the full matcher set)");
-            }
-            Object expected = item.get("equals");
-            if (expected == null) {
-                throw new StandTestException("Assertion at " + itemLoc + " must declare a non-null 'equals' value");
-            }
-            equalsMap.put(path, expected);
+        return IntStream.range(0, items.size())
+                .mapToObj(index -> equalsAssertion(items.get(index), assertLoc + "[" + index + "]"))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (first, second) -> second, LinkedHashMap::new));
+    }
+
+    private static Map.Entry<String, Object> equalsAssertion(Object node, String itemLoc) {
+        Map<String, Object> item = SurfaceValues.asMap(node, itemLoc);
+        SurfaceValues.checkKnownKeys(item, SurfaceValues.ASSERT_ITEM_KEYS, itemLoc);
+        String path = SurfaceValues.requireString(item, "path", itemLoc);
+        if (SurfaceValues.declaresNonEqualsMatcher(item)) {
+            throw new StandTestException("Assertion at " + itemLoc + " uses a matcher that kafka.expect cannot execute: kafka.expect runs 'equals' only (REST and grpc.unary support the full matcher set)");
         }
-        return equalsMap;
+        Object expected = item.get("equals");
+        if (expected == null) {
+            throw new StandTestException("Assertion at " + itemLoc + " must declare a non-null 'equals' value");
+        }
+        return Map.entry(path, expected);
     }
 
     private static void applyDbExpect(Map<String, Object> fields, Map<String, Object> out, String location) {
@@ -258,9 +237,9 @@ final class AiStepNormalizer {
         out.put("equals", single);
     }
 
-    private static void copyIfPresent(Map<String, Object> from, Map<String, Object> to, String key) {
-        if (from.containsKey(key)) {
-            to.put(key, from.get(key));
-        }
+    private static void copyIfPresent(Map<String, Object> from, Map<String, Object> to, String... keys) {
+        Stream.of(keys)
+                .filter(from::containsKey)
+                .forEach(key -> to.put(key, from.get(key)));
     }
 }

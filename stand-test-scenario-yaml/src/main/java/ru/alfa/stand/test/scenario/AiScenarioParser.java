@@ -3,7 +3,6 @@ package ru.alfa.stand.test.scenario;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -21,15 +20,31 @@ import ru.alfa.stand.test.core.scenario.Scenario;
  * surface before a document was ever loaded; that module was removed deliberately, so what this class
  * accepts now defines the format, and its fail-closed rejections are the only pre-runtime check there is.
  *
- * <p>It normalizes the AI ergonomic fields onto the yaml-surface field map the existing translators read
- * (so a document accepted by the schema reaches a runnable {@code Scenario}), then delegates to the same
- * {@code *StepTranslator}s to emit the exact {@code GenericStep} wire keys. It builds nothing else, opens no
- * connections, reads no environment, and leaves {@code ${...}} placeholders for the runtime resolver.
+ * <p>It normalizes the AI ergonomic fields onto the yaml-surface field map the existing translators read,
+ * then delegates to the same {@code *StepTranslator}s to emit the exact {@code GenericStep} wire keys. It
+ * builds nothing else, opens no connections, reads no environment, and leaves {@code ${...}} placeholders
+ * for the runtime resolver.
  *
- * <p>Fail-closed like {@link YamlScenarioParser}: unknown fields, unknown/unsupported step types, and
- * constructs no adapter can execute yet (inline JSON bodies, non-{@code equals} matchers,
- * {@code expect.rowExists}, {@code grpc.unary}) are rejected as config-class {@link StandTestException}.
- * JSON is a subset of YAML, so the document may be JSON or YAML. Stateless and thread-safe.
+ * <p>Fail-closed like {@link YamlScenarioParser}: unknown fields at every level, unknown step types, and
+ * constructs no adapter can execute yet are rejected as config-class {@link StandTestException}. The
+ * not-yet-executable list is short and worth stating exactly, because after the schema module went this
+ * javadoc is one of the few descriptions of the format left:
+ *
+ * <ul>
+ *   <li>an inline {@code body.json}/{@code request.json} — a payload must be a classpath
+ *   {@code .fixture};</li>
+ *   <li>{@code expect.rowExists} on {@code db.expectEventually} — only {@code expect.singleValue} runs.</li>
+ * </ul>
+ *
+ * <p>The executable step types are {@code rest.get}/{@code rest.post},
+ * {@code rest.expectEventually}, {@code kafka.send}, {@code kafka.expect},
+ * {@code db.expectEventually} and {@code grpc.unary}. On matchers the surface mirrors the adapters
+ * rather than levelling them: REST and {@code grpc.unary} accept all five
+ * ({@code equals}/{@code contains}/{@code exists}/{@code notNull}/{@code matches}), while
+ * {@code kafka.expect} is equals-only because its executor is — a document calling gRPC equals-only, or
+ * calling {@code grpc.unary} unsupported, is describing an older version of this parser.
+ *
+ * <p>JSON is a subset of YAML, so the document may be JSON or YAML. Stateless and thread-safe.
  */
 public final class AiScenarioParser {
 
@@ -47,31 +62,10 @@ public final class AiScenarioParser {
         Map<String, Object> root = SurfaceValues.asMap(SafeYaml.load(document), "<document>");
         SurfaceValues.checkKnownKeys(root, KNOWN_TOP_LEVEL, "<document>");
 
-        var builder = Scenario.builder(SurfaceValues.requireString(root, "id", "<document>"))
-                .environment(SurfaceValues.requireString(root, "environment", "<document>"));
-        String title = SurfaceValues.optionalString(root, "title", "<document>");
-        if (title != null) {
-            builder.title(title);
-        }
-        String description = SurfaceValues.optionalString(root, "description", "<document>");
-        if (description != null) {
-            builder.description(description);
-        }
-        for (Object tag : tags(root)) {
-            if (!(tag instanceof String text) || text.isBlank()) {
-                throw new StandTestException("Each entry in 'tags' must be a non-blank string, but found " + tag);
-            }
-            builder.tag(text);
-        }
-
-        List<Object> nodes = SurfaceValues.asList(requireSteps(root), "steps");
-        List<GenericStep> steps = new ArrayList<>();
-        for (int index = 0; index < nodes.size(); index++) {
-            steps.add(translateStep(nodes.get(index), index));
-        }
-        if (steps.isEmpty()) {
-            throw new StandTestException("A scenario must declare at least one step under 'steps'");
-        }
+        var builder = ScenarioDocuments.startBuilder(root, "environment");
+        List<GenericStep> steps = ScenarioDocuments.translateSteps(
+                SurfaceValues.asList(requireSteps(root), "steps"), AiScenarioParser::translateStep);
+        ScenarioDocuments.requireAtLeastOneStep(steps, "'steps'");
         builder.steps(steps);
         return builder.build();
     }
@@ -131,10 +125,5 @@ public final class AiScenarioParser {
             throw new StandTestException("A scenario must declare 'steps'");
         }
         return steps;
-    }
-
-    private static List<Object> tags(Map<String, Object> root) {
-        Object tags = root.get("tags");
-        return (tags == null) ? List.of() : SurfaceValues.asList(tags, "tags");
     }
 }

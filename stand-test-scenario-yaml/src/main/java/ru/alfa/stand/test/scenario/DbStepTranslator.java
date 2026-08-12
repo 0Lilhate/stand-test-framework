@@ -1,7 +1,6 @@
 package ru.alfa.stand.test.scenario;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import ru.alfa.stand.test.core.exception.StandTestException;
@@ -40,20 +39,15 @@ final class DbStepTranslator {
                 YamlStepKeys.SQL, YamlStepKeys.SQL_RESOURCE, true, location);
         params.put(YamlStepKeys.PARAMS, SurfaceValues.objectMap(fields.get("params"), location + ".params"));
         switch (type) {
-            case "db.query" -> params.put(YamlStepKeys.CAPTURES, fields.containsKey("capture")
-                    ? SurfaceValues.captures(fields.get("capture"), YamlStepKeys.COLUMN, location + ".capture") : List.of());
+            case "db.query" -> SurfaceValues.putCaptures(params, fields, YamlStepKeys.COLUMN, location);
             case "db.expectEventually" -> {
                 Object expected = fields.get("equals");
                 if (expected == null) {
                     throw new StandTestException("Field 'equals' at " + location + " is required for db.expectEventually and must not be null");
                 }
                 params.put(YamlStepKeys.EXPECTED_VALUE, expected);
-                if (fields.containsKey("timeout")) {
-                    params.put(YamlStepKeys.TIMEOUT_MILLIS, SurfaceValues.durationMillis(fields.get("timeout"), location + ".timeout"));
-                }
-                if (fields.containsKey("pollInterval")) {
-                    params.put(YamlStepKeys.POLL_INTERVAL_MILLIS, SurfaceValues.durationMillis(fields.get("pollInterval"), location + ".pollInterval"));
-                }
+                SurfaceValues.putOptionalDuration(params, fields, "timeout", YamlStepKeys.TIMEOUT_MILLIS, location);
+                SurfaceValues.putOptionalDuration(params, fields, "pollInterval", YamlStepKeys.POLL_INTERVAL_MILLIS, location);
             }
             case "db.cleanup" -> params.put(YamlStepKeys.WHERE_TEST_RUN_ID_COLUMN, SurfaceValues.requireString(fields, "whereTestRunId", location));
             case "db.seed" -> {
