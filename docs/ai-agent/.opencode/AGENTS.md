@@ -46,18 +46,31 @@ opencode's tool events. It is loaded automatically; there is nothing to switch o
 The host awaits `tool.execute.before` before running the tool, so a refusal is a refusal — the write
 does not happen and the model is told why.
 
-**One thing is still absent here, and pretending otherwise would be the reporting the rules forbid.**
-There is **no session-end gate**: Claude Code's `Stop` hook may exit 2 and hold the session open,
-opencode's `event` hook returns void, and a gate that cannot refuse is a report — so the
-unreviewed-artifact check does not run on this host at all. Run
-`node .opencode/hooks/stand-guard.mjs stop` yourself before finishing, and treat its verdict as the
-check the host will not make for you.
+Two more events complete the wiring, both off `session.idle`:
 
-Subagents are **not** on that list any more: `agents/` ships to this copy too, and `opencode.json`
+| Event | Guard subcommand | What it buys |
+|---|---|---|
+| `session.idle`, session **without** a `parentID` | `stand-guard.mjs stop` | the session-end gate — a refusal comes back as a **new turn** carrying the verdict |
+| `session.idle`, session **with** a `parentID` | `stand-guard.mjs subagent-stop` | the record that a separate context ran, which the `safety-review` gate requires |
+
+**The session-end gate holds differently here, and the difference is not smoothed over.** Claude
+Code's `Stop` hook exits 2 and the session simply does not end; opencode's `event` returns void, so
+the plugin instead posts the guard's refusal back into the session (`session.promptAsync`). The end
+is the same — the run does not finish with an unreviewed artifact — but a one-shot `opencode run` may
+exit before that turn lands, and there the gate degrades to its report on stderr. One refusal buys
+exactly one re-entry: the next idle passes `stop_hook_active`, the guard reports `NOT-READY`, and the
+session is released.
+
+Do **not** run `stand-guard.mjs stop` yourself. It is a host subcommand, `pre-bash` refuses it, and
+typed by hand it manufactures a fact rather than reporting one.
+
+Subagents are **not** absent here either: `agents/` ships to this copy too, and `opencode.json`
 declares `subagent_depth` plus `permission.task` for exactly the three names, so stages 2, 4, 8 and
-11 run in a separate context here as well. What does NOT follow is full parity — the `safety-review`
-gate still proves less on this host, because the check "a subagent finished after the artifact was
-written" is `Stop` bookkeeping, and that is the half that cannot exist here.
+11 run in a separate context here as well. Since a subagent is a child session, its completion is the
+`session.idle` in the table above — so the `safety-review` gate's evidence now exists on this host.
+Before that binding the gate was not merely weaker here: `record-gate --verdict PASS` refuses unless a
+subagent finished after the artifact was written, and with nothing reporting that event the verdict
+could never be written at all.
 
 ## The pipeline — two branches
 
@@ -163,9 +176,10 @@ invented locator, and the context that wrote it remembers deciding it rather tha
 `stand-test-safety-reviewer` and `stand-test-quality-reviewer` through the task tool; neither can write,
 so each reports and you fix.
 
-What is still weaker here than under Claude Code: nothing RECORDS that the delegation happened. The
-`safety-review` gate's "a subagent finished since the artifact was written" check is Stop-hook
-bookkeeping, and opencode has no Stop gate. The separate context is real; the proof of it is not.
+The delegation is RECORDED here too: a subagent runs as a child session, and the plugin turns that
+session's `session.idle` into the `subagent-stop` the `safety-review` gate reads. What the record
+proves is the same modest thing it proves under Claude Code — that some separate context finished
+after the artifact was written, not that it reviewed anything.
 
 ## Workflows
 
