@@ -9,8 +9,8 @@ junit = "5.11.4"
 assertj = "3.26.3"
 jacoco = "0.8.15"
 # ArchUnit pins the module dependency graph (core as a pure sink, no adapter-to-adapter edges,
-# allure/scenario-yaml/ai-schema/config core-only, nothing depends on the starter) as a JUnit test in the
-# example module — the only module with every SDK module on its classpath. TEST-ONLY.
+# allure/scenario-yaml/config core-only, nothing depends on the starter) as a JUnit test in the example
+# module — the only module with every SDK module on its classpath. TEST-ONLY.
 archunit = "1.3.0"
 # SLF4J is the SDK's logging facade (plan §17): every module logs through `slf4j-api` (a pure facade,
 # no binding, no IO). The published SDK ships ONLY the facade — the consumer supplies the binding
@@ -41,13 +41,6 @@ allure = "2.29.1"
 # tree that maps straight onto GenericStep parameters) is the lightweight fit. Loaded via SafeConstructor +
 # LoaderOptions (no arbitrary type instantiation — mitigates the CVE-2022-1471 class of issues).
 snakeYaml = "2.3"
-# stand-test-ai-schema module: JSON Schema tooling used ONLY in that module's tests to validate the
-# example scenarios against the shipped schema resource. networknt transitively pulls jackson-databind,
-# so both are kept strictly in `testImplementation` there — Jackson never reaches the main graph (the
-# repo otherwise avoids Jackson; json-path uses json-smart). The published artifact is the schema
-# resource itself, which needs no runtime dependency.
-networknt = "1.5.6"
-jackson = "2.18.2"
 # stand-test-grpc adapter: grpc-java runtime/stub/protobuf + server-reflection client + JSON<->protobuf
 # (JsonFormat) so declarative scenarios call unary methods via DynamicMessage without generated stubs.
 # The transport (grpc-netty-shaded) is runtimeOnly — it stays off the consumer's compile graph — and the
@@ -60,8 +53,12 @@ protobuf = "3.25.5"
 # downloaded by the bundled driver on first use (or preinstalled into the CI image), which is why the
 # browser-backed tests live behind a separate `browserTest` task rather than in `test`.
 playwright = "1.61.0"
-# Reserved for later phases (not applied at the skeleton stage):
+# stand-test-spring-boot-starter: the Boot version its auto-configuration is compiled and tested
+# against. NOT constrained by stand-test-bom — the consumer's own Boot BOM or plugin governs it.
 springBoot = "3.5.14"
+# Reserved, applied nowhere: the SDK is a library and manages versions through the catalog and the BOM,
+# so the Spring dependency-management PLUGIN has no job here. Kept only in case a future consumer-facing
+# sample needs it; delete it rather than apply it on a whim.
 springDependencyManagement = "1.1.7"
 
 [libraries]
@@ -82,8 +79,6 @@ kafka-clients = { module = "org.apache.kafka:kafka-clients", version.ref = "kafk
 h2 = { module = "com.h2database:h2", version.ref = "h2" }
 allure-java-commons = { module = "io.qameta.allure:allure-java-commons", version.ref = "allure" }
 snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeYaml" }
-networknt-json-schema-validator = { module = "com.networknt:json-schema-validator", version.ref = "networknt" }
-jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
 grpc-api = { module = "io.grpc:grpc-api", version.ref = "grpc" }
 grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
 grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }

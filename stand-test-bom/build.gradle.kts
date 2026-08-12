@@ -3,26 +3,19 @@ plugins {
   `maven-publish`
 }
 
-// Aggregate BOM (platform) for the stand-test SDK.
+// stand-test-bom — the SDK's aggregate platform; see README.md. Two rules that are not visible from the
+// code below:
 //
-// It constrains (1) every published SDK module to this build's version and (2) the curated
-// third-party libraries the adapters expose or rely on, so a consumer importing the platform gets a
-// consistent, tested dependency set:
-//
-//   testImplementation(platform("ru.alfa.stand.test:stand-test-bom:<version>"))
-//   testImplementation("ru.alfa.stand.test:stand-test-junit")   // no explicit versions needed
-//
-// Versions come from the same catalog the modules build against (gradle/libs.versions.toml), so the
-// BOM can never drift from the SDK's own compile-time versions. Deliberately NOT constrained:
-// test-only libraries of this build (h2, networknt/jackson, junit/assertj — the consumer owns its
-// test stack) and Spring Boot (governed by the consumer's own Boot BOM/plugin).
-//
-// IMPORTANT: modules constrained by this BOM must NOT import it back (that would create a
-// `core -> bom -> core` cycle). Only EXTERNAL consumers import it.
+//  - a module constrained here must NOT import the platform back (`core -> bom -> core` is a cycle).
+//    Only EXTERNAL consumers import it.
+//  - versions come from the same catalog the modules compile against, never spelled out here, so the
+//    BOM cannot drift from what the SDK was actually built with.
 
 dependencies {
   constraints {
-    // SDK modules (stand-test-example is test-only and not published).
+    // Every published module. stand-test-example is test-only and stand-test-bom is this project;
+    // `verifyBomCoversEveryPublishedModule` below fails the build if this list and the set of published
+    // subprojects ever disagree.
     api(project(":stand-test-core"))
     api(project(":stand-test-await"))
     api(project(":stand-test-junit"))
@@ -36,11 +29,11 @@ dependencies {
     api(project(":stand-test-config"))
     api(project(":stand-test-spring-boot-starter"))
 
-    // Logging facade every SDK module compiles against (plan §17). Constrained so a consumer's binding
-    // resolves against the same slf4j-api the SDK was built with; the binding itself is the consumer's.
+    // Every third-party library a published module carries into a consumer's graph, at the version the
+    // SDK was built and tested against. `implementation` deps belong here as much as `api` ones: the
+    // consumer still resolves them at runtime, and an unpinned runtime version is exactly the drift a
+    // BOM exists to prevent.
     api(libs.slf4j.api)
-
-    // Curated third-party versions the adapters are built and tested against.
     api(libs.spring.webflux)
     api(libs.json.path)
     api(libs.kafka.clients)
@@ -53,7 +46,65 @@ dependencies {
     api(libs.protobuf.java.util)
     api(libs.allure.java.commons)
     api(libs.snakeyaml)
+    // Playwright's version decides which browser binaries the bundled driver downloads, so a consumer
+    // resolving a different one than stand-test-ui was tested against gets a driver/browser mismatch —
+    // the most expensive kind of drift in this list, and the reason it is pinned rather than left to
+    // whatever the graph settles on.
+    api(libs.playwright)
+
+    // Deliberately absent. Spring Boot: the starter takes it `compileOnly` and the consumer's own Boot
+    // BOM or plugin governs that version — constraining it here would fight them. JUnit and AssertJ: the
+    // consumer owns its test stack, and stand-test-junit already exports `junit-bom` as a platform, so
+    // JUnit is aligned there rather than twice. H2, ArchUnit and Logback are test-only in this build and
+    // reach no consumer at all.
   }
+}
+
+// The BOM's whole promise is that a consumer importing the platform needs no version for any published
+// module — and nothing checked that the list above kept up. It is not a hypothetical: this BOM once
+// shipped EMPTY, which the 2026-07 full-library review found by reading rather than by a failing build.
+// Both sides are computed at configuration time so the check is configuration-cache friendly.
+val publishedModules: List<String> = rootProject.subprojects
+  .map { it.name }
+  .filter { it != project.name && it != "stand-test-example" }
+  .sorted()
+
+val constrainedModules: List<String> = configurations.getByName("api").dependencyConstraints
+  .filter { it.group == project.group.toString() }
+  .map { it.name }
+  .sorted()
+
+val verifyBomCoversEveryPublishedModule by tasks.registering {
+  description = "Fails if the BOM's module constraints and the set of published subprojects disagree."
+  val expected = publishedModules
+  val declared = constrainedModules
+  inputs.property("publishedModules", expected)
+  inputs.property("constrainedModules", declared)
+  doLast {
+    val missing = expected - declared.toSet()
+    val unknown = declared - expected.toSet()
+    if (missing.isNotEmpty() || unknown.isNotEmpty()) {
+      throw GradleException(
+        buildString {
+          append("stand-test-bom does not match the published modules.")
+          if (missing.isNotEmpty()) {
+            append("\n  Published but NOT constrained (a consumer would have to spell out a version): ")
+            append(missing.joinToString())
+            append("\n  Fix: add `api(project(\":<module>\"))` to the constraints block.")
+          }
+          if (unknown.isNotEmpty()) {
+            append("\n  Constrained but not a published module: ")
+            append(unknown.joinToString())
+            append("\n  Fix: remove it from the constraints block.")
+          }
+        },
+      )
+    }
+  }
+}
+
+tasks.named("check") {
+  dependsOn(verifyBomCoversEveryPublishedModule)
 }
 
 publishing {
