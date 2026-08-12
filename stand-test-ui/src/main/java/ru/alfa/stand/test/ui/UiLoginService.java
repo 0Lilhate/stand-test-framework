@@ -17,7 +17,7 @@ import ru.alfa.stand.test.core.environment.UiAuthConfig;
 import ru.alfa.stand.test.core.environment.UiAuthScheme;
 import ru.alfa.stand.test.core.environment.UiLoginChallenge;
 import ru.alfa.stand.test.core.environment.UiLoginFormConfig;
-import ru.alfa.stand.test.core.exception.StandTestAssertionError;
+import ru.alfa.stand.test.core.exception.DiagnosticAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestException;
 
 /**
@@ -155,10 +155,17 @@ final class UiLoginService {
             // An application that did not sign the account in is a statement about the product — most often
             // "these credentials were rejected" — so it fails the test rather than breaking the run. The
             // message names the account and never the credentials.
-            throw new StandTestAssertionError("Signing in to UI application '" + alias + "' as account '" + account.accountId() + "' (role '" + account.role()
+            // The account id and role reach the report as rows; the credential variable NAMES stay in the
+            // message only, where they already are. Neither is a value, and neither ever will be.
+            throw new DiagnosticAssertionError("Signing in to UI application '" + alias + "' as account '" + account.accountId() + "' (role '" + account.role()
                     + "') did not complete within " + timeout + ": " + signedIn.describe()
                     + " never appeared. The credentials from " + account.usernameRef() + " / " + account.passwordRef()
-                    + " were rejected, or the sign-in needs a step this configuration does not describe.");
+                    + " were rejected, or the sign-in needs a step this configuration does not describe.",
+                    result.timeoutDiagnostics()
+                            .withAttribute("ui.application", alias)
+                            .withAttribute("ui.login.accountId", account.accountId())
+                            .withAttribute("ui.login.role", account.role())
+                            .toMap());
         }
     }
 

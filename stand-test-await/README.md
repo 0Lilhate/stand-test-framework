@@ -52,8 +52,22 @@ No transport logic, no reporting/Allure wiring, no scenario execution — the aw
 adapters and runner build on. It publishes no reporting events itself: it returns `TimeoutDiagnostics`
 and the caller decides what to do with them.
 
-> **Known gap.** Every adapter (`rest`, `kafka`, `db`, `ui`) takes only `summary()` and embeds it in the
-> failure message, so a timed-out await reaches a report as prose. `toMap()` and `withAttribute(...)` —
-> the structured form and the slot for `scenarioId`/`testRunId`/`correlationId` — have no production
-> caller, and `DefaultAwaiter` always builds an empty attribute map. The types are designed for a
-> `StepResult`/`StepEvent` diagnostics map that nothing currently fills from here.
+### How a timeout reaches the report
+
+Both renderings are used, for two different readers. `summary()` goes into the thrown failure's
+**message**, for whoever reads a stack trace. `toMap()` goes into the failure's **diagnostics**, for
+whoever reads the report: every adapter's timeout throws a
+`ru.alfa.stand.test.core.exception.DiagnosticAssertionError`, which implements the core marker
+`FailureAttachments`, and `DefaultScenarioRunner` folds that map into the failing `StepEvent`. In Allure
+the await then renders as key/value rows — `attempts=30`, `elapsed=PT30S`, `lastValue=PENDING` — instead
+of one long sentence.
+
+`withAttribute(...)` is how an adapter adds what the await engine cannot know, and each one does:
+`rest.service`/`rest.path`, `kafka.topic`/`kafka.realTopic`/`kafka.messagesSeen`,
+`db.datasource`/`db.expected`/`db.sql`, `ui.application`/`ui.locator`. Keys are namespaced by adapter so
+they cannot collide with the engine's own (`await`, `timeout`, `pollInterval`, `attempts`, `elapsed`,
+`lastValue`, `lastError`), and an attribute can never overwrite one — `toMap()` appends with
+`putIfAbsent`.
+
+Anything put here is rendered verbatim into a report, so it must be metadata: an alias, a count, a
+bounded query. Never a response body, a message payload or anything a producer has not already redacted.

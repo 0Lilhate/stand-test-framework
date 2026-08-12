@@ -14,13 +14,15 @@ import java.util.Objects;
  * time (monotonic, see {@link TimeSource}), the last value observed (may be null) and the last error
  * message (may be null when no probe threw).
  *
- * <p>{@link #summary()} renders a single-line message for an exception, and is what every adapter uses
- * today. {@link #toMap()} renders the same diagnostics as a flat map for a {@code StepResult}/
- * {@code StepEvent} diagnostics map, and {@code attributes} (via {@link #withAttribute}) is where a
- * caller would add the run identity the await engine deliberately does not know —
- * {@code scenarioId}/{@code testRunId}/{@code correlationId}, probe details. Both are offered rather
- * than used: the engine always builds an empty attribute map, and no adapter routes the structured
- * form into a step's diagnostics, so a timed-out await reaches a report as prose inside the message.
+ * <p>Two renderings, for two readers, and every adapter uses both. {@link #summary()} is one line for
+ * the thrown failure's message, read off a stack trace. {@link #toMap()} is the same facts as a flat map
+ * for a {@code StepResult}/{@code StepEvent} diagnostics map, read as key/value rows in a report —
+ * carried there by a {@code DiagnosticAssertionError}. {@code attributes} (via {@link #withAttribute})
+ * is where the caller adds what the await engine deliberately does not know: the alias it was polling,
+ * how many messages it saw, the run identity. An attribute can never overwrite an engine-owned key.
+ *
+ * <p>Whatever goes in is rendered verbatim into a report, so it must be metadata — an alias, a count, a
+ * bounded query — never a payload.
  *
  * @param description the human-readable name of what was being awaited
  * @param timeout the configured maximum total wait

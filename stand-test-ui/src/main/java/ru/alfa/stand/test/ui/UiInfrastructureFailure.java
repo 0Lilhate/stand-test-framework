@@ -1,6 +1,5 @@
 package ru.alfa.stand.test.ui;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import ru.alfa.stand.test.core.event.Attachment;
@@ -36,11 +35,6 @@ final class UiInfrastructureFailure extends StandTestException implements Failur
 
     @Override
     public Map<String, Object> failureDiagnostics() {
-        if (this.maskedZones == 0) {
-            return Map.of();
-        }
-        Map<String, Object> diagnostics = new LinkedHashMap<>();
-        diagnostics.put(UiAssertionFailure.DIAGNOSTIC_MASKED_ZONES, this.maskedZones);
-        return diagnostics;
+        return UiFailureDiagnostics.merge(getCause(), UiAssertionFailure.DIAGNOSTIC_MASKED_ZONES, this.maskedZones);
     }
 }

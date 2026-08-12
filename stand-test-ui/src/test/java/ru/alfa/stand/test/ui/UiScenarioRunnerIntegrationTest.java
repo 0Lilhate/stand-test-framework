@@ -259,6 +259,39 @@ class UiScenarioRunnerIntegrationTest {
         assertThat(failed.diagnostics()).containsKey("exception.class");
     }
 
+    @Test
+    @DisplayName("a timed-out ui.expectEventually lands its await diagnostics in the FAILED StepEvent — the wrapper that carries the screenshot must not swallow them")
+    void timedOutExpectEventuallyCarriesAwaitDiagnosticsThroughTheWrapper() {
+        // The executor wraps every failure of a step to attach the artefacts it just captured. That wrapper
+        // is what the runner reads, so a wrapper that reported only its own diagnostics would drop the
+        // await's — which is the whole reason the step is red.
+        UiLocator status = UiLocator.testId("status");
+        this.driver.present(status, "Pending");
+        RecordingPublisher events = new RecordingPublisher();
+        DefaultScenarioRunner recorder = runnerWith(events);
+
+        assertThatThrownBy(() -> recorder.run(Scenario.builder("ui-await-diagnostics")
+                .environment(UiTestSupport.ENVIRONMENT)
+                .step(UiStep.expectEventually(UiTestSupport.APPLICATION, status)
+                        .id("await-status")
+                        .assertText("Accepted")
+                        .within(Duration.ofMillis(120))
+                        .pollInterval(Duration.ofMillis(20))
+                        .build())
+                .build()))
+                .isInstanceOf(StandTestAssertionError.class);
+
+        StepEvent failed = events.stepEvents().stream()
+                .filter(event -> event.status() == StepStatus.FAILED)
+                .filter(event -> "ui.expectEventually".equals(event.stepType()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no FAILED ui.expectEventually StepEvent was captured"));
+        assertThat(failed.diagnostics())
+                .containsEntry("ui.application", UiTestSupport.APPLICATION)
+                .containsEntry("timeout", "PT0.12S")
+                .containsKeys("await", "attempts", "elapsed", "ui.locator", "exception.class");
+    }
+
     private DefaultScenarioRunner runner() {
         EnvironmentRegistry registry = UiTestSupport.registry();
         UiStepExecutor executor = new UiStepExecutor((application, settings) -> this.driver, new EnvironmentUiApplicationResolver(name -> "http://localhost:8080"));

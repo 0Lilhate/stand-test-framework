@@ -27,6 +27,7 @@ import ru.alfa.stand.test.core.environment.CorrelationConfig;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.ServiceEndpointDefinition;
+import ru.alfa.stand.test.core.exception.DiagnosticAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.execution.StepExecutionContext;
@@ -159,9 +160,13 @@ public final class RestStepExecutor implements StepExecutor {
                 observed -> observed.mismatch() == null);
         PollProbe last = result.orElseThrow(diagnostics -> {
             LOG.debug("REST poll {} {} timed out: {}", request.method(), request.path(), diagnostics.summary());
-            return new StandTestAssertionError(
+            // The message keeps the prose for whoever reads the stack trace; the map is the same facts as
+            // key/value rows for whoever reads the report. The alias and path go through withAttribute so
+            // the structured form is as complete as the sentence.
+            return new DiagnosticAssertionError(
                     "rest.expectEventually '" + service + " " + request.path() + "' did not observe the expected response: " + diagnostics.summary()
-                            + " (service=" + service + ", path=" + request.path() + ")");
+                            + " (service=" + service + ", path=" + request.path() + ")",
+                    diagnostics.withAttribute("rest.service", service).withAttribute("rest.path", request.path()).toMap());
         });
         if (!captures.isEmpty()) {
             applyCaptures(captures, parse(last.response().body()), context.variableStore());

@@ -205,9 +205,11 @@ Allure classpath shows up in the log instead of as an empty report.
 - The core event model carries no per-step **description** or **exception class** as first-class fields;
   the step name is `"<stepType> <stepId>"` and the failing exception's class is surfaced via the
   `exception.class` diagnostic the runner records.
-- Rich diagnostics/attachments on **thrown** failures depend on adapters populating them on the failure
-  path (a later phase); today the runner attaches the exception class on that path, and diagnostics/
-  attachments flow fully on the success and returned-`TIMEOUT` paths.
+- Rich diagnostics/attachments on **thrown** failures depend on the adapter opting in via the core marker
+  `FailureAttachments`; the runner adds only `exception.class` by itself. Every **await timeout** now opts
+  in — `rest`/`kafka`/`db`/`ui` throw a `DiagnosticAssertionError` carrying `TimeoutDiagnostics.toMap()`,
+  so the `diagnostics` attachment of a timed-out step holds `attempts`/`elapsed`/`lastValue` plus the
+  adapter's own alias keys. Other thrown failures still carry only the exception class.
 - ~~Каталог артефактов прогона передаётся публикатору снаружи, и у проводки пока нет вызывающего.~~
   **Исправлено `UITG-F003` 2026-08-07 (см. ниже «Каталог артефактов»).** Пункт продержался дольше, чем
   был верен, и стоил ровно того, о чём предупреждал: пока проводки не было, **каждое** файловое вложение

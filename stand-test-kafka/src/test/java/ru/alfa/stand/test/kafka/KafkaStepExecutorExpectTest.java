@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.Duration;
 import java.util.Map;
 import org.apache.kafka.clients.consumer.MockConsumer;
+import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import ru.alfa.stand.test.await.Awaiter;
@@ -15,6 +16,7 @@ import ru.alfa.stand.test.core.environment.CorrelationConfig;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.TopicDefinition;
+import ru.alfa.stand.test.core.exception.DiagnosticAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.execution.StepExecutionContext;
@@ -169,6 +171,24 @@ class KafkaStepExecutorExpectTest {
                 .isInstanceOf(StandTestAssertionError.class)
                 .hasMessageContaining("did not receive a matching message")
                 .hasMessageContaining("messagesSeen=0");
+    }
+
+    @Test
+    @DisplayName("a timed-out expect carries messagesSeen into the report as a row of its own — zero means nothing arrived, non-zero means nothing matched")
+    void timeout_carriesReportableDiagnostics() {
+        KafkaStepExecutor executor = executor(new DefaultAwaiter(new FakeTimeSource()));
+        ScenarioStep step = KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).correlationIdFromContext().within(Duration.ofMillis(100)).build();
+        executor.prepare(step, this.context);
+        addResponse(0L, "k-seen", "{\"n\":1}", "different-correlation");
+
+        assertThatThrownBy(() -> executor.execute(step, this.context))
+                .isInstanceOf(DiagnosticAssertionError.class)
+                .asInstanceOf(InstanceOfAssertFactories.type(DiagnosticAssertionError.class))
+                .extracting(DiagnosticAssertionError::failureDiagnostics)
+                .satisfies(diagnostics -> assertThat(diagnostics)
+                        .containsEntry("kafka.topic", KafkaTestSupport.RESPONSE_ALIAS)
+                        .containsEntry("kafka.messagesSeen", 1)
+                        .containsKeys("await", "attempts", "elapsed", "timeout", "kafka.realTopic"));
     }
 
     @Test

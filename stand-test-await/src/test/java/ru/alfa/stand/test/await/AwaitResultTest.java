@@ -5,8 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import java.util.Map;
+import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import ru.alfa.stand.test.core.exception.DiagnosticAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestException;
 
@@ -83,6 +85,22 @@ class AwaitResultTest {
                 .isInstanceOf(StandTestException.class)
                 .hasMessageContaining("not satisfied within")
                 .hasNoCause();
+    }
+
+    @Test
+    @DisplayName("the composition adapters use: the mapped DiagnosticAssertionError keeps toMap() and still gets the probe's last error as its cause")
+    void orElseThrow_diagnosticAssertionError_keepsBothHalves() {
+        RuntimeException probeError = new IllegalStateException("probe");
+        AwaitResult<String> result = AwaitResult.timedOut("PENDING", 3, Duration.ofSeconds(1), probeError, diagnostics());
+
+        assertThatThrownBy(() -> result.orElseThrow(diag -> new DiagnosticAssertionError(diag.summary(), diag.toMap())))
+                .isInstanceOf(DiagnosticAssertionError.class)
+                .hasCause(probeError)
+                .asInstanceOf(InstanceOfAssertFactories.type(DiagnosticAssertionError.class))
+                .extracting(DiagnosticAssertionError::failureDiagnostics)
+                .satisfies(carried -> assertThat(carried)
+                        .containsEntry("attempts", 3)
+                        .containsEntry("lastValue", "PENDING"));
     }
 
     @Test

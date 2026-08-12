@@ -24,6 +24,7 @@ import ru.alfa.stand.test.await.Awaiter;
 import ru.alfa.stand.test.await.TimeoutDiagnostics;
 import ru.alfa.stand.test.core.environment.DatasourceDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
+import ru.alfa.stand.test.core.exception.DiagnosticAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.execution.ResourceScope;
@@ -441,9 +442,16 @@ public final class DbStepExecutor implements StepExecutor {
     }
 
     private static StandTestAssertionError expectTimeout(TimeoutDiagnostics diagnostics, String datasourceAlias, String sql, Object expected, Object lastObserved) {
-        return new StandTestAssertionError("db.expectEventually '" + datasourceAlias + "' did not observe the expected value: " + diagnostics.summary()
+        // The truncated SQL goes into the map too: "which query did not come true" is the first thing asked
+        // of a red db step, and in the message it sits at the end of a long line.
+        Map<String, Object> reportable = diagnostics
+                .withAttribute("db.datasource", datasourceAlias)
+                .withAttribute("db.expected", DbValues.render(expected))
+                .withAttribute("db.sql", truncate(sql))
+                .toMap();
+        return new DiagnosticAssertionError("db.expectEventually '" + datasourceAlias + "' did not observe the expected value: " + diagnostics.summary()
                 + " (datasource=" + datasourceAlias + ", expected=" + DbValues.render(expected) + ", lastObserved=" + lastObserved
-                + ", sql=" + truncate(sql) + ")");
+                + ", sql=" + truncate(sql) + ")", reportable);
     }
 
     private static String truncate(String sql) {

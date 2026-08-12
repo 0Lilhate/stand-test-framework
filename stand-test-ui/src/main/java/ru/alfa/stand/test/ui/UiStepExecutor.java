@@ -26,6 +26,7 @@ import ru.alfa.stand.test.core.environment.UiAuthScheme;
 import ru.alfa.stand.test.core.environment.UiLoginFormConfig;
 import ru.alfa.stand.test.core.environment.UiTraceMode;
 import ru.alfa.stand.test.core.event.Attachment;
+import ru.alfa.stand.test.core.exception.DiagnosticAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.execution.StepExecutionContext;
@@ -518,9 +519,12 @@ public final class UiStepExecutor implements StepExecutor {
                 policy,
                 () -> UiAssertionEvaluator.firstMismatch(assertions, locator, snapshot(session, locator, assertions, List.of(), probeTimeout)),
                 mismatch -> mismatch == null);
-        result.orElseThrow(diagnostics -> new StandTestAssertionError(
+        result.orElseThrow(diagnostics -> new DiagnosticAssertionError(
                 "ui.expectEventually on " + locator.describe() + " did not hold: " + diagnostics.summary()
-                        + " (application=" + session.application().alias() + ")"));
+                        + " (application=" + session.application().alias() + ")",
+                diagnostics.withAttribute("ui.application", session.application().alias())
+                        .withAttribute("ui.locator", locator.describe())
+                        .toMap()));
         applyCaptures(captures, session, settings, context);
     }
 
