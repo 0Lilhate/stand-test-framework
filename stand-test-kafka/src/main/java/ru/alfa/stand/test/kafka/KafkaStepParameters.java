@@ -1,6 +1,5 @@
 package ru.alfa.stand.test.kafka;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -127,32 +126,39 @@ public final class KafkaStepParameters {
     }
 
     static List<KafkaAssertion> assertions(Map<String, Object> parameters) {
-        List<KafkaAssertion> result = new ArrayList<>();
-        for (Map<String, Object> entry : entryList(parameters, ASSERTIONS)) {
-            Object path = entry.get(JSON_PATH);
-            Object expected = entry.get(EXPECTED_VALUE);
-            if (!(path instanceof String text)) {
-                throw new StandTestException("Kafka assertion '" + JSON_PATH + "' must be a string");
-            }
-            if (expected == null) {
-                throw new StandTestException("Kafka assertion '" + EXPECTED_VALUE + "' must not be null");
-            }
-            result.add(new KafkaAssertion(text, expected));
+        return entryList(parameters, ASSERTIONS).stream()
+                .map(KafkaStepParameters::assertion)
+                .toList();
+    }
+
+    /**
+     * Reads one assertion. There is no matcher key: {@code kafka.expect} runs EQUALS only, so an absent
+     * wire matcher is the only spelling — see {@code MessageAssertions}, which delegates to core's
+     * {@code AssertionMatchers.equalsMatch}.
+     */
+    private static KafkaAssertion assertion(Map<String, Object> entry) {
+        Object path = entry.get(JSON_PATH);
+        Object expected = entry.get(EXPECTED_VALUE);
+        if (!(path instanceof String text)) {
+            throw new StandTestException("Kafka assertion '" + JSON_PATH + "' must be a string");
         }
-        return result;
+        if (expected == null) {
+            throw new StandTestException("Kafka assertion '" + EXPECTED_VALUE + "' must not be null");
+        }
+        return new KafkaAssertion(text, expected);
     }
 
     static List<KafkaCapture> captures(Map<String, Object> parameters) {
-        List<KafkaCapture> result = new ArrayList<>();
-        for (Map<String, Object> entry : entryList(parameters, CAPTURES)) {
-            Object name = entry.get(VARIABLE_NAME);
-            Object path = entry.get(JSON_PATH);
-            if (!(name instanceof String variableName) || !(path instanceof String jsonPath)) {
-                throw new StandTestException("Kafka capture requires string '" + VARIABLE_NAME + "' and '" + JSON_PATH + "'");
-            }
-            result.add(new KafkaCapture(variableName, jsonPath));
-        }
-        return result;
+        return entryList(parameters, CAPTURES).stream()
+                .map(entry -> {
+                    Object name = entry.get(VARIABLE_NAME);
+                    Object path = entry.get(JSON_PATH);
+                    if (!(name instanceof String variableName) || !(path instanceof String jsonPath)) {
+                        throw new StandTestException("Kafka capture requires string '" + VARIABLE_NAME + "' and '" + JSON_PATH + "'");
+                    }
+                    return new KafkaCapture(variableName, jsonPath);
+                })
+                .toList();
     }
 
     @SuppressWarnings("unchecked")
@@ -164,13 +170,13 @@ public final class KafkaStepParameters {
         if (!(value instanceof List<?> list)) {
             throw new StandTestException("Kafka step parameter '" + key + "' must be a list");
         }
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (Object item : list) {
-            if (!(item instanceof Map<?, ?>)) {
-                throw new StandTestException("Kafka step parameter '" + key + "' entries must be maps");
-            }
-            result.add((Map<String, Object>) item);
-        }
-        return result;
+        return list.stream()
+                .map(item -> {
+                    if (!(item instanceof Map<?, ?>)) {
+                        throw new StandTestException("Kafka step parameter '" + key + "' entries must be maps");
+                    }
+                    return (Map<String, Object>) item;
+                })
+                .toList();
     }
 }

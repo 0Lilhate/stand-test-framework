@@ -326,19 +326,15 @@ public final class KafkaStep {
     }
 
     private List<Map<String, Object>> assertionMaps() {
-        List<Map<String, Object>> list = new ArrayList<>();
-        for (KafkaAssertion assertion : this.assertions) {
-            list.add(Map.of(KafkaStepParameters.JSON_PATH, assertion.jsonPath(), KafkaStepParameters.EXPECTED_VALUE, assertion.expectedValue()));
-        }
-        return List.copyOf(list);
+        return this.assertions.stream()
+                .map(assertion -> Map.<String, Object>of(KafkaStepParameters.JSON_PATH, assertion.jsonPath(), KafkaStepParameters.EXPECTED_VALUE, assertion.expectedValue()))
+                .toList();
     }
 
     private List<Map<String, Object>> captureMaps() {
-        List<Map<String, Object>> list = new ArrayList<>();
-        for (KafkaCapture capture : this.captures) {
-            list.add(Map.of(KafkaStepParameters.VARIABLE_NAME, capture.variableName(), KafkaStepParameters.JSON_PATH, capture.jsonPath()));
-        }
-        return List.copyOf(list);
+        return this.captures.stream()
+                .map(capture -> Map.<String, Object>of(KafkaStepParameters.VARIABLE_NAME, capture.variableName(), KafkaStepParameters.JSON_PATH, capture.jsonPath()))
+                .toList();
     }
 
     private static String requireNonBlank(String value, String what) {
