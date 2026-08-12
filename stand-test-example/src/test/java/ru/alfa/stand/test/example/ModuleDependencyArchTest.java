@@ -76,6 +76,39 @@ class ModuleDependencyArchTest {
     }
 
     @Test
+    @DisplayName("stand-test-await depends on core alone among the siblings — it is the second sink, and every adapter is built on it")
+    void awaitIsCoreOnly() {
+        noClasses().that().resideInAPackage(AWAIT)
+                .should().dependOnClassesThat().resideInAnyPackage(
+                        JUNIT, REST, KAFKA, DB, GRPC, UI, ALLURE, SCENARIO, CONFIG, STARTER, EXAMPLE)
+                .as("stand-test-await must depend on no sibling but core")
+                .check(SDK);
+    }
+
+    @Test
+    @DisplayName("stand-test-await pulls in no third-party polling engine — the promise a consumer's classpath actually cashes")
+    void awaitHasNoThirdPartyEngine() {
+        // The module's whole dependency argument is "no Awaitility, so a consumer never inherits or
+        // conflicts with a transitive version of one". Until now nothing held it: adding a polling library
+        // to await would have compiled and passed this suite, exactly as adding Playwright to core would
+        // have before coreHasNoUiOrIoDependencies existed. Same shape of rule, one module over.
+        classes().that().resideInAPackage(AWAIT)
+                .should().onlyDependOnClassesThat().resideInAnyPackage("java..", "javax..", "org.slf4j..", CORE, AWAIT, "")
+                .as("stand-test-await must depend only on the JDK, slf4j-api and core")
+                .check(SDK);
+    }
+
+    @Test
+    @DisplayName("stand-test-junit sees core, await and JUnit — and no adapter, so the bridge cannot acquire a transport")
+    void junitBridgeHasNoAdapterOrTransport() {
+        classes().that().resideInAPackage(JUNIT)
+                .should().onlyDependOnClassesThat().resideInAnyPackage(
+                        "java..", "javax..", "org.slf4j..", "org.junit..", CORE, AWAIT, JUNIT, "")
+                .as("stand-test-junit must depend only on the JDK, JUnit, slf4j-api, core and await")
+                .check(SDK);
+    }
+
+    @Test
     @DisplayName("the Scenario model carries no UI fields: a browser, a viewport and a base URL are configuration, not scenario")
     void scenarioHasNoUiFields() {
         assertThat(Arrays.stream(Scenario.class.getDeclaredFields()).filter(field -> !field.isSynthetic()).map(Field::getName))
