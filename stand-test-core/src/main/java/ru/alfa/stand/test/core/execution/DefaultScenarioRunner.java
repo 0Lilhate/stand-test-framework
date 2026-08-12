@@ -4,7 +4,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -281,7 +280,9 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
         if (outcome == null) {
             diagnostics = Map.of();
         } else {
-            diagnostics = new HashMap<>(outcome.diagnostics());
+            // LinkedHashMap, not HashMap: the compensator's own keys keep their order and the runner's
+            // three are appended after them, which is how a reader meets them in the report.
+            diagnostics = new LinkedHashMap<>(outcome.diagnostics());
             diagnostics.put("compensation.status", outcome.status().name());
             diagnostics.put("compensation.target", outcome.target());
             if (outcome.affectedRows() >= 0) {

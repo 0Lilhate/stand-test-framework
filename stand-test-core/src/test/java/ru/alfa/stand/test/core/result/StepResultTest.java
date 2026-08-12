@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
@@ -28,6 +29,36 @@ class StepResultTest {
         assertThat(StepResult.skipped("s", "rest.post", START, END).status()).isEqualTo(StepStatus.SKIPPED);
         assertThat(StepResult.success("s", "rest.post", START, END).duration()).isEqualTo(Duration.ofMillis(5));
         assertThat(StepResult.success("s", "rest.post", START, END).errorMessage()).isNull();
+    }
+
+    @Test
+    @DisplayName("diagnostics keep the order they were assembled in — that order is what a report renders")
+    void diagnostics_keepInsertionOrder() {
+        Map<String, Object> ordered = new LinkedHashMap<>();
+        ordered.put("await", "rest.expectEventually orders /api/status");
+        ordered.put("timeout", "PT30S");
+        ordered.put("pollInterval", "PT0.2S");
+        ordered.put("attempts", 30);
+        ordered.put("elapsed", "PT30S");
+        ordered.put("lastValue", "PENDING");
+        ordered.put("rest.service", "orders");
+
+        StepResult result = new StepResult("s", "rest.expectEventually", StepStatus.FAILED, START, END, "late", ordered);
+
+        assertThat(result.diagnostics().keySet())
+                .containsExactly("await", "timeout", "pollInterval", "attempts", "elapsed", "lastValue", "rest.service");
+    }
+
+    @Test
+    @DisplayName("a null diagnostic value is carried, not thrown on: a step must not be reclassified by how it described itself")
+    void diagnostics_tolerateANullValue() {
+        Map<String, Object> withNull = new LinkedHashMap<>();
+        withNull.put("lastValue", null);
+        withNull.put("attempts", 3);
+
+        StepResult result = new StepResult("s", "db.expectEventually", StepStatus.TIMEOUT, START, END, "late", withNull);
+
+        assertThat(result.diagnostics()).containsEntry("lastValue", null).containsEntry("attempts", 3);
     }
 
     @Test

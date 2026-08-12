@@ -15,8 +15,9 @@ import ru.alfa.stand.test.core.validation.SqlStatementKind;
  * {@link StandTestException} on any violation.
  *
  * <p>It derives every decision from the core {@link SqlStatementClassifier} and the
- * {@link ForbiddenOperation} constants, so it cannot drift from the static validator or the AI schema
- * (plan §8.6). The DB executor calls it at runtime, before any IO, on the exact SQL it is about to send —
+ * {@link ForbiddenOperation} constants, so it cannot drift from the pre-flight {@code ScenarioValidator}
+ * (plan §8.6) — the two are the SDK's only derivations of that enum since {@code stand-test-ai-schema}
+ * was removed. The DB executor calls it at runtime, before any IO, on the exact SQL it is about to send —
  * the defense-in-depth runtime re-enforcement the plan mandates. Rules (MVP):
  *
  * <ul>

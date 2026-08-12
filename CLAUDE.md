@@ -132,8 +132,10 @@ YAML DSL ────────────────┘                    
 - **`correlationId` is SDK-owned** and injected outbound (REST header / Kafka key / gRPC metadata);
   capturing it from a response is a fallback only.
 - **`ForbiddenOperation` is the single source of truth** for guardrails, and since the removal of
-  `stand-test-ai-schema` (2026-08-12, a deliberate call by the line owner) the runtime
-  `DefaultScenarioValidator` is the *only* thing deriving from it. The pre-flight JSON Schema pass and
+  `stand-test-ai-schema` (2026-08-12, a deliberate call by the line owner) exactly **two** things derive
+  from it, both at runtime: the pre-flight `DefaultScenarioValidator` and the db module's `DbWriteGuard`,
+  which re-checks the exact SQL about to be sent. A new guardrail is not added until both agree — the
+  validator refuses the document, the guard refuses the statement. The pre-flight JSON Schema pass and
   the cross-check test that pinned its rules table to the enum are gone with the module, so a
   declarative document now meets the guardrails at parse time (`AiScenarioParser`, fail-closed) and at
   validation time — never before it is loaded. The value-level guardrails the schema used to state

@@ -2,6 +2,7 @@ package ru.alfa.stand.test.core.compensation;
 
 import java.util.Map;
 import java.util.Objects;
+import ru.alfa.stand.test.core.event.Diagnostics;
 
 /**
  * Immutable result of applying one {@link Compensator}. Carries the reporting identity (action id and a
@@ -33,7 +34,7 @@ public record CompensationOutcome(
         Objects.requireNonNull(actionId, "actionId must not be null");
         Objects.requireNonNull(target, "target must not be null");
         Objects.requireNonNull(status, "status must not be null");
-        diagnostics = Map.copyOf(Objects.requireNonNull(diagnostics, "diagnostics must not be null"));
+        diagnostics = Diagnostics.immutable(Objects.requireNonNull(diagnostics, "diagnostics must not be null"));
     }
 
     /**

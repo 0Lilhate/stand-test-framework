@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -29,6 +30,7 @@ import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
 import ru.alfa.stand.test.core.event.Attachment;
+import ru.alfa.stand.test.core.event.Diagnostics;
 import ru.alfa.stand.test.core.event.FailureAttachments;
 import ru.alfa.stand.test.core.event.NoOpReportingEventPublisher;
 import ru.alfa.stand.test.core.event.ReportingEvent;
@@ -782,6 +784,66 @@ class DefaultScenarioRunnerTest {
     }
 
     @Test
+    @DisplayName("a null VALUE inside the supplied diagnostics is carried too — the map being non-null is not the only way to break the reporting branch")
+    void run_failureDiagnosticsWithANullValue_doesNotReplaceTheStepFailure() {
+        // The sibling of the null-map case. "The last value observed was null" is an ordinary thing for a
+        // step to report, and a defensive copy that rejects it would turn the act of describing a failure
+        // into a different failure — recorded while the runner is already recording the real one.
+        Map<String, Object> supplied = new LinkedHashMap<>();
+        supplied.put("lastValue", null);
+        supplied.put("attempts", 3);
+        RecordingReportingEventPublisher recording = new RecordingReportingEventPublisher();
+        DefaultScenarioRunner runner = new DefaultScenarioRunner(
+                List.of(new FakeStepExecutor("fake.evidence", (step, context) -> {
+                    throw new SuppliedDiagnosticsFailure("nothing arrived", supplied);
+                })),
+                new DefaultScenarioValidator(),
+                iftRegistry(),
+                recording);
+
+        assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.evidence"))))
+                .isInstanceOf(StandTestAssertionError.class)
+                .hasMessageContaining("nothing arrived");
+
+        assertThat(recording.events()).anySatisfy(event -> assertThat(event).isInstanceOfSatisfying(StepEvent.class, e -> {
+            assertThat(e.phase()).isEqualTo(StepPhase.FINISHED);
+            assertThat(e.status()).isEqualTo(StepStatus.FAILED);
+            assertThat(e.diagnostics()).containsEntry("lastValue", null).containsEntry("attempts", 3);
+        }));
+    }
+
+    @Test
+    @DisplayName("the order a failure assembled its diagnostics in survives into the step event, because that order is what a report renders")
+    void run_failureDiagnostics_keepTheirOrder() {
+        Map<String, Object> supplied = new LinkedHashMap<>();
+        supplied.put("await", "kafka.expect response-topic");
+        supplied.put("timeout", "PT30S");
+        supplied.put("pollInterval", "PT0.2S");
+        supplied.put("attempts", 30);
+        supplied.put("elapsed", "PT30S");
+        supplied.put("kafka.messagesSeen", 0);
+        RecordingReportingEventPublisher recording = new RecordingReportingEventPublisher();
+        DefaultScenarioRunner runner = new DefaultScenarioRunner(
+                List.of(new FakeStepExecutor("fake.evidence", (step, context) -> {
+                    throw new SuppliedDiagnosticsFailure("no message matched", supplied);
+                })),
+                new DefaultScenarioValidator(),
+                iftRegistry(),
+                recording);
+
+        assertThatThrownBy(() -> runner.run(scenario(GenericStep.of("s1", "fake.evidence"))))
+                .isInstanceOf(StandTestAssertionError.class);
+
+        assertThat(recording.events()).anySatisfy(event -> assertThat(event).isInstanceOfSatisfying(StepEvent.class, e -> {
+            assertThat(e.phase()).isEqualTo(StepPhase.FINISHED);
+            // exception.class is the runner's own and is written first; the failure's keys follow in the
+            // order it assembled them.
+            assertThat(e.diagnostics().keySet()).containsExactly(
+                    "exception.class", "await", "timeout", "pollInterval", "attempts", "elapsed", "kafka.messagesSeen");
+        }));
+    }
+
+    @Test
     @DisplayName("a marker implementation that returns null never replaces the step's real failure with a failure of the reporting branch")
     void run_failureEvidenceIsNull_doesNotReplaceTheStepFailure() {
         RecordingReportingEventPublisher recording = new RecordingReportingEventPublisher();
@@ -854,7 +916,10 @@ class DefaultScenarioRunnerTest {
 
         private SuppliedDiagnosticsFailure(String message, Map<String, Object> diagnostics) {
             super(message);
-            this.diagnostics = Map.copyOf(diagnostics);
+            // What a real adopter does (DiagnosticAssertionError included): an ordered, null-tolerant copy.
+            // `Map.copyOf` is the reflexive spelling and would scramble the order and reject a null value
+            // before the runner ever saw the map — this double once got that wrong too.
+            this.diagnostics = Diagnostics.immutable(diagnostics);
         }
 
         @Override

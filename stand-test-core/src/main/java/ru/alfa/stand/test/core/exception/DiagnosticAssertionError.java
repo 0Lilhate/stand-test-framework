@@ -1,10 +1,9 @@
 package ru.alfa.stand.test.core.exception;
 
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import ru.alfa.stand.test.core.event.Attachment;
+import ru.alfa.stand.test.core.event.Diagnostics;
 import ru.alfa.stand.test.core.event.FailureAttachments;
 
 /**
@@ -42,7 +41,7 @@ public class DiagnosticAssertionError extends StandTestAssertionError implements
      */
     public DiagnosticAssertionError(String message, Map<String, Object> diagnostics) {
         super(message);
-        this.diagnostics = copy(diagnostics);
+        this.diagnostics = Diagnostics.immutable(diagnostics);
     }
 
     /**
@@ -54,7 +53,7 @@ public class DiagnosticAssertionError extends StandTestAssertionError implements
      */
     public DiagnosticAssertionError(String message, Throwable cause, Map<String, Object> diagnostics) {
         super(message, cause);
-        this.diagnostics = copy(diagnostics);
+        this.diagnostics = Diagnostics.immutable(diagnostics);
     }
 
     @Override
@@ -67,17 +66,4 @@ public class DiagnosticAssertionError extends StandTestAssertionError implements
         return this.diagnostics;
     }
 
-    /**
-     * Copies defensively while preserving iteration order and tolerating a null value.
-     *
-     * <p>{@code Map.copyOf} would do neither: it scrambles the order the diagnostics were assembled in —
-     * which is the order a report renders them — and throws on a null value. Throwing here would replace
-     * the failure being reported with a failure of the reporting branch.
-     */
-    private static Map<String, Object> copy(Map<String, Object> diagnostics) {
-        if (diagnostics == null || diagnostics.isEmpty()) {
-            return Map.of();
-        }
-        return Collections.unmodifiableMap(new LinkedHashMap<>(diagnostics));
-    }
 }

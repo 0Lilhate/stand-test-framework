@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import ru.alfa.stand.test.core.event.Attachment;
+import ru.alfa.stand.test.core.event.Diagnostics;
 
 /**
  * Immutable outcome of a single scenario step.
@@ -45,7 +46,7 @@ public record StepResult(
         Objects.requireNonNull(status, "status must not be null");
         Objects.requireNonNull(startedAt, "startedAt must not be null");
         Objects.requireNonNull(finishedAt, "finishedAt must not be null");
-        diagnostics = (diagnostics == null) ? Map.of() : Map.copyOf(diagnostics);
+        diagnostics = Diagnostics.immutable(diagnostics);
         attachments = (attachments == null) ? List.of() : List.copyOf(attachments);
     }
 
