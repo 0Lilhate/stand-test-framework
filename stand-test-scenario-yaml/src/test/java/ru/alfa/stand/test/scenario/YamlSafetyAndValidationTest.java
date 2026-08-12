@@ -20,6 +20,46 @@ class YamlSafetyAndValidationTest {
                 .isInstanceOf(StandTestException.class);
     }
 
+    // The alias and nesting limits are the half of SafeYaml this module was NOT pinning, while
+    // stand-test-config pinned all four of its own. The two SafeYaml copies are duplicated on purpose (a
+    // shared one would need SnakeYAML in core, which core must never take), so nothing but a test on each
+    // side keeps their numbers together — and this is the side whose stated threat model is an
+    // AI-generated document.
+
+    @Test
+    @DisplayName("an alias bomb (more than 10 aliases for collections) is rejected by the loader options")
+    void aliasBomb_isRejected() {
+        StringBuilder yaml = new StringBuilder("base: &b [1, 2]\nlist: [");
+        for (int index = 0; index < 11; index++) {
+            if (index > 0) {
+                yaml.append(", ");
+            }
+            yaml.append("*b");
+        }
+        yaml.append("]\n");
+
+        // SafeYaml.load, not parser.parse: the parser refuses this document for a dozen other reasons
+        // (unknown top-level fields among them), so going through it would pass whether the alias limit
+        // fired or not. The loader's own message is what proves WHICH check refused it.
+        assertThatThrownBy(() -> SafeYaml.load(yaml.toString()))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("Failed to parse document");
+    }
+
+    @Test
+    @DisplayName("a document nested deeper than 50 levels is rejected by the loader options")
+    void excessiveNesting_isRejected() {
+        StringBuilder yaml = new StringBuilder();
+        for (int depth = 0; depth < 60; depth++) {
+            yaml.append("  ".repeat(depth)).append("a:\n");
+        }
+        yaml.append("  ".repeat(60)).append("1\n");
+
+        assertThatThrownBy(() -> SafeYaml.load(yaml.toString()))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("Failed to parse document");
+    }
+
     @Test
     @DisplayName("duplicate keys are rejected by the loader options")
     void duplicateKeys_areRejected() {
