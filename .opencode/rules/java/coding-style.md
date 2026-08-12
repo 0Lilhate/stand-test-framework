@@ -17,7 +17,8 @@ paths:
 
 - Prefer `record` for value types (Java 16+)
 - Mark fields `final` by default — use mutable state only when required
-- Return defensive copies from public APIs: `List.copyOf()`, `Map.copyOf()`, `Set.copyOf()`
+- Return defensive copies from public APIs: `List.copyOf()`, `Map.copyOf()`, `Set.copyOf()` — but see
+  *When `copyOf` is the wrong copy* below before reaching for them
 - Copy-on-write: return new instances rather than mutating existing ones
 
 ```java
@@ -34,6 +35,39 @@ public class Order {
     }
 }
 ```
+
+### When `copyOf` is the wrong copy
+
+`List.copyOf()` / `Map.copyOf()` / `Set.copyOf()` and `Collectors.toMap()` are the reflexive spelling of
+"copy defensively", and they silently drop properties the caller may be relying on:
+
+- **all of them reject `null`** — a null element, key or value throws `NullPointerException` from inside
+  the JDK, replacing whatever diagnosis the caller was about to produce;
+- **`Map.copyOf` and `Collectors.toMap` also lose iteration order** — both return a hash-ordered map.
+  (`List.copyOf` keeps order; a `Set` has none to keep.)
+
+Reach for them when neither property matters. When either one does, copy through an ordered, null-tolerant
+collection instead:
+
+```java
+// WRONG — a diagnostics map is rendered into a report in the order it was assembled, and
+// "the last value observed was null" is an ordinary thing for a step to report
+this.diagnostics = Map.copyOf(diagnostics);
+
+// CORRECT — ordered, null-tolerant, still an immutable defensive copy
+this.diagnostics = Collections.unmodifiableMap(new LinkedHashMap<>(diagnostics));
+```
+
+Ask two questions before copying: **does a reader see this order?** (a report, a rendered message, a
+generated statement) and **can a value legitimately be absent?** (a parsed document, an observed value, a
+resolver that may return null). Either "yes" rules out `copyOf`/`toMap`.
+
+Both failure modes hide from the obvious test: order needs `containsExactly`, not `containsEntry`, and the
+null case needs a test that supplies one. In this repository the same mistake has been fixed three times —
+step diagnostics reaching reports shuffled and a null value replacing a real failure with an NPE, a
+document's `key:` with no value turning a located message into a JDK NPE, and a resolver whose contract
+allows null. Where a loop is kept for this reason, say so in a comment, or the next cleanup pass will
+"finish the job".
 
 ## Naming
 
