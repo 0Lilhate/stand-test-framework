@@ -1,6 +1,0 @@
-# INVALID by design: production-looking environment ids are rejected outright.
-environments:
-  - id: prod-main
-    services:
-      - serviceId: client-service
-        baseUrlRef: CLIENT_SERVICE_BASE_URL

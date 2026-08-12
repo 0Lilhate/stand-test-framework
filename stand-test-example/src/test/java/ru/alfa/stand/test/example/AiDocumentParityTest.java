@@ -2,40 +2,39 @@ package ru.alfa.stand.test.example;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.networknt.schema.JsonSchema;
-import com.networknt.schema.JsonSchemaFactory;
-import com.networknt.schema.SpecVersion;
-import com.networknt.schema.ValidationMessage;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
-import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import ru.alfa.stand.test.ai.AiSchemaResources;
+import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.scenario.GenericStep;
 import ru.alfa.stand.test.core.scenario.Scenario;
 import ru.alfa.stand.test.core.validation.DefaultScenarioValidator;
 import ru.alfa.stand.test.scenario.AiScenarioParser;
 
 /**
- * Parity proof for the AI-format guardrail: a scenario document that passes the JSON Schema shipped by
- * {@code stand-test-ai-schema} is also accepted by {@code AiScenarioParser} and becomes a valid core
- * {@link Scenario}. This is the single test that closes the loop schema-accepts → parser-accepts →
- * runnable model, so the ai-schema and the runtime engine cannot drift apart silently. Structural only —
- * no live stand is contacted.
+ * Parity proof for the AI-format engine: a scenario document in the steps/type format is accepted by
+ * {@code AiScenarioParser}, becomes a valid core {@link Scenario} with the expected wire keys, and a
+ * document violating the guardrails is rejected before it can run. Structural only — no live stand is
+ * contacted.
+ *
+ * <p>This test used to close a three-link loop schema-accepts → parser-accepts → runnable model against
+ * the JSON Schema shipped by the former {@code stand-test-ai-schema} module. That module was removed
+ * deliberately, so the first link is gone: the parser is now the only gate the AI format has before the
+ * runtime validator, and a malformed document is caught at parse time rather than by a pre-flight schema
+ * pass.
  */
-class AiSchemaParityTest {
+class AiDocumentParityTest {
 
     private static final String DOCUMENT = "/ai/canonical-flow.json";
     private static final String GRPC_DOCUMENT = "/ai/grpc-flow.json";
     private static final String INVALID_DOCUMENT = "/ai/invalid-flow.json";
 
     private static String readDocument(String path) {
-        try (InputStream in = AiSchemaParityTest.class.getResourceAsStream(path)) {
+        try (InputStream in = AiDocumentParityTest.class.getResourceAsStream(path)) {
             if (in == null) {
                 throw new IllegalStateException("Missing parity document: " + path);
             }
@@ -45,25 +44,8 @@ class AiSchemaParityTest {
         }
     }
 
-    private static Set<ValidationMessage> validateAgainstSchema(String path) {
-        try {
-            JsonSchema schema = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012)
-                    .getSchema(AiSchemaResources.scenarioSchemaJson());
-            JsonNode node = new ObjectMapper().readTree(readDocument(path));
-            return schema.validate(node);
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to validate " + path, e);
-        }
-    }
-
     @Test
-    @DisplayName("the canonical document passes the ai-schema JSON Schema")
-    void document_passesSchema() {
-        assertThat(validateAgainstSchema(DOCUMENT)).as("schema validation messages").isEmpty();
-    }
-
-    @Test
-    @DisplayName("the same document parses into a validator-clean Scenario with the expected wire keys")
+    @DisplayName("the canonical document parses into a validator-clean Scenario with the expected wire keys")
     void document_parsesToRunnableScenario() {
         Scenario scenario = new AiScenarioParser().parse(readDocument(DOCUMENT));
 
@@ -94,24 +76,14 @@ class AiSchemaParityTest {
     }
 
     @Test
-    @DisplayName("a document violating the guardrails is rejected by the ai-schema JSON Schema")
-    void invalidDocument_failsSchema() {
-        Set<ValidationMessage> messages = validateAgainstSchema(INVALID_DOCUMENT);
-
-        // Three independent guardrails must each produce a message anchored at its own step: the unknown
-        // (destructive) step type, the URL where a logical alias is required, and the timeout whose unit
-        // the duration format does not allow (only ms|s|m).
-        assertThat(messages).as("schema validation messages").isNotEmpty();
-        String rendered = messages.toString();
-        assertThat(rendered).contains("$.steps[0].type");
-        assertThat(rendered).contains("$.steps[1].service");
-        assertThat(rendered).contains("$.steps[2].timeout");
-    }
-
-    @Test
-    @DisplayName("the grpc.unary document passes the ai-schema JSON Schema")
-    void grpcDocument_passesSchema() {
-        assertThat(validateAgainstSchema(GRPC_DOCUMENT)).as("schema validation messages").isEmpty();
+    @DisplayName("a document violating the guardrails is rejected by the parser, not deferred to the run")
+    void invalidDocument_isRejectedAtParseTime() {
+        // The document's first step is a destructive `db.delete` — a step type the AI format does not
+        // have. The parser fails closed on it, so the two later violations (a URL where a logical alias
+        // belongs, an unbounded timeout) never get the chance to reach a stand.
+        assertThatThrownBy(() -> new AiScenarioParser().parse(readDocument(INVALID_DOCUMENT)))
+                .isInstanceOf(StandTestException.class)
+                .hasMessageContaining("db.delete");
     }
 
     @Test

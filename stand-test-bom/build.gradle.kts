@@ -33,7 +33,6 @@ dependencies {
     api(project(":stand-test-ui"))
     api(project(":stand-test-allure"))
     api(project(":stand-test-scenario-yaml"))
-    api(project(":stand-test-ai-schema"))
     api(project(":stand-test-config"))
     api(project(":stand-test-spring-boot-starter"))
 

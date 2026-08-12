@@ -38,8 +38,8 @@ all values through the `:name` rewriter.
 
 **Core prerequisite (delivered, §8.8).** `SqlStatementClassifier` (+ `SqlClassification` /
 `SqlStatementKind`) in `stand-test-core` `core.validation`: a fail-closed, comment/literal-aware
-classifier (read / write / destructive / rejected) that both the runtime `DbWriteGuard` and a future
-static `ScenarioValidator` / `ai-schema` derive from, so they cannot drift (§8.6). No new env contract is
+classifier (read / write / destructive / rejected) that both the runtime `DbWriteGuard` and the
+`ScenarioValidator` derive from, so they cannot drift (§8.6). No new env contract is
 required: `DatasourceDefinition` already exists.
 
 > **Known follow-up.** Static guard enforcement currently lives in the adapter (runtime, before any IO).

@@ -1,8 +1,0 @@
-candidates:
-  - candidateId: create-payment
-    candidateType: endpoint
-    status: new
-    confidence: high
-    normalized:
-      id: create-payment
-      title: "Create payment"

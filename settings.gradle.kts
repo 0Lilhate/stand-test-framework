@@ -140,6 +140,5 @@ include(
   "stand-test-example",
   "stand-test-spring-boot-starter",
   "stand-test-scenario-yaml",
-  "stand-test-ai-schema",
   "stand-test-config"
 )

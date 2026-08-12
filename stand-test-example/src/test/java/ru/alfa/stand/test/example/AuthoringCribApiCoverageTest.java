@@ -35,10 +35,11 @@ import ru.alfa.stand.test.rest.RestStep;
  * human read the failure. That is not hypothetical: the same class of drift already shipped once,
  * when the crib went on calling gRPC equals-only after it had gained the full matcher set.
  *
- * <p>This test lives in {@code stand-test-example} rather than next to the other kit tests in
- * {@code stand-test-ai-schema} for one reason: it needs the adapter classes on the classpath, and
- * ai-schema's dependency boundary forbids adapter edges ("it must NOT depend on runtime/adapter
- * modules"). The example module already depends on all four adapters.
+ * <p>This test lives in {@code stand-test-example} because it needs the adapter classes on the
+ * classpath, and this is the only module that has all four. That placement is now load-bearing rather
+ * than incidental: the other kit tests lived in {@code stand-test-ai-schema} and went with it when that
+ * module was removed, so this is the last machine check standing between a kit asset and the SDK it
+ * describes.
  */
 class AuthoringCribApiCoverageTest {
 

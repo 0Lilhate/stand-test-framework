@@ -96,7 +96,7 @@ YAML DSL ────────────────┘                    
 ### Module graph (`A → B` = A depends on B; keep this acyclic, core is the only sink)
 
 - `await`, `junit`, `rest`, `kafka`, `db`, `grpc`, `ui` → `core` (and the adapters + junit also → `await`)
-- `allure` → `core`; `scenario-yaml` → **core only** (adapters resolved via SPI at runtime, no compile edges); `ai-schema` → **core only** (no runtime/adapter deps, no `scenario-yaml`); `config` → **core only** (+ SnakeYAML; ships the `FileEnvironmentRegistry` SPI provider that loads `stand-test-environments.yml`)
+- `allure` → `core`; `scenario-yaml` → **core only** (adapters resolved via SPI at runtime, no compile edges); `config` → **core only** (+ SnakeYAML; ships the `FileEnvironmentRegistry` SPI provider that loads `stand-test-environments.yml`)
 - `spring-boot-starter` → the runtime modules it wires as `compileOnly` optionals (never the reverse); `bom` is the `java-platform` outside the compile graph — it constrains every published module plus the curated third-party versions (only external consumers import it)
 - **Adapter modules must not depend on each other.** Each module's `build.gradle.kts` keeps its
   `Planned internal dependencies` as commented stubs that must match this target graph.
@@ -114,14 +114,31 @@ YAML DSL ────────────────┘                    
 - **Failure semantics:** assertion failures are raised as `StandTestAssertionError` (extends
   `AssertionError`, so JUnit/Allure treat them as a failed test); infrastructure/config problems as
   `StandTestException` (extends `RuntimeException`). A `StepStatus.FAILED` is a reporting record and
-  must never silently substitute for a thrown failure.
+  must never silently substitute for a thrown failure. On a **thrown** failure the runner builds the
+  step's diagnostics from the cause alone and adds only `exception.class` — anything richer is opt-in
+  through the core marker **`FailureAttachments`**, whose `failureDiagnostics()`/`failureAttachments()`
+  the runner folds into the failing `StepEvent`. Two adopters: the UI adapter (screenshot, masked-zone
+  count) and **`DiagnosticAssertionError`** — a `StandTestAssertionError` carrying a diagnostics map,
+  which is what every adapter's **await timeout** throws. So a timed-out `expectEventually` reaches a
+  report twice over: `TimeoutDiagnostics.summary()` in the message for whoever reads a stack trace, and
+  `toMap()` in the diagnostics for whoever reads the report, plus adapter keys added through
+  `withAttribute` (`rest.service`, `kafka.messagesSeen`, `db.sql`, `ui.application`, …). That map is
+  rendered verbatim into the report, so it takes metadata only — an alias, a count, a bounded query —
+  never a response body or a message payload. A wrapper that re-throws such a failure must republish
+  what its cause carried (`UiFailureDiagnostics.merge`), or the diagnostics die at the last hop.
+  `DiagnosticAssertionError`'s causeless constructor is deliberately `super(message)` and never
+  `super(message, null)`: the two-argument form of `Throwable` fixes the cause at null and the JDK then
+  refuses `initCause`, which is exactly how `AwaitResult.orElseThrow` attaches the probe's last error.
 - **`correlationId` is SDK-owned** and injected outbound (REST header / Kafka key / gRPC metadata);
   capturing it from a response is a fallback only.
-- **`ForbiddenOperation` is the single source of truth** for guardrails: the runtime
-  `DefaultScenarioValidator` and the `stand-test-ai-schema` JSON Schema both derive from it (a
-  cross-check test pins the schema's rules table to the enum), and the runtime validator re-enforces
-  the schema's value-level guardrails (secret headers, SQL sleep functions, timeout bounds) so a
-  document that skipped the schema pass meets the same net. **`EnvironmentRegistry`** resolves logical
+- **`ForbiddenOperation` is the single source of truth** for guardrails, and since the removal of
+  `stand-test-ai-schema` (2026-08-12, a deliberate call by the line owner) the runtime
+  `DefaultScenarioValidator` is the *only* thing deriving from it. The pre-flight JSON Schema pass and
+  the cross-check test that pinned its rules table to the enum are gone with the module, so a
+  declarative document now meets the guardrails at parse time (`AiScenarioParser`, fail-closed) and at
+  validation time — never before it is loaded. The value-level guardrails the schema used to state
+  first (secret headers, SQL sleep functions, timeout bounds) survive because the runtime validator
+  enforces them itself. **`EnvironmentRegistry`** resolves logical
   aliases (service/topic/datasource/gRPC) to endpoints + **secret references** (never secret values),
   and is the whitelist enforcement point. Nuance: in the Spring starter path, non-secret ENDPOINT
   fields may instead carry Spring-resolved values via value twins (`base-url`/`url`/`target`/
@@ -219,8 +236,7 @@ wave-1 UI slice: five `ui.*` step types on Playwright, application by registry a
 `BrowserContext` per run in the `ResourceScope`, browser-backed tests behind a separate `browserTest`
 task — see `stand-test-ui/README.md` and `docs/ui-test-generation/`), **`stand-test-allure`** (with sink-side secret masking of attachment
 bodies), **`stand-test-scenario-yaml`** (two surfaces: given/then YAML and the AI steps/type format),
-**`stand-test-ai-schema`** (JSON Schema + generation rules; a cross-check test pins the matcher grammar
-to the core enum), **`stand-test-spring-boot-starter`** (Boot-3 auto-configuration, adapters as
+**`stand-test-spring-boot-starter`** (Boot-3 auto-configuration, adapters as
 `compileOnly` optionals) and **`stand-test-config`** (file-based `EnvironmentRegistry` SPI provider).
 **`stand-test-example`** is a test-only showcase (offline doubles, not published); **`stand-test-bom`**
 is the `java-platform` carrying constraints for every published module. Known asymmetry: **Kafka and DB** are
@@ -241,6 +257,19 @@ API key. **Do not reintroduce them.** The agent is the host; what this repositor
 kit under `docs/ai-agent/`, and its roadmap is
 [`docs/plans/ai-agent-kit-implementation.md`](docs/plans/ai-agent-kit-implementation.md) — read that
 before picking up work on the kit.
+
+**`stand-test-ai-schema` was removed on 2026-08-12**, deliberately and with the cost accepted by the
+line owner. It shipped the declarative format's JSON Schema, the generation-rules catalogue and a
+60-line resource loader; its `src/test` had grown into the CI home of everything else — kit bundle
+parity (`.claude/` ⇄ `.opencode/`), the `ForbiddenOperation` cross-check, the KB and evaluation-corpus
+schemas, the capability censuses, `.gitlab-ci.yml` and the count-bearing docs. All 49 test classes went
+with it. Two consequences to keep in mind rather than rediscover: the AI/declarative document has **no
+pre-flight gate** any more (`AiScenarioParser` fail-closed + `DefaultScenarioValidator` are the whole
+net, both after loading), and **nothing machine-checks the kit against this repository** — a kit asset
+claiming an SDK capability that changed will now simply be wrong and stay green. The kit assets that
+referenced the jar resources (`stand-test-yaml-authoring`, `/stand-test-yaml`, `/stand-test-validate`,
+the `test-plan`/`failure-analysis` schemas used by `stand-test-scenario-design` and
+`stand-test-debugging`) point at something that no longer exists and are pending a decision.
 
 The kit now has **two branches**: the protocol one (REST/Kafka/DB/gRPC) and a **UI branch** — 9
 skills + 5 commands + `rules/stand-test-ui-guardrails.md`, wave-1 backlog items S-5.1/S-5.2. Its

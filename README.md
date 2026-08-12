@@ -35,7 +35,6 @@ YAML DSL ──────────────────┘
 | [stand-test-config](stand-test-config/README.md) | Файловый `EnvironmentRegistry` (`stand-test-environments.yml`) — SPI-провайдер для plain JUnit |
 | [stand-test-spring-boot-starter](stand-test-spring-boot-starter/README.md) | Auto-configuration для Boot 3: `@Autowired StandClient`, окружения из `application.yml` |
 | [stand-test-scenario-yaml](stand-test-scenario-yaml/README.md) | YAML DSL (поверхности given/then и AI steps/type) над той же моделью |
-| [stand-test-ai-schema](stand-test-ai-schema/README.md) | JSON Schema + правила генерации для безопасных AI-сценариев |
 | [stand-test-bom](stand-test-bom/README.md) | BOM (`java-platform`) — выравнивание версий для потребителей |
 | [stand-test-example](stand-test-example/README.md) | Test-only витрина на offline-двойниках (не публикуется) — живой quick start |
 
@@ -219,12 +218,15 @@ Spring схлопнет его, и ref будет прочитан как имя
 
 ## AI-генерируемые сценарии
 
-`stand-test-ai-schema` поставляет JSON Schema и
-[правила генерации](stand-test-ai-schema/src/main/resources/ai/stand-test-ai-generation-rules.md), которые
-нужны LLM, чтобы производить безопасные декларативные сценарии; `stand-test-scenario-yaml` парсит этот
-формат в ту же валидированную модель. Guardrails (только whitelisted-окружения, никаких сырых URL, никаких
-инлайн-секретов, никакого деструктивного SQL, ограниченные таймауты) выводятся из единственного источника
-истины `ForbiddenOperation` и переenforce'атся в рантайме валидатором.
+`stand-test-scenario-yaml` парсит декларативный формат (steps/type) в ту же валидированную модель.
+Guardrails (только whitelisted-окружения, никаких сырых URL, никаких инлайн-секретов, никакого
+деструктивного SQL, ограниченные таймауты) выводятся из единственного источника истины
+`ForbiddenOperation` и enforce'атся рантайм-валидатором.
+
+Отдельного модуля с JSON Schema для этого формата больше нет: `stand-test-ai-schema` удалён 12.08.2026
+осознанным решением. Практическое следствие для потребителя — **предварительной проверки документа
+схемой не существует**: нарушение ловится при разборе (`AiScenarioParser` fail-closed) и валидатором,
+то есть уже после загрузки, а не до неё.
 
 ### Кит для AI-агента
 

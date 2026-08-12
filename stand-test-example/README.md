@@ -1,6 +1,6 @@
 # stand-test-example
 
-**Group:** examples · **Gradle plugin:** `java-library` · **Internal dependencies (test):** `stand-test-core`, `stand-test-await`, `stand-test-junit`, `stand-test-rest`, `stand-test-db`, `stand-test-kafka`, `stand-test-grpc`, `stand-test-allure`, `stand-test-config`, `stand-test-scenario-yaml`, `stand-test-ai-schema`, `stand-test-spring-boot-starter`
+**Group:** examples · **Gradle plugin:** `java-library` · **Internal dependencies (test):** `stand-test-core`, `stand-test-await`, `stand-test-junit`, `stand-test-rest`, `stand-test-db`, `stand-test-kafka`, `stand-test-grpc`, `stand-test-allure`, `stand-test-config`, `stand-test-scenario-yaml`, `stand-test-spring-boot-starter`
 
 Technical **usage examples and a verification module** for the stand-test SDK (Iteration 8). They show
 how a consuming team writes scenarios with the SDK, prove the published modules compose into one working
@@ -24,7 +24,7 @@ The examples live in `src/test/java` (there is no production code):
 | `FullStandTestFrameworkExampleTest` | **the composition proof**: one scenario through model → validator → runner → `StepExecutor` SPI (REST + DB + gRPC + a test-only variable-snapshot probe) → await (`db.expectEventually`) → variable capture/`${…}` resolve → correlation propagation (REST header **and** gRPC metadata carry the same SDK-owned id) → Allure mapping; plus per-run `VariableStore` isolation (a second run starts empty, fresh `testRunId`) and a deterministic `Awaiter` demo on a fake `TimeSource` (3 poll attempts, zero wall-clock time). |
 | `FrameworkFailureSemanticsExampleTest` | failure semantics — an unmet step assertion surfaces as `StandTestAssertionError` (an `AssertionError`, so JUnit fails the test) while the Allure side-channel still renders the step FAILED with its diagnostics attachment. |
 | `StandTestSpringBootStarterExampleTest` | the Spring consumer path — `ApplicationContextRunner` over the starter's auto-configuration: beans by default, nothing on `stand.test.enabled=false`, `stand.test.environments.*` binding, user bean wins. Offline, no bootable app. |
-| `AiSchemaParityTest` | AI-format guardrail parity — the canonical/gRPC documents pass the `stand-test-ai-schema` JSON Schema **and** parse into validator-clean scenarios, while `ai/invalid-flow.json` (destructive step type, hardcoded URL, unbounded timeout) is rejected by the schema. No runner involved. |
+| `AiDocumentParityTest` | AI-format parity — the canonical/gRPC documents parse into validator-clean scenarios with the expected wire keys, while `ai/invalid-flow.json` (destructive step type, hardcoded URL, unbounded timeout) is rejected by `AiScenarioParser` at parse time. No runner involved. Formerly `AiSchemaParityTest`: it also ran a JSON Schema pass first, which went with `stand-test-ai-schema`. |
 | `KafkaExampleTest` | `KafkaStep.send` → `expect` — inject the SDK correlation header, match it, JSON-path assert + capture. **Needs a broker** (tagged `requires-broker`, excluded from the default run). |
 
 ## Execution model (why it runs offline)
@@ -74,7 +74,6 @@ and not exposed on `ScenarioResult` — a custom executor is the sanctioned way 
 | `stand-test-allure` | yes | `AllureReportingEventPublisher` over a capturing lifecycle facade |
 | `stand-test-config` | yes | `FileEnvironmentRegistry` SPI provider loads `application.yml` for `@StandTest` |
 | `stand-test-scenario-yaml` | yes | `AiScenarioParser` (AI-format documents → core `Scenario`) |
-| `stand-test-ai-schema` | yes | shipped JSON Schema validates the valid/invalid example documents |
 | `stand-test-spring-boot-starter` | yes | `ApplicationContextRunner` context checks (no bootable app) |
 
 ### The `@StandTest` path (Phase 2)

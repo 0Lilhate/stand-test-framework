@@ -42,14 +42,11 @@ dependencies {
     testImplementation(libs.grpc.api)
     testImplementation(libs.grpc.services)
     testRuntimeOnly(libs.grpc.netty.shaded)
-    // AI-format parity: the scenario-yaml engine (AiScenarioParser) parses the AI document, and the
-    // ai-schema module ships the JSON Schema it must first validate against. Both are core-only and
-    // test-only here. The JSON Schema validator (networknt) + Jackson are declared directly: ai-schema
-    // keeps them in its own test scope, so they do NOT reach this module transitively.
+    // AI-format parity: the scenario-yaml engine (AiScenarioParser) parses the AI document into a core
+    // Scenario — core-only and test-only here. The JSON Schema validator (networknt) + Jackson used to be
+    // declared alongside it for the ai-schema pre-flight pass; that module was removed deliberately, so
+    // the parser is the AI format's only gate and this module needs no JSON Schema tooling.
     testImplementation(project(":stand-test-scenario-yaml"))
-    testImplementation(project(":stand-test-ai-schema"))
-    testImplementation(libs.networknt.json.schema.validator)
-    testImplementation(libs.jackson.databind)
     // Spring Boot starter example: StandTestSpringBootStarterExampleTest wires the auto-configuration
     // through ApplicationContextRunner (spring-boot-test) — offline bean-presence/binding checks only,
     // no bootable app and no real application context.

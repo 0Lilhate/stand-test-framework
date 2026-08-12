@@ -38,9 +38,10 @@ import ru.alfa.stand.test.core.scenario.StepParameterKeys;
  * the application declares ({@code UI_LOGIN_ROLE_REQUIRED} / {@code UI_LOGIN_ROLE_UNKNOWN}). Adapters
  * re-resolve each alias as defence in depth (plan §8.6); DB write-allow semantics stay with the adapters.
  *
- * <p>The registry overload also re-enforces at runtime the value-level guardrails the AI JSON Schema
- * ({@code stand-test-ai-schema}) expresses statically, so a declarative document that reaches the runner
- * WITHOUT a prior schema pass meets the same net (runtime is a superset of the schema, plan §11):
+ * <p>The registry overload also enforces the value-level guardrails the AI JSON Schema
+ * ({@code stand-test-ai-schema}) used to express statically. That module was removed deliberately, so this
+ * is no longer a second net under a first one — it is the only net, and every declarative document reaches
+ * the runner without a prior schema pass (plan §11):
  * secret-bearing header names and {@code Bearer}/{@code Basic}-shaped header values are rejected
  * ({@link ForbiddenOperation#SECRET_IN_SOURCE}), SQL sleep/side-effect time functions are rejected
  * ({@link ForbiddenOperation#THREAD_SLEEP}) and every declared timeout/deadline must be a positive whole

@@ -13,9 +13,13 @@ import ru.alfa.stand.test.core.scenario.GenericStep;
 import ru.alfa.stand.test.core.scenario.Scenario;
 
 /**
- * Parses an AI-format declarative scenario — the flat {@code steps: [{ id, type, ... }]} surface described
- * by the JSON Schema shipped in {@code stand-test-ai-schema} — into the same generic core {@link Scenario}
- * model the runtime executes (the second declarative input alongside {@link YamlScenarioParser}).
+ * Parses an AI-format declarative scenario — the flat {@code steps: [{ id, type, ... }]} surface — into the
+ * same generic core {@link Scenario} model the runtime executes (the second declarative input alongside
+ * {@link YamlScenarioParser}).
+ *
+ * <p>This parser is the format's FIRST gate. A JSON Schema in {@code stand-test-ai-schema} used to state the
+ * surface before a document was ever loaded; that module was removed deliberately, so what this class
+ * accepts now defines the format, and its fail-closed rejections are the only pre-runtime check there is.
  *
  * <p>It normalizes the AI ergonomic fields onto the yaml-surface field map the existing translators read
  * (so a document accepted by the schema reaches a runnable {@code Scenario}), then delegates to the same

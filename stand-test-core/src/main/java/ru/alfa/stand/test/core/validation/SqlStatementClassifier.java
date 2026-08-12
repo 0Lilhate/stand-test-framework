@@ -12,8 +12,8 @@ import java.util.regex.Pattern;
  * Fail-closed classifier for a single SQL statement (plan §8.8 — the DB safety prerequisite).
  *
  * <p>It is the single source of truth for "what is this SQL?" that both the DB adapter (at runtime,
- * before any IO) and the static {@code ScenarioValidator} / {@code ai-schema} derive their allow/deny
- * decisions from, so the runtime guard and the static checks cannot drift apart (plan §8.6).
+ * before any IO) and the {@code ScenarioValidator} derive their allow/deny decisions from, so the guard
+ * and the pre-flight checks cannot drift apart (plan §8.6).
  *
  * <p><strong>Why a custom classifier and not a SQL parser.</strong> Comments, string literals,
  * multi-statement batches and schema qualification make naive keyword matching unsafe — a missed

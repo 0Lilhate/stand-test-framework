@@ -7,9 +7,10 @@ import java.util.Set;
 import ru.alfa.stand.test.core.exception.StandTestException;
 
 /**
- * Normalizes one AI-format step — a flat object with a {@code type} field and ergonomic nested fields
- * (as described by the JSON Schema in {@code stand-test-ai-schema}) — into the yaml-surface field map the
- * existing {@code RestStepTranslator}/{@code KafkaStepTranslator}/{@code DbStepTranslator} already consume.
+ * Normalizes one AI-format step — a flat object with a {@code type} field and ergonomic nested fields — into
+ * the yaml-surface field map the existing {@code RestStepTranslator}/{@code KafkaStepTranslator}/
+ * {@code DbStepTranslator} already consume. The JSON Schema that used to describe this surface shipped in
+ * {@code stand-test-ai-schema}, a module removed deliberately; the rules below are now the description.
  *
  * <p>Fail-closed: unknown AI fields and constructs that no adapter can execute yet are rejected here with
  * a clear {@link StandTestException} naming the supported alternative. The returned map is intermediate —
