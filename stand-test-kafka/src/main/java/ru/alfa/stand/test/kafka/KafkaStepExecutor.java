@@ -75,9 +75,6 @@ public final class KafkaStepExecutor implements StepExecutor {
 
     private static final Logger LOG = LoggerFactory.getLogger(KafkaStepExecutor.class);
 
-    // Mode (a) of plan §4: the blocking consumer.poll(pollTimeout) carries the pause, so the await
-    // poll interval is kept near-zero (AwaitPolicy forbids exactly zero) rather than adding a second,
-    // independent wait between probes.
     /**
      * Namespace prefix for this adapter's {@link ResourceScope} keys, so a topic alias can never collide
      * with another adapter's resource registered under the same logical alias in one run (mirrors the DB
@@ -148,9 +145,6 @@ public final class KafkaStepExecutor implements StepExecutor {
         }
         Map<String, Object> parameters = parameters(step);
         String topicAlias = KafkaStepParameters.requireString(parameters, KafkaStepParameters.TOPIC);
-        // Fail-closed BEFORE any broker IO (plan §15): reject an undiscriminated or constant-key expect here,
-        // in prepare(), rather than after armConsumer() has opened a real consumer — mirroring the DB path,
-        // which enforces the write-guard before opening a connection.
         requirePerRunDiscriminator(parameters, topicAlias);
         armConsumer(topicAlias, context);
     }

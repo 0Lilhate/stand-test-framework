@@ -51,22 +51,16 @@ final class DbStepTranslator {
             }
             case "db.cleanup" -> params.put(YamlStepKeys.WHERE_TEST_RUN_ID_COLUMN, SurfaceValues.requireString(fields, "whereTestRunId", location));
             case "db.seed" -> {
-                // taggedByTestRunId names the reap column an INSERT tags with :testRunId (the same column the
-                // paired cleanup filters); optional here but enforced at runtime by the write-guard for an
-                // INSERT (parallel isolation, plan §15) — mirrors DbStep.taggedByTestRunId(...).
                 String tagColumn = SurfaceValues.optionalString(fields, "taggedByTestRunId", location);
                 if (tagColumn != null) {
                     params.put(YamlStepKeys.SEED_TEST_RUN_ID_COLUMN, tagColumn);
                 }
-                // whereTestRunId is OPTIONAL for a seed (an INSERT needs no predicate); a write-scoped
-                // UPDATE/DELETE seed may declare it, mirroring DbStep which allows it on seed and cleanup.
                 String whereColumn = SurfaceValues.optionalString(fields, "whereTestRunId", location);
                 if (whereColumn != null) {
                     params.put(YamlStepKeys.WHERE_TEST_RUN_ID_COLUMN, whereColumn);
                 }
             }
             default -> {
-                // unreachable: the known-set switch above already rejected any other type.
             }
         }
         return params;

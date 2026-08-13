@@ -144,9 +144,6 @@ public record UiRunSettings(
                 (browser == null || browser.isBlank()) ? DEFAULT_BROWSER : browser.trim(),
                 Duration.ofMillis(positiveMillis(source.apply(ACTION_TIMEOUT_PROPERTY), ACTION_TIMEOUT_PROPERTY, UiStepParameters.DEFAULT_ACTION_TIMEOUT_MILLIS)),
                 Duration.ofMillis(positiveMillis(source.apply(NAVIGATION_TIMEOUT_PROPERTY), NAVIGATION_TIMEOUT_PROPERTY, UiStepParameters.DEFAULT_TIMEOUT_MILLIS)),
-                // Resolved by core, not here: the reporting sink resolves the same directory from the same
-                // source, and two spellings of "where do this run's artefacts live" is how the picture got
-                // lost the first time.
                 RunArtifacts.directory(source),
                 Duration.ofDays(positiveDays(retentionDays, ARTIFACTS_RETENTION_DAYS_PROPERTY, DEFAULT_ARTIFACT_RETENTION.toDays())));
     }

@@ -137,14 +137,7 @@ final class PlaywrightUiDriver implements UiDriver {
         this.application = Objects.requireNonNull(application, "application must not be null");
         this.traceEnabled = (application.trace() == UiTraceMode.ON_FAILURE);
         this.page = context.newPage();
-        // The console is recorded from the moment the page is created — "за время шага" in the story's
-        // wording means everything the step surfaced before it went red, and the failure path attaches it.
-        // Every level is kept: a warning the symptom of a bug is as relevant to a broken run as an error.
         this.page.onConsoleMessage(this::recordConsoleMessage);
-        // The network story is recorded the same way — every response the page receives from the moment it
-        // exists. Only method/path/status are kept and the credential headers are masked as the record is
-        // built (UITG-S015, SEC-05); a body is never read, so a red run can show "it reached the backend
-        // and got a 500" without ever copying what the payload carried.
         this.page.onResponse(this::recordResponse);
     }
 
@@ -152,8 +145,6 @@ final class PlaywrightUiDriver implements UiDriver {
         if (message == null) {
             return;
         }
-        // "type: text" is the same shape a developer reads in the browser's own console, and it costs the
-        // reader nothing to scan; an empty text is still a message the page chose to log, so it is kept.
         this.consoleMessages.record(message.type() + ": " + message.text());
     }
 
@@ -224,8 +215,6 @@ final class PlaywrightUiDriver implements UiDriver {
                 return ElementSnapshot.absent();
             }
             if (matches > 1) {
-                // Playwright would fail this on its own further down with a strict-mode error about a
-                // resolved selector; saying it here names the locator the test author actually wrote.
                 throw new StandTestException("Locator " + locator.describe() + " matched " + matches + " elements — a step must address exactly one; narrow the locator");
             }
             boolean visible = element.isVisible();
@@ -233,8 +222,6 @@ final class PlaywrightUiDriver implements UiDriver {
             String text = element.textContent(new Locator.TextContentOptions().setTimeout(timeout));
             return new ElementSnapshot(true, visible, enabled, text, inputValue(element, timeout), readAttributes(element, attributes, timeout));
         } catch (TimeoutError timedOut) {
-            // A probe that could not complete in its (short) budget is an observation of "not there yet",
-            // not a broken driver: the await engine polls again, and the step's own timeout still bounds it.
             LOG.debug("UI probe of {} timed out after {}", locator.describe(), probeTimeout);
             return ElementSnapshot.absent();
         } catch (PlaywrightException failure) {
@@ -268,8 +255,6 @@ final class PlaywrightUiDriver implements UiDriver {
 
     @Override
     public void setExtraHeader(String name, String value) {
-        // The union, not the one header: Playwright replaces the entire set on every call, so sending only
-        // the newest would unset every header set before it.
         synchronized (this.extraHeaders) {
             this.extraHeaders.put(name, value);
             this.context.setExtraHTTPHeaders(Map.copyOf(this.extraHeaders));
@@ -292,28 +277,14 @@ final class PlaywrightUiDriver implements UiDriver {
 
     @Override
     public Path captureScreenshot(Path directory, Duration timeout) {
-        // Named through UiRunArtifacts, which is also what the retention recognises: a name invented here
-        // would be an artefact the sweep does not own and therefore never cleans (SEC-09). The uniqueness
-        // rationale lives there too — several runs of one JVM can fail at the same instant.
         String name = UiRunArtifacts.screenshotName();
         Path target = directory.resolve(name);
         try {
-            // Playwright's screenshot has no per-call timeout of its own: it is a synchronous grab of the
-            // current frame. The bound asked for is therefore not applied by Playwright — it is kept in the
-            // contract because the seam stays symmetric with the other driver calls; the caller still bounds
-            // the effort by calling this once, never in a retry loop. If the browser is already gone the call
-            // throws below and the executor treats it as a missed artefact, not a masked step failure.
-            //
-            // The zones recorded by the preceding maskSensitive are drained into THIS screenshot only, then
-            // released: a later capture on the same driver must never inherit a mask that was meant for the
-            // one that consumed it (UITG-T005). The drain happens before the grab, so even a failed grab
             // leaves no stale mask for the next artefact.
             List<Locator> masks = new ArrayList<>(this.maskedLocators);
             this.maskedLocators.clear();
             Page.ScreenshotOptions options = new Page.ScreenshotOptions().setPath(target);
             if (!masks.isEmpty()) {
-                // Opaque red: unmistakable in pixel inspection, and the masking contract is "painted over",
-                // not "blurred" — a blur still leaks a value rendered in the frame (SEC-05, UITG-S017).
                 options.setMask(masks).setMaskColor("#FF0000");
             }
             this.page.screenshot(options);
@@ -372,11 +343,6 @@ final class PlaywrightUiDriver implements UiDriver {
 
     @Override
     public Path captureTrace(Path directory, Duration timeout) {
-        // A driver that never recorded — the application opted out, so tracing().start() was never called —
-        // answers null: an absent artefact is a normal outcome, not an error (UITG-S016). A SUPPRESSED trace
-        // answers null for the same reason and deliberately looks identical: it was given up so a credential
-        // would not be recorded (SEC-05). stop() writes the ZIP accumulated since the last resume and frees
-        // the recording buffer, so it is called exactly once, guarded by the traceStopped flag.
         if (!this.traceEnabled || this.traceStopped || this.traceSuppressed) {
             return null;
         }
@@ -392,18 +358,12 @@ final class PlaywrightUiDriver implements UiDriver {
 
     @Override
     public List<String> consoleMessages() {
-        // A defensive copy: the returned snapshot is handed to the failing step's report, which must never
-        // observe the driver's growing buffer mutating (one run, one thread — but the copy keeps the
-        // contract honest and the artefact stable).
         dispatchPendingEvents();
         return this.consoleMessages.snapshot();
     }
 
     @Override
     public List<String> networkRequests() {
-        // A defensive copy, for the same reason the console list is copied: the snapshot reaches the
-        // failing step's report and must stay stable while the listener keeps appending (one run, one
-        // thread — but the copy keeps the "never return null, never leak a mutating buffer" contract).
         dispatchPendingEvents();
         return this.networkRequests.snapshot();
     }
@@ -444,9 +404,6 @@ final class PlaywrightUiDriver implements UiDriver {
         for (UiLocator locator : sensitiveLocators) {
             Locator element = PlaywrightLocators.locator(this.page, locator);
             this.maskedLocators.add(element);
-            // A zone is counted only while it is really on the page: one that has vanished since it was
-            // observed (count == 0) contributes nothing and is reported as a diagnostics datum, not an error.
-            // A browser already gone makes count() throw, which the executor reads as "abort the capture".
             if (element.count() > 0) {
                 masked++;
             }
@@ -456,8 +413,6 @@ final class PlaywrightUiDriver implements UiDriver {
 
     @Override
     public void close() {
-        // Reverse order of acquisition, and every step attempted even if an earlier one failed: a leaked
-        // browser process outlives the JVM's usefulness on a CI agent.
         releaseActiveTrace();
         closeQuietly(this.page::close, "page");
         closeQuietly(this.context::close, "browser context");
@@ -479,7 +434,6 @@ final class PlaywrightUiDriver implements UiDriver {
             try {
                 this.context.tracing().stop();
             } catch (PlaywrightException alreadyGone) {
-                // The browser is closing anyway; a failed release is not a reason to harden the close path.
                 LOG.warn("Could not release the browser trace for application '{}': {}", this.application.alias(), alreadyGone.getMessage());
             }
         }
@@ -489,7 +443,6 @@ final class PlaywrightUiDriver implements UiDriver {
         try {
             return element.inputValue(new Locator.InputValueOptions().setTimeout(timeout));
         } catch (PlaywrightException notAnInput) {
-            // Asking a <div> for its value is a legitimate outcome, not an error: there is none.
             return null;
         }
     }

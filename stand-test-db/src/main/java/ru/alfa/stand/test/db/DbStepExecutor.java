@@ -313,15 +313,9 @@ public final class DbStepExecutor implements StepExecutor {
         } catch (SQLException failure) {
             throw new StandTestException("Failed to open a JDBC connection for datasource '" + alias + "': " + failure.getMessage(), failure);
         }
-        // Register the connection before configuring it, so the run-scoped ResourceScope owns it and
-        // closeAll() releases it even if setAutoCommit below throws — otherwise the open connection would leak
-        // (neither closed here nor tracked for the run's finally, plan §8.7).
         RunScopedConnection connection = new RunScopedConnection(raw, alias);
         scope.register(key, connection);
         try {
-            // Make the seed -> query/expectEventually visibility contract explicit rather than relying on an
-            // unenforced driver default: each statement commits on its own so a later step (and the test's own
-            // verification connection) sees a seed/cleanup's effect.
             raw.setAutoCommit(true);
         } catch (SQLException failure) {
             throw new StandTestException("Failed to configure the JDBC connection for datasource '" + alias + "': " + failure.getMessage(), failure);
@@ -330,9 +324,6 @@ public final class DbStepExecutor implements StepExecutor {
     }
 
     private ResolvedDatasource resolve(DatasourceDefinition datasource) {
-        // url/user must resolve to a non-blank value; a blank one is a stand misconfiguration (e.g. an empty
-        // env var) and must surface as a StandTestException (config, plan §8.3), not as the record's
-        // low-level IllegalArgumentException. The password may legitimately be empty, so it is not required.
         String url = resolveRequired(datasource, datasource.urlRef(), "urlRef");
         String user = resolveRequired(datasource, datasource.userRef(), "userRef");
         String password = this.referenceResolver.resolve(datasource.passwordRef());
@@ -355,8 +346,6 @@ public final class DbStepExecutor implements StepExecutor {
             Object value = entry.getValue();
             binds.put(entry.getKey(), (value instanceof String text) ? resolver.resolve(text) : value);
         }
-        // Reserved bind (plan §8.8): :testRunId is always available and parameterized, so seed tagging and
-        // the whereTestRunId predicate bind to the run's id rather than being string-spliced.
         binds.put("testRunId", context.scenarioContext().testRunId().value());
         return binds;
     }
@@ -375,10 +364,6 @@ public final class DbStepExecutor implements StepExecutor {
             throw new StandTestException("A step using whereTestRunId(...) must not carry its own WHERE clause — the testRunId predicate is the single source of the WHERE (plan §8.8)");
         }
         String trimmed = stripTrailingSemicolon(base.strip());
-        // Append the predicate on a fresh line: a trailing line comment (`--`) in the author SQL would
-        // otherwise swallow a same-line WHERE and silently neutralise the testRunId scoping. The guard
-        // re-checks the assembled SQL to fail closed on any remaining neutralisation (e.g. a trailing
-        // unterminated block comment / string literal).
         return trimmed + "\nWHERE " + whereColumn + " = :testRunId";
     }
 

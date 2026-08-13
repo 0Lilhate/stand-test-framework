@@ -61,17 +61,9 @@ final class UiSecrets {
         try {
             return call.get();
         } catch (RuntimeException | AssertionError failure) {
-            // AssertionError is caught alongside RuntimeException on purpose, and it is the case that
-            // matters most: a fill that times out arrives here as StandTestAssertionError (an Error), having
-            // been classified by UiDriverCalls, and it carries the driver's own message and cause. Catching
-            // only RuntimeException would leave the leak check inert on the single most likely failure of a
-            // credential fill. Other Errors — OutOfMemory, StackOverflow — are deliberately not caught.
             if (!leaks(failure, secrets)) {
                 throw failure;
             }
-            // The replacement keeps the ORIGINAL classification: an unmet expectation stays a failed test and
-            // an infrastructure problem stays broken. Withholding a message must not also silently move a
-            // step from FAILED to BROKEN — that would poison the flaky-rate measurement to hide a leak.
             String sanitised = "Could not " + what + ": the browser driver failed with " + failure.getClass().getName()
                     + ", and its message is withheld because it contained the credential value."
                     + " The account's login or password is echoed by the driver; check the driver, not this message.";
@@ -93,8 +85,6 @@ final class UiSecrets {
         if (failure == null || secrets == null || secrets.isEmpty()) {
             return false;
         }
-        // Iterative, with an identity-based visited set: a cause chain or a suppressed list may be cyclic
-        // (nothing forbids it), and a leak check that could loop forever would be worse than no check.
         Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         Deque<Throwable> pending = new ArrayDeque<>();
         pending.add(failure);

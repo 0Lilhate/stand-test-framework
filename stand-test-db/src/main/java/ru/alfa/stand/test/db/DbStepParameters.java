@@ -92,9 +92,6 @@ public final class DbStepParameters {
         if (value == null) {
             return defaultValue;
         }
-        // Accept only whole-number types: a Double would be silently truncated (250.9 -> 250) or saturated
-        // (1e30 -> Long.MAX_VALUE) by longValue(). The Java DSL always supplies a Long (Duration.toMillis());
-        // a future YAML front-end may supply an Integer. Mirrors the strict RestStepParameters.expectedStatus.
         long millis;
         if (value instanceof Long longMillis) {
             millis = longMillis;
@@ -140,9 +137,6 @@ public final class DbStepParameters {
             if (!(item instanceof String column) || column.isBlank()) {
                 throw new StandTestException("DB step parameter '" + IDENTIFIED_BY + "' entries must be non-blank column names");
             }
-            // Re-validate at the runtime read path (not only in the Java builder): the parameter map is a
-            // wire contract a YAML/raw producer can target, and each column is spliced verbatim into the
-            // SDK-generated compensation DELETE, so a non-identifier value must be refused fail-closed.
             if (!SqlIdentifiers.isPlainIdentifier(column)) {
                 throw new StandTestException("DB step parameter '" + IDENTIFIED_BY + "' entry '" + column + "' must be a plain identifier");
             }

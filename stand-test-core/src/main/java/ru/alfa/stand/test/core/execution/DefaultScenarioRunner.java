@@ -158,12 +158,7 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
         int total = steps.size();
         Instant startedAt = clock.instant();
         List<StepResult> stepResults = new ArrayList<>();
-        // primary is a LOCAL — never an instance field: this runner is a shared singleton invoked
-        // concurrently, so per-run failure state must stay thread-confined (parallel isolation, plan §8.2).
         Throwable primary = null;
-        // The whole run is wrapped in an MDC scope so every log line — the SDK's, the adapters', and the
-        // system-under-test client's on this thread — carries scenarioId/testRunId/correlationId (plan §17).
-        // MdcScope restores the prior MDC on close, keeping concurrent runs isolated.
         try (MdcScope scenarioScope = MdcScope.of(scenarioMdc(context))) {
             publishScenario(context, ScenarioPhase.STARTED);
             LOG.info("Scenario '{}' started: {} step(s), env={}", context.scenarioId(), total, context.environment());
@@ -180,16 +175,9 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
                     }
                 }
             } catch (RuntimeException | Error failure) {
-                // Capture the in-flight failure (the step loop throws StandTestException (RuntimeException) or
-                // StandTestAssertionError (extends Error)) so the finally can gate ON_FAILURE compensation and
-                // attach any cleanup failure as suppressed instead of masking it. Rethrown unchanged.
                 primary = failure;
                 throw failure;
             } finally {
-                // Order is load-bearing: drain compensations while the run-scoped connection is still open,
-                // THEN close resources and publish FINISHED, and only as the final act decide whether a
-                // compensation failure fails a green run or is suppressed onto the in-flight failure. Never
-                // throw before closeQuietly/publish — that would leak the connection and break the report.
                 CompensationReport report = drainCompensations(undoLog, scenario.cleanupPolicy(), primary != null, context);
                 closeQuietly(resourceScope);
                 publishScenario(context, ScenarioPhase.FINISHED);
@@ -228,10 +216,6 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
                     outcome = CompensationOutcome.failed(compensator.actionId(), compensator.target(), "compensator returned a null outcome", null, Map.of());
                 }
             } catch (Throwable unexpected) {
-                // A Compensator must not throw (it folds errors into a FAILED outcome), but this defensive
-                // net catches Throwable — including Error — so a contract-violating compensator or a JVM
-                // Error can never escape the drain, skip the closeQuietly/publish(FINISHED) tail, or mask the
-                // in-flight failure. The escape is recorded as a FAILED outcome and the drain continues.
                 outcome = CompensationOutcome.failed(compensator.actionId(), compensator.target(), unexpected.getMessage(), unexpected, Map.of());
             }
             outcomes.add(outcome);
@@ -280,8 +264,6 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
         if (outcome == null) {
             diagnostics = Map.of();
         } else {
-            // LinkedHashMap, not HashMap: the compensator's own keys keep their order and the runner's
-            // three are appended after them, which is how a reader meets them in the report.
             diagnostics = new LinkedHashMap<>(outcome.diagnostics());
             diagnostics.put("compensation.status", outcome.status().name());
             diagnostics.put("compensation.target", outcome.target());
@@ -347,8 +329,6 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
                     executor.prepare(step, executionContext);
                 } catch (StandTestException alreadyClassified) {
                     recordPrepareFailure(step, start, context, stepResults, alreadyClassified);
-                    // Already classified by the adapter — propagated unwrapped so its precise diagnosis
-                    // survives; the step context still reaches the operator through this log line.
                     LOG.error("{} failed to prepare: {}", stepLabel(index + 1, total, step), safeMessage(alreadyClassified), alreadyClassified);
                     throw alreadyClassified;
                 } catch (RuntimeException unexpected) {
@@ -375,10 +355,6 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
         try {
             resourceScope.closeAll();
         } catch (Throwable closeFailure) {
-            // Closing run-scoped resources is best-effort in the finally block: a faulty close must never
-            // mask the real test outcome (a thrown step failure), fail an otherwise-passing run, or skip the
-            // FINISHED publish that follows. Throwable (not just RuntimeException) is swallowed so an Error
-            // from a resource's close() cannot alter the outcome either — but it is logged at WARN (plan §17).
             LOG.warn("Failed to close run-scoped resources (best-effort, ignored)", closeFailure);
         }
     }
@@ -415,9 +391,6 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
                 LOG.error("{}", message, unexpected);
                 throw new StandTestException(message, unexpected);
             }
-            // The executor returned normally. Recording and the FINISHED event happen OUTSIDE the try above
-            // so that a failure of the (best-effort) reporting publisher can never reclassify a passing step
-            // as failed or add a duplicate StepResult (plan §17: reporting is a side-channel).
             stepResults.add(result);
             publishStep(context, step, StepPhase.FINISHED, result.status(), result.errorMessage(), result.diagnostics(), result.attachments());
             logStepOutcome(index, total, step, result);
@@ -443,8 +416,6 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
         Map<String, Object> diagnostics = new LinkedHashMap<>();
         diagnostics.put("exception.class", cause.getClass().getName());
         if (cause instanceof FailureAttachments withEvidence) {
-            // A failing step can add its own picture of what happened (masked zones, element state) without
-            // reaching for the runner; the runner is transport-agnostic and must not invent a vocabulary.
             Map<String, Object> supplied = withEvidence.failureDiagnostics();
             if (supplied == null) {
                 warnNullEvidence(cause, "failureDiagnostics()");
@@ -551,11 +522,6 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
         try {
             reportingEventPublisher.publish(event);
         } catch (Throwable reportingFailure) {
-            // Reporting is a best-effort side-channel (plan §17): a publisher failure must never change
-            // the test outcome. Throwable (not just RuntimeException) is swallowed — exactly as
-            // closeQuietly does — so an Error from a version-skewed reporting sink (e.g. a LinkageError /
-            // NoClassDefFoundError from a mismatched allure-model on the consumer classpath) cannot escape
-            // and replace the primary test failure the runner is about to throw. Logged at WARN.
             LOG.warn("Reporting publisher failed for a scenario event (best-effort, ignored)", reportingFailure);
         }
     }
@@ -564,11 +530,6 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
         try {
             reportingEventPublisher.publish(event);
         } catch (Throwable reportingFailure) {
-            // Reporting is a best-effort side-channel (plan §17): a publisher failure must never change
-            // the test outcome. Throwable (not just RuntimeException) is swallowed — exactly as
-            // closeQuietly does — so an Error from a version-skewed reporting sink (e.g. a LinkageError /
-            // NoClassDefFoundError from a mismatched allure-model on the consumer classpath) cannot escape
-            // and replace the primary test failure the runner is about to throw. Logged at WARN.
             LOG.warn("Reporting publisher failed for a step event (best-effort, ignored)", reportingFailure);
         }
     }

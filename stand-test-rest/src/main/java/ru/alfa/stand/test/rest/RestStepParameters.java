@@ -135,8 +135,6 @@ public final class RestStepParameters {
         if (!(value instanceof Map<?, ?> raw)) {
             throw new StandTestException("REST step parameter '" + key + "' must be a map");
         }
-        // String.valueOf on both sides, so a collector is safe here: neither a key nor a value can come
-        // out null (a null value renders as the string "null"), and LinkedHashMap keeps declaration order.
         return raw.entrySet().stream()
                 .collect(Collectors.toMap(entry -> String.valueOf(entry.getKey()), entry -> String.valueOf(entry.getValue()),
                         (first, second) -> second, LinkedHashMap::new));

@@ -15,7 +15,6 @@ import ru.alfa.stand.test.core.environment.DatasourceDefinition;
  *
  * <p>Registered into the run's undo-log at execution time (capture is always-on); applied by the runner in
  * its {@code finally}, in reverse registration order, per the scenario's {@code CleanupPolicy}. Per the
- * {@link Compensator} contract it <strong>never throws</strong>: a {@link SQLException} or any other error
  * is folded into a {@link CompensationOutcome} of status FAILED. The generated DELETE is re-checked by the
  * {@link DbWriteGuard} compensation lane before it runs, and every value is bound through
  * {@link NamedParameterStatement}. The undo is idempotent: a DELETE that affects zero rows (the row was
@@ -78,9 +77,6 @@ final class DbCompensator implements Compensator {
                 "db.operation", "compensate");
         try {
             DbWriteGuard.classifyAndEnforceCompensationDelete(deleteSql, datasource);
-            // Pre-count BEFORE deleting (autoCommit=true means a DELETE is irreversible): if the key matches
-            // more than one row the declared identifiedBy is not unique, so the undo would remove foreign
-            // rows — report FAILED and delete NOTHING, rather than losing data we did not create.
             long matching = countMatching(countSql, binds);
             if (matching == 0) {
                 return CompensationOutcome.skipped(actionId, datasourceAlias, "row already absent (idempotent no-op)", diagnostics);

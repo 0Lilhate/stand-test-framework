@@ -213,24 +213,13 @@ public final class UiStepExecutor implements StepExecutor {
         Objects.requireNonNull(step, "step must not be null");
         Objects.requireNonNull(context, "context must not be null");
         final Instant startedAt = Instant.now();
-        // application is declared here and assigned inside the try so the failure path can still capture a
-        // screenshot against it; a failure before it is assigned (a foreign step, a parameter read that
-        // throws) has no application and therefore no screenshot to capture.
         String application = null;
         UiRunSettings runSettings = this.settings.get();
-        // The failing step's sensitive zones, resolved while the parameters are parsed and passed to the
-        // failure path so its screenshot can mask them before the artefact is taken (UITG-S017, SEC-05).
-        // Declared before the try and filled inside because parsing parameters may itself throw (a foreign
-        // step): a failure before assignment has no application and therefore gets no masking either.
-        // Mutable because a ui.login step contributes its form's credential fields (see login()); the outer
-        // catch reads whatever was collected by the time the step threw.
         List<UiLocator> sensitiveZones = new ArrayList<>();
         try {
             Map<String, Object> parameters = parameters(step);
             sensitiveZones(parameters, sensitiveZones);
             if (UiStepParameters.LOGIN_TYPE.equals(step.type())) {
-                // Sign-in opens the session by itself: a saved session can only be restored while the
-                // browsing context is created, so it cannot ride on the route other step types share.
                 application = UiStepParameters.requireString(parameters, UiStepParameters.APPLICATION);
                 return login(step, parameters, application, runSettings, context, startedAt, sensitiveZones);
             }
@@ -297,18 +286,10 @@ public final class UiStepExecutor implements StepExecutor {
                 try {
                     maskedZones = session.driver().maskSensitive(sensitiveZones, SCREENSHOT_TIMEOUT);
                 } catch (RuntimeException maskFailure) {
-                    // SEC-05 abort, not a missed capture: a zone the driver could not mask must not be
-                    // captured, because a screenshot of a secret is worse than no screenshot at all. The
-                    // log names the masking failure, so the distinction is visible to whoever reads a
-                    // broken red run without a picture. The element-vanished case is not here — maskSensitive
-                    // reports a lower count for it, not a throw (UITG-S017 / MEDIUM-2).
                     LOG.warn("Could not mask the sensitive zones of the failing step for application '{}' — the failure "
                             + "screenshot is aborted rather than risk exposing a secret: {}", application, maskFailure.toString());
                     return UiEvidence.EMPTY;
                 }
-                // Observability (UITG-S017): how many of the step's sensitive zones were actually stopped
-                // before the capture — an element that vanished mid-masking is a datum, not a failure. The
-                // count is carried into the failing step's diagnostics (UiEvidence), not only logged.
                 LOG.info("Masked {} of {} sensitive zone(s) for application '{}' before capturing the failure screenshot",
                         maskedZones, sensitiveZones.size(), application);
             }
@@ -317,11 +298,6 @@ public final class UiStepExecutor implements StepExecutor {
             if (screenshot != null) {
                 attachments.add(Attachment.ofFile("ui-screenshot", "image/png", screenshot));
             }
-            // The trace is the second (heavier) failure artefact, recorded only when the application's
-            // registry declaration opts in, and sealed strictly after the masking above — a trace must never
-            // precede the maskSensitive it would argue with (UITG-S017, SEC-05; UITG-S016). It is best-effort
-            // like the screenshot: a missed or absent trace is logged, never allowed to replace the step's
-            // own failure.
             if (session.application().trace() == UiTraceMode.ON_FAILURE) {
                 try {
                     Path trace = session.driver().captureTrace(directory, TRACE_TIMEOUT);
@@ -332,13 +308,6 @@ public final class UiStepExecutor implements StepExecutor {
                     LOG.warn("Could not capture the trace for application '{}': {}", application, traceFailure.toString());
                 }
             }
-            // The console is the third (textual) failure artefact: a frontend error often announces itself
-            // in the console before anything visibly breaks, so the report gets what the page logged (UITG-S014).
-            // It rides the TEXT channel, which the Allure sink runs through the secret masker (SEC-05) — a
-            // secret a page accidentally logged is redacted the same way an exception message is. Best-effort
-            // like the trace: a log read that fails must never replace the step's own failure. The negative
-            // scenario — an empty console — attaches nothing at all, rather than an empty block (the check is
-            // "any non-blank line", not "the list is non-empty").
             try {
                 String console = joinedLines(session.driver().consoleMessages());
                 if (!console.isBlank()) {
@@ -347,13 +316,6 @@ public final class UiStepExecutor implements StepExecutor {
             } catch (RuntimeException consoleFailure) {
                 LOG.warn("Could not read the browser console for application '{}': {}", application, consoleFailure.toString());
             }
-            // The network story is the fourth failure artefact (UITG-S015): whether a request reached the
-            // backend, and with what code, is the first thing to answer on a red run. The driver has already
-            // reduced each line to method/path/status and masked the credential headers, and — like the
-            // console — the block rides the TEXT channel, so whatever still slipped through runs through the
-            // secret masker in the sink (SEC-05). Best-effort like the trace: a read that fails must never
-            // replace the step's own failure. The negative scenario — no requests observed — attaches nothing,
-            // rather than an empty block.
             try {
                 String network = joinedLines(session.driver().networkRequests());
                 if (!network.isBlank()) {
@@ -364,9 +326,6 @@ public final class UiStepExecutor implements StepExecutor {
             }
             return new UiEvidence(attachments, maskedZones);
         } catch (IOException | RuntimeException failure) {
-            // A capture that could not complete (directory, the browser gone mid-grab) must not hide the
-            // step's own failure. Masking failures are handled earlier and return EMPTY already, so this
-            // branch is about the capture itself, not about a secret the mask failed to cover.
             LOG.warn("Could not capture a failure screenshot for '{}': {}", application, failure.toString());
             return UiEvidence.EMPTY;
         }
@@ -388,7 +347,7 @@ public final class UiStepExecutor implements StepExecutor {
             if (line == null || line.isBlank()) {
                 continue;
             }
-            if (out.length() > 0) {
+            if (!out.isEmpty()) {
                 out.append('\n');
             }
             out.append(line);
@@ -500,25 +459,16 @@ public final class UiStepExecutor implements StepExecutor {
         Duration timeout = Duration.ofMillis(UiStepParameters.positiveMillis(parameters, UiStepParameters.TIMEOUT_MILLIS, UiStepParameters.DEFAULT_TIMEOUT_MILLIS));
         Duration pollInterval = Duration.ofMillis(
                 UiStepParameters.positiveMillis(parameters, UiStepParameters.POLL_INTERVAL_MILLIS, UiStepParameters.DEFAULT_POLL_INTERVAL_MILLIS));
-        // Two nested waits would produce a meaningless time budget, so the split is explicit: the SDK's
-        // await engine owns the polling, and a single probe is bounded by roughly one poll interval so it
-        // cannot eat the step's budget. Playwright's own auto-waiting is used only for actionability.
-        //
-        // Clamped to the step's own timeout as defence in depth: the validator refuses an interval larger
-        // than the wait, but a GenericStep assembled without a validation pass would otherwise make this
-        // single probe outlive the step it belongs to — the opposite of what bounding it was for.
         Duration probeTimeout = (pollInterval.compareTo(timeout) > 0) ? timeout : pollInterval;
         AwaitPolicy policy = AwaitPolicy.builder("ui.expectEventually " + session.application().alias() + " " + locator.describe())
                 .timeout(timeout)
                 .pollInterval(pollInterval)
-                // A driver error during polling is infrastructure, not a not-yet-satisfied expectation:
-                // it aborts the wait instead of being retried until the timeout hides it.
                 .ignoreExceptions(false)
                 .build();
         AwaitResult<String> result = this.awaiter.await(
                 policy,
                 () -> UiAssertionEvaluator.firstMismatch(assertions, locator, snapshot(session, locator, assertions, List.of(), probeTimeout)),
-                mismatch -> mismatch == null);
+            Objects::isNull);
         result.orElseThrow(diagnostics -> new DiagnosticAssertionError(
                 "ui.expectEventually on " + locator.describe() + " did not hold: " + diagnostics.summary()
                         + " (application=" + session.application().alias() + ")",
@@ -530,9 +480,6 @@ public final class UiStepExecutor implements StepExecutor {
 
     private ElementSnapshot snapshot(UiSession session, UiLocator locator, List<UiAssertion> assertions, List<UiCapture> captures, Duration probeTimeout) {
         Set<String> attributes = UiAssertionEvaluator.attributeNames(assertions, captures);
-        // Observing goes through the same classifier as acting: a driver that reports "the element never
-        // became actionable" from a probe must be read as a failed expectation, and any other driver error
-        // must carry the adapter's own message rather than the runner's generic "failed unexpectedly".
         ElementSnapshot snapshot = driverCall(() -> session.driver().snapshot(locator, attributes, probeTimeout), "observe " + locator.describe());
         if (snapshot == null) {
             throw new StandTestException("The UI driver returned no snapshot for " + locator.describe() + " — a driver must report absence as ElementSnapshot.absent()");
@@ -588,11 +535,6 @@ public final class UiStepExecutor implements StepExecutor {
         UiSession opened = context.resourceScope().get(UiSession.resourceKey(application)).map(UiSession.class::cast).orElse(null);
         ResolvedUiApplication resolved = (opened != null) ? opened.application() : this.applicationResolver.resolve(application, context);
         UiAuthConfig auth = requireSignInConfigured(resolved);
-        // The sign-in form's credential fields are sensitive by definition, but they live in the registry's
-        // auth config, not in the step's own parameters — the step carries only the application alias. Fold
-        // them into the failing step's sensitive zones here, so a ui.login that fills the form and then
-        // fails (credentials rejected) captures a screenshot with the typed password painted over (UITG-S017,
-        // SEC-05, acceptance: "скриншот формы входа содержит поле пароля закрашенным").
         addLoginFormZones(auth, resolved.alias(), sensitiveZones);
         String leaseKey = leaseKey(environment, application, role);
         LeasedAccount account = leaseAccount(environment, resolved, auth, role, accountTimeout, context);
@@ -612,8 +554,6 @@ public final class UiStepExecutor implements StepExecutor {
             return new StepResult(step.id(), step.type(), StepStatus.SUCCESS, startedAt, Instant.now(), null, loginDiagnostics(session, auth, account, outcome));
         } finally {
             if (!ownedByScope) {
-                // The browser never opened, or the session refused this account: nobody else will ever close
-                // this lease, so an account held by a run that never used it would be lost for the JVM's life.
                 account.close();
             }
         }
@@ -808,9 +748,6 @@ public final class UiStepExecutor implements StepExecutor {
     private UiSession openSession(ResolvedUiApplication resolved, UiRunSettings runSettings, StepExecutionContext context, Path storageState) {
         String application = resolved.alias();
         LOG.debug("Opening UI session for application '{}' ({}, headless={}, restoredSession={})", application, runSettings.browser(), runSettings.headless(), storageState != null);
-        // The run's housekeeping: the first run that reaches a real browser sweeps the artefacts directory
-        // older than the retention (UITG-S018, SEC-09). Best-effort by construction (see RunArtifactRetention)
-        // and never applies to storage-state; an open must not start with its own history.
         if (this.retentionSwept.compareAndSet(false, true)) {
             new RunArtifactRetention(runSettings.artifactRetention()).sweep(runSettings.artifactsDirectory());
         }
@@ -860,7 +797,6 @@ public final class UiStepExecutor implements StepExecutor {
         try {
             return session.driver().currentUrl();
         } catch (RuntimeException unavailable) {
-            // Diagnostics must never be the reason a green step turns red.
             LOG.debug("Could not read the current URL for diagnostics: {}", unavailable.toString());
             return null;
         }

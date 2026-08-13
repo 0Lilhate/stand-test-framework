@@ -145,10 +145,6 @@ public final class RestStepExecutor implements StepExecutor {
                 .pollInterval(pollInterval)
                 .ignoreExceptions(false)
                 .build();
-        // A transport failure (the caller throws StandTestException) aborts the await immediately —
-        // an unreachable service is an infrastructure problem, not an unmet expectation. An HTTP 5xx
-        // is NOT an exception (the caller returns the response), so transient error statuses are
-        // polled through until the expectations hold or the timeout expires.
         AtomicInteger attempt = new AtomicInteger();
         AwaitResult<PollProbe> result = this.awaiter.await(
                 policy,
@@ -160,9 +156,6 @@ public final class RestStepExecutor implements StepExecutor {
                 observed -> observed.mismatch() == null);
         PollProbe last = result.orElseThrow(diagnostics -> {
             LOG.debug("REST poll {} {} timed out: {}", request.method(), request.path(), diagnostics.summary());
-            // The message keeps the prose for whoever reads the stack trace; the map is the same facts as
-            // key/value rows for whoever reads the report. The alias and path go through withAttribute so
-            // the structured form is as complete as the sentence.
             return new DiagnosticAssertionError(
                     "rest.expectEventually '" + service + " " + request.path() + "' did not observe the expected response: " + diagnostics.summary()
                             + " (service=" + service + ", path=" + request.path() + ")",
@@ -213,9 +206,6 @@ public final class RestStepExecutor implements StepExecutor {
         if (endpoint.auth() == null) {
             return;
         }
-        // Applied whenever the registry declares auth for the service — auth is a service property,
-        // not a per-step choice; inline Authorization headers are rejected by the validator, so the
-        // registry-driven value is the only sanctioned source and always wins.
         headers.put(AUTHORIZATION_HEADER, this.authHeaderResolver.resolve(endpoint.auth()));
     }
 
@@ -228,16 +218,11 @@ public final class RestStepExecutor implements StepExecutor {
     private static void injectCorrelationId(Map<String, Object> parameters, ServiceEndpointDefinition endpoint, Map<String, String> headers, StepExecutionContext context) {
         CorrelationConfig correlation = endpoint.correlation();
         boolean hasHeaderCarrier = correlation != null && correlation.source() == CorrelationSource.HEADER;
-        // Default-on: inject when the service declares a HEADER carrier, unless the step opted in/out
-        // explicitly. The SDK owns correlationId (plan §8), so end-to-end traceability is the safe default
-        // rather than a builder call an AI author can silently forget.
         boolean shouldInject = RestStepParameters.injectCorrelationIdFlag(parameters).orElse(hasHeaderCarrier);
         if (!shouldInject) {
             return;
         }
         if (!hasHeaderCarrier) {
-            // Only reachable when the step forced injection on a service that declares no HEADER carrier —
-            // an unmet request, surfaced rather than silently sending nothing.
             throw new StandTestException("Correlation id injection was requested for service '" + endpoint.name() + "', but it has no HEADER correlation config");
         }
         headers.put(correlation.name(), context.scenarioContext().correlationId().value());

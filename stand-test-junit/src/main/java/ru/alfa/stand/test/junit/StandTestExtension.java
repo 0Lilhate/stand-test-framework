@@ -78,9 +78,6 @@ public final class StandTestExtension implements ParameterResolver {
         if (type == StandClient.class || type == Awaiter.class) {
             return true;
         }
-        // A @StandScenarioId/@StandEnv parameter is claimed regardless of its type, so that a misuse (a
-        // non-String parameter, or both annotations at once) fails with a clear message from
-        // resolveParameter rather than JUnit's generic "no resolver registered" error.
         return parameterContext.isAnnotated(StandScenarioId.class) || parameterContext.isAnnotated(StandEnv.class);
     }
 
@@ -88,9 +85,6 @@ public final class StandTestExtension implements ParameterResolver {
     public Object resolveParameter(ParameterContext parameterContext, ExtensionContext extensionContext) {
         boolean asStandScenarioId = parameterContext.isAnnotated(StandScenarioId.class);
         boolean asEnvironment = parameterContext.isAnnotated(StandEnv.class);
-        // The misuse checks run BEFORE the injectable types, so that `@StandEnv StandClient` is refused
-        // rather than quietly given a client. Dispatching on the type first would exempt exactly the two
-        // types this extension injects — the ones a reader is most likely to annotate by mistake.
         if (asStandScenarioId || asEnvironment) {
             return declaredString(parameterContext, extensionContext, asStandScenarioId, asEnvironment);
         }
@@ -98,7 +92,6 @@ public final class StandTestExtension implements ParameterResolver {
         if (type == Awaiter.class) {
             return Awaiter.create();
         }
-        // The only remaining type supportsParameter claims.
         return standClient(extensionContext);
     }
 
@@ -176,13 +169,6 @@ public final class StandTestExtension implements ParameterResolver {
     }
 
     private static StandClient buildStandClient() {
-        // All three collaborators are discovered through the same SPI, so junit gains no compile-time edge
-        // to any adapter (plan §8.5/§17). Executors are a list by design — every adapter contributes one.
-        // The other two are singular, and exactly ONE provider is allowed: with more than one the pick
-        // would be silently classpath-order-dependent, so building the client fails loudly instead. With
-        // no reporting provider the NoOp publisher keeps behaviour unchanged; with no registry provider
-        // the fallback raises a distinct "no provider on the test classpath" diagnostic at first lookup
-        // instead of a misleading "not whitelisted" failure.
         List<StepExecutor> executors = providers(StepExecutor.class);
         ReportingEventPublisher publisher = uniqueProvider(providers(ReportingEventPublisher.class), ReportingEventPublisher.class)
                 .orElse(NoOpReportingEventPublisher.INSTANCE);

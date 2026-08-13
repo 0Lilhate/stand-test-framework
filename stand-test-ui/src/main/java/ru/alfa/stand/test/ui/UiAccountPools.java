@@ -60,10 +60,6 @@ final class UiAccountPools {
                 ignored -> new Registration(new InProcessAccountPool(roster), fingerprint(roster)));
         String asked = fingerprint(roster);
         if (!registration.fingerprint.equals(asked)) {
-            // Keyed by application, NOT by roster — and a second roster for the same application is refused
-            // rather than given a pool of its own. Two pools would each believe they lease exclusively while
-            // handing the same account id to two runs at once, which is the one guarantee this exists to make.
-            // Refusing also catches the case the roster-in-the-key version was written for: a stale pool.
             throw new StandTestException("The account roster of UI application '" + application + "' in environment '" + environment
                     + "' changed within one JVM: this process is already leasing from " + registration.fingerprint + ", and was now asked for " + asked
                     + ". Two rosters for one application would each lease 'exclusively' while handing the same account to two runs;"

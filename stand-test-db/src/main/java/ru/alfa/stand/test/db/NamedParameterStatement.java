@@ -49,9 +49,6 @@ final class NamedParameterStatement {
         while (index < sql.length()) {
             SqlSpanScanner.Span span = SqlSpanScanner.spanAt(sql, index);
             if (span != null) {
-                // Comments and string/identifier literals are copied verbatim — a ':name', a '::' cast or a
-                // statement boundary inside them is not a bind. Span boundaries come from the shared
-                // SqlSpanScanner, so this rewriter and the classifier's strip() cannot drift (plan §8.6).
                 translated.append(sql, span.start(), span.end());
                 index = span.end();
                 continue;
@@ -68,7 +65,6 @@ final class NamedParameterStatement {
                 index++;
             }
         }
-        // A statement with no named binds (a parameterless SELECT/DELETE) is valid: orderedNames is empty.
         return new NamedParameterStatement(translated.toString(), names);
     }
 
@@ -127,9 +123,6 @@ final class NamedParameterStatement {
     }
 
     private static boolean isNameStart(char character) {
-        // ASCII identifier grammar [A-Za-z_], matching this class's Javadoc, SqlIdentifiers.PLAIN_IDENTIFIER
-        // and the classifier's ASCII \b for :testRunId — not Unicode-aware Character.isLetter, which would let
-        // the bind grammar drift from the single-source-of-truth classifier (plan §8.6).
         return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || character == '_';
     }
 

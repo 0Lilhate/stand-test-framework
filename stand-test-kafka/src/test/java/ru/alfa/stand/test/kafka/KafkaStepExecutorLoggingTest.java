@@ -31,8 +31,6 @@ class KafkaStepExecutorLoggingTest {
         Logger executorLogger = (Logger) LoggerFactory.getLogger(KafkaStepExecutor.class);
         ListAppender<ILoggingEvent> appender = new ListAppender<>();
         appender.start();
-        // The test-only logback config keeps the root at WARN, so raise this logger to DEBUG to capture
-        // the produce trace, then reset it to inherit the root level again in the finally block.
         executorLogger.setLevel(Level.DEBUG);
         executorLogger.addAppender(appender);
         try {

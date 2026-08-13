@@ -42,8 +42,6 @@ public final class RestStep {
     private String id;
     private String body;
     private String bodyResource;
-    // Tri-state: null = unset (inject when the resolved service declares a HEADER correlation carrier —
-    // the safe default), TRUE = force-inject, FALSE = explicit opt-out.
     private Boolean injectCorrelationId;
     private Integer expectedStatus;
     private Long timeoutMillis;

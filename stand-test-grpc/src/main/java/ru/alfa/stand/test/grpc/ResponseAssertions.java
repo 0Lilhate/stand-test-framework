@@ -30,10 +30,6 @@ final class ResponseAssertions {
         try {
             return JsonPath.parse(value);
         } catch (InvalidJsonException | IllegalArgumentException invalid) {
-            // Same rule as the REST and Kafka adapters: json-smart quotes a fragment of the offending
-            // value, so the parser's message stays out of the failure text. Near-unreachable here (the
-            // response is rendered from a protobuf message and is well-formed by construction), but the
-            // three JSON entry points fail the same way on purpose.
             throw new StandTestAssertionError("Response is not valid JSON (" + value.length() + " characters, parse failed)");
         }
     }
@@ -45,8 +41,6 @@ final class ResponseAssertions {
             try {
                 actual = document.read(assertion.jsonPath());
             } catch (PathNotFoundException notFound) {
-                // An absent path is not an error here: EXISTS(false)/NOT_NULL evaluate it. Captures still
-                // fail closed on a missing path (they use read()).
                 pathPresent = false;
             }
             if (AssertionMatchers.matches(assertion.matcher(), assertion.expectedValue(), pathPresent, actual)) {

@@ -7,7 +7,6 @@ import ru.alfa.stand.test.core.event.Attachment;
  * What a failing UI step managed to gather on its failure path: the file-backed artefacts (a screenshot)
  * and how many of its sensitive zones were actually masked before the capture.
  *
- * <p>Carried from {@link UiStepExecutor#captureFailure} to the thrown {@link UiAssertionFailure}/
  * {@link UiInfrastructureFailure}, which place the artefacts into the step's report and the masked-zone
  * count into the step's diagnostics. Both fields are diagnostics data, not the step's outcome: the failing
  * step stays exactly as classified, and an empty evidence is the honest "nothing to report".

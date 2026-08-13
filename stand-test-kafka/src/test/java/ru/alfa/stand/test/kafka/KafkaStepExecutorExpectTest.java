@@ -218,11 +218,8 @@ class KafkaStepExecutorExpectTest {
         KafkaStepExecutor executor = new KafkaStepExecutor(localFactory, reference -> reference, Awaiter.create());
         ScenarioStep step = KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).correlationIdFromContext().assertPath("$.fresh", true).build();
         executor.prepare(step, localContext);
-        // Backlog carrying the run's own correlation id — would be selected if the consumer replayed from
-        // the beginning instead of seeking to the end.
         backlogConsumer.addRecord(KafkaTestSupport.record(KafkaTestSupport.RESPONSE_NAME, 0L, null, "{\"fresh\":false}", Map.of(KafkaTestSupport.CORRELATION_HEADER, correlation)));
         backlogConsumer.addRecord(KafkaTestSupport.record(KafkaTestSupport.RESPONSE_NAME, 1L, null, "{\"fresh\":false}", Map.of(KafkaTestSupport.CORRELATION_HEADER, correlation)));
-        // The fresh message produced after arming, at the end of the log.
         backlogConsumer.addRecord(KafkaTestSupport.record(KafkaTestSupport.RESPONSE_NAME, 2L, null, "{\"fresh\":true}", Map.of(KafkaTestSupport.CORRELATION_HEADER, correlation)));
 
         StepResult result = executor.execute(step, localContext);
@@ -420,8 +417,6 @@ class KafkaStepExecutorExpectTest {
 
         executor.prepare(step, auditContext);
 
-        // The identity reference resolver passes the ref through, so the recorded cluster shows which
-        // definition was picked: the named audit cluster, not the environment default.
         assertThat(auditFactory.consumerCluster().bootstrapServers()).isEqualTo(KafkaTestSupport.AUDIT_BOOTSTRAP_REF);
         auditContext.resourceScope().closeAll();
     }

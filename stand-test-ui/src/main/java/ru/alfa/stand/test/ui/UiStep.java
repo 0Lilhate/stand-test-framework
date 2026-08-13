@@ -453,9 +453,6 @@ public final class UiStep {
             throw new IllegalStateException("pollInterval(...) polls, and only " + UiStepParameters.EXPECT_EVENTUALLY_TYPE + " polls; " + this.type + " does not accept it");
         }
         if (this.pollIntervalMillis != null && this.pollIntervalMillis > effectiveTimeoutMillis()) {
-            // Each bound is legal on its own; the pair is not. A 60 s interval inside a 500 ms wait probes
-            // once and blocks for a minute, so the declared bound describes nothing. The runtime validator
-            // enforces the same rule for every adapter that polls; refusing here says it one step earlier.
             throw new IllegalStateException("pollInterval(" + this.pollIntervalMillis + " ms) must not exceed the step's timeout ("
                     + effectiveTimeoutMillis() + " ms) — a step that polls less often than it waits performs a single probe and then waits for the interval");
         }

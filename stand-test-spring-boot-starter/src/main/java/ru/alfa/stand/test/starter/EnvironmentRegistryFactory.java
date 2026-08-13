@@ -205,9 +205,6 @@ public final class EnvironmentRegistryFactory {
         if (auth == null) {
             return null;
         }
-        // A missing scheme must surface as the environment-labelled IllegalStateException like every
-        // other misconfiguration, so it is rejected here as IllegalArgumentException rather than
-        // letting the core constructor's NullPointerException escape the toEnvironment wrapper.
         if (auth.getScheme() == null) {
             throw new IllegalArgumentException("service '" + alias + "' auth.scheme must not be null");
         }

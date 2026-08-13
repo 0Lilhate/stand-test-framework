@@ -60,8 +60,6 @@ final class UiAssertionEvaluator {
                 String value = snapshot.attribute(assertion.attribute());
                 yield new Observed(snapshot.present() && value != null, value);
             }
-            // A boolean property is always observable: an absent element is simply not visible and not
-            // enabled, which is an answer, not a missing one.
             case VISIBLE -> new Observed(true, snapshot.visible());
             case ENABLED -> new Observed(true, snapshot.enabled());
         };

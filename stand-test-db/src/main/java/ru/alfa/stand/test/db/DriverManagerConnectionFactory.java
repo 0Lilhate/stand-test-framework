@@ -25,8 +25,6 @@ public final class DriverManagerConnectionFactory implements ConnectionFactory {
     @Override
     public Connection open(ResolvedDatasource datasource) throws SQLException {
         int current = DriverManager.getLoginTimeout();
-        // getLoginTimeout() == 0 means "unbounded" (the JDBC default): bound it. A caller-set smaller value
-        // is a tighter bound and is respected.
         if (current <= 0 || current > LOGIN_TIMEOUT_SECONDS) {
             DriverManager.setLoginTimeout(LOGIN_TIMEOUT_SECONDS);
         }

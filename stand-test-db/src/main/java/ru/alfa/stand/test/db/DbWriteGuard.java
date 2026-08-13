@@ -120,7 +120,6 @@ final class DbWriteGuard {
         if (classification.isWrite()) {
             enforceWrite(classification, operation, datasource, testRunIdPredicateDeclared);
         }
-        // READ requires nothing further: reads are allowed on every operation.
     }
 
     /**
@@ -215,22 +214,12 @@ final class DbWriteGuard {
                         + " requires a declared testRunId predicate (DbStep.whereTestRunId(...)): the SDK-appended WHERE <column> = :testRunId is the single source of the predicate ["
                         + ForbiddenOperation.DESTRUCTIVE_SQL_WITHOUT_ALLOW.code() + "]");
             }
-            // Belt-and-suspenders: do not merely trust the declared flag — confirm the predicate is
-            // actually present and effective in the SQL about to be executed. A trailing comment or
-            // unterminated literal in the author SQL can neutralise the SDK-appended WHERE; in that case
-            // the assembled SQL classifies with no WHERE and no :testRunId bind, and is refused here
-            // rather than running unscoped (plan §8.8, fail-closed).
             if (!classification.containsWhereClause() || !classification.referencesTestRunIdBind()) {
                 throw new StandTestException("A " + classification.leadingKeyword()
                         + " whose testRunId predicate was neutralised (e.g. by a trailing comment or unterminated literal) is refused as an unscoped mutation ["
                         + ForbiddenOperation.DESTRUCTIVE_SQL_WITHOUT_ALLOW.code() + "]");
             }
         } else {
-            // The remaining WRITE is an INSERT (seed). Require the row to carry the reserved :testRunId
-            // bind, so the run's own testRunId-scoped cleanup reaps it and two concurrent runs can neither
-            // leak untagged rows nor collide on shared test data (plan §15). A textual :testRunId reference
-            // suffices here — unlike the UPDATE/DELETE marker, which must scope a mutation — because tagging
-            // the freshly inserted row is exactly what the bind must do.
             if (!classification.referencesTestRunIdBind()) {
                 throw new StandTestException("A " + classification.leadingKeyword()
                         + " seed must tag its rows with the reserved :testRunId bind (for example INSERT INTO test_data.orders(id, test_run_id) VALUES (:id, :testRunId)), so the run's testRunId-scoped cleanup reaps them and concurrent runs stay isolated ["

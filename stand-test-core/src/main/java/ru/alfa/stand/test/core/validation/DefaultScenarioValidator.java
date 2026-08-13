@@ -320,8 +320,6 @@ public final class DefaultScenarioValidator implements ScenarioValidator {
 
     private static void checkTimeout(GenericStep step, String key, Object value, List<ValidationIssue> issues) {
         if (!(value instanceof Number)) {
-            // Non-numeric values are the adapter parameter schema's concern (a config error there);
-            // the guardrail bounds only what is already declared as a number.
             return;
         }
         if (!(value instanceof Integer) && !(value instanceof Long)) {

@@ -53,10 +53,6 @@ public final class InProcessAccountPool implements AccountPool {
         if (accounts.isEmpty()) {
             throw new IllegalArgumentException("an account pool must hold at least one account");
         }
-        // Uniqueness is checked case-INSENSITIVELY, because the account id becomes a file name: two ids
-        // differing only in case would key one session-state file on a case-insensitive filesystem, and one
-        // account would silently restore the other's session — including a low-privilege account restoring a
-        // privileged one's.
         Set<String> ids = new LinkedHashSet<>();
         for (UiAccount account : accounts) {
             if (!ids.add(account.accountId().toLowerCase(Locale.ROOT))) {

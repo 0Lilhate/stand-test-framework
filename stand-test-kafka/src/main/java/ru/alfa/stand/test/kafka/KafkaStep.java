@@ -44,8 +44,6 @@ public final class KafkaStep {
     private String body;
     private String bodyResource;
     private String key;
-    // Tri-state (kafka.send only): null = unset (inject when the resolved topic declares a HEADER
-    // correlation carrier — the safe default), TRUE = force-inject, FALSE = explicit opt-out.
     private Boolean injectCorrelationId;
     private boolean correlationIdFromContext;
     private Long timeoutMillis;
@@ -267,11 +265,6 @@ public final class KafkaStep {
         if (this.body != null || this.bodyResource != null || this.injectCorrelationId != null) {
             throw new IllegalStateException("body / bodyFromResource / injectCorrelationId apply to kafka.send, not kafka.expect");
         }
-        // Parallel-safety (plan §15): an expect must select by a per-run-unique discriminator, else two
-        // concurrent runs on a shared topic match each other's messages. correlationIdFromContext() uses the
-        // SDK-owned unique correlationId. A key() is a valid discriminator ONLY when it is per-run-derived
-        // (contains a ${...} placeholder such as ${testRunId}); a constant key is rejected. When BOTH are set
-        // the key merely narrows among the run's own correlated messages, so a constant key is fine there.
         if (!this.correlationIdFromContext) {
             if (this.key == null) {
                 throw new IllegalStateException("A kafka.expect step must select messages by a per-run discriminator to stay parallel-safe (plan §15): "

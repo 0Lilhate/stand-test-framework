@@ -75,8 +75,6 @@ final class RunArtifactRetention {
         }
         Instant cutoff = Instant.now().minus(retention);
         int deleted = 0;
-        // A directory read rather than a tree walk: artefacts are flat, and this is what keeps a nested tree
-        // the consumer put beside them outside the sweep's reach entirely.
         try (DirectoryStream<Path> entries = Files.newDirectoryStream(artifactsDirectory)) {
             for (Path entry : entries) {
                 if (sweepable(entry, cutoff)) {
@@ -84,8 +82,6 @@ final class RunArtifactRetention {
                 }
             }
         } catch (IOException failure) {
-            // A sweep that threw on the way is still partially done; report what it did reach and move on —
-            // the run must start regardless of the housekeeping around it.
             LOG.warn("Artefact retention sweep over {} aborted: {}", artifactsDirectory, failure.toString());
         }
         if (deleted > 0) {
@@ -101,7 +97,6 @@ final class RunArtifactRetention {
             return false;
         }
         try {
-            // Not a symlink target, and not a directory wearing an artefact's name: only a real file goes.
             if (!Files.isRegularFile(entry, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
                 return false;
             }
@@ -116,8 +111,6 @@ final class RunArtifactRetention {
         try {
             Files.deleteIfExists(artefact);
         } catch (IOException cannotDelete) {
-            // Best-effort identical to the capture side: one artefact that refuses to go must not rob the run
-            // of a valid start, and the next sweep will retry it.
             LOG.warn("Could not delete aged artefact {}: {}", artefact, cannotDelete.toString());
             return 0;
         }

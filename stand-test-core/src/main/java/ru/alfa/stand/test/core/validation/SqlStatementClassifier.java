@@ -43,20 +43,10 @@ public final class SqlStatementClassifier {
     private static final Pattern DELETE_TARGET = Pattern.compile("(?i)\\bDELETE\\s+FROM\\s+([A-Za-z0-9_.\"]+)");
     private static final Pattern TEST_RUN_ID_BIND = Pattern.compile("(?<![:\\w]):testRunId\\b");
     private static final Pattern WHERE_CLAUSE = Pattern.compile("(?i)\\bWHERE\\b");
-    // A WITH (CTE) statement is read-only unless it embeds a data-modifying or DDL leaf, which cannot be
-    // classified safely in the MVP grammar; presence of any such keyword forces a fail-closed reject.
     private static final Pattern DATA_MODIFYING_KEYWORD =
             Pattern.compile("(?i)\\b(INSERT|UPDATE|DELETE|MERGE|TRUNCATE|DROP|ALTER|CREATE|GRANT|REVOKE|CALL|EXEC|EXECUTE)\\b");
-    // A SELECT-level INTO is a write, not a read: `SELECT ... INTO new_table` creates and populates a
-    // table (PostgreSQL/SQL Server) and `SELECT ... INTO OUTFILE/DUMPFILE` writes a server-side file
-    // (MySQL). Treating it as a read would sail it past the entire write-guard, so it is rejected.
     private static final Pattern SELECT_INTO = Pattern.compile("(?i)\\bINTO\\b");
-    // An INSERT upsert tail mutates pre-existing rows just like an UPDATE, but hides behind the INSERT
-    // leading keyword and so escapes the testRunId-predicate requirement; rejected fail-closed in the MVP.
     private static final Pattern UPSERT_CLAUSE = Pattern.compile("(?i)\\bON\\s+CONFLICT\\b|\\bON\\s+DUPLICATE\\s+KEY\\b");
-    // Blocking/side-effecting time functions (a delay/DoS primitive). They have no place in a bounded
-    // stand test and can hide behind a READ classification (e.g. SELECT pg_sleep(3600)), so both the static
-    // validator and the runtime DB write-guard reject them via {@link #containsSideEffectingTimeFunction}.
     private static final Pattern SIDE_EFFECT_TIME_FUNCTION =
             Pattern.compile("\\b(?:pg_sleep|sleep|waitfor|benchmark|dbms_lock)\\b", Pattern.CASE_INSENSITIVE);
 

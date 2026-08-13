@@ -45,7 +45,6 @@ public interface StepExecutor {
      * @param context the per-run execution context
      */
     default void prepare(ScenarioStep step, StepExecutionContext context) {
-        // No-op by default: only async-expect adapters (Kafka) override this. REST/DB prepare is a no-op.
     }
 
     /**

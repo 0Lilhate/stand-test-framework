@@ -85,9 +85,6 @@ public record UiLoginFormConfig(
             throw new IllegalArgumentException("login form field '" + field + "' must not be blank when declared");
         }
         if (!LOCATOR_EXPRESSION.matcher(value.trim()).matches()) {
-            // The rejected text is deliberately NOT repeated. The one input this check exists to catch is a
-            // credential typed where a locator belongs, so echoing it back would publish the mistake to the
-            // build log and the CI artefact — the check would cause the leak it was written to prevent.
             throw new IllegalArgumentException("login form field '" + field + "' must be a locator expression '<strategy>=<value>' (for example testId=login-submit or role=button:Sign in)."
                     + " This field addresses an element on the page and never holds a credential; logins and passwords come from the account roster behind credentials-pool-ref."
                     + " (The offending value is not repeated here — it may be the credential itself.)");

@@ -96,10 +96,6 @@ public final class AllureReportingEventPublisher implements ReportingEventPublis
             if (event.phase() == ScenarioPhase.STARTED) {
                 lifecycle.updateTestCase(metadataMapper.scenarioLabels(event), metadataMapper.scenarioParameters(event));
             } else if (event.phase() == ScenarioPhase.FINISHED) {
-                // The runner always emits FINISHED (in a finally), so binding the cleanup here resets the
-                // per-thread stack between runs even when a mid-run lifecycle call left an orphaned uuid —
-                // a reused pool thread never inherits a stale entry (plan §15). Closing the Allure test case
-                // itself stays with the JUnit/Allure integration.
                 stepUuids.remove();
             }
         } catch (Throwable reportingFailure) {
@@ -133,9 +129,6 @@ public final class AllureReportingEventPublisher implements ReportingEventPublis
     private void startStep(StepEvent event) {
         String uuid = UUID.randomUUID().toString();
         lifecycle.startStep(uuid, stepMapper.stepName(event));
-        // Push only after the lifecycle accepted the step: a thrown startStep then leaves the per-thread
-        // stack balanced, and the paired FINISHED synthesises its own step rather than closing one Allure
-        // never opened.
         stepUuids.get().push(uuid);
     }
 
@@ -144,8 +137,6 @@ public final class AllureReportingEventPublisher implements ReportingEventPublis
         String uuid = stack.poll();
         try {
             if (uuid == null) {
-                // A FINISHED without a matching STARTED (e.g. the publisher was attached mid-run):
-                // synthesise a step so the outcome is still recorded rather than dropped.
                 uuid = UUID.randomUUID().toString();
                 lifecycle.startStep(uuid, stepMapper.stepName(event));
             }
@@ -157,8 +148,6 @@ public final class AllureReportingEventPublisher implements ReportingEventPublis
             }
             lifecycle.stopStep(uuid);
         } finally {
-            // Restores the ThreadLocal invariant even when a lifecycle call threw, so a reused pool thread
-            // never inherits an orphaned entry.
             if (stack.isEmpty()) {
                 stepUuids.remove();
             }
