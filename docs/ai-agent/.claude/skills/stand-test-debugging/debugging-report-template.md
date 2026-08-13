@@ -1,6 +1,14 @@
 # Debugging Report: <test class / scenario-id> @ <date>
 
-> Output of workflow `failed-test-debugging`. The failure is documented, never hidden.
+> Output of skill `stand-test-debugging`, via `/stand-test-debug`. The failure is documented,
+> never hidden.
+>
+> **Written to `debug/<scenario-id>-<YYYY-MM-DD>.md`**, with the Write tool (never `cat >`, `tee`
+> or `sed -i` — the guard refuses a file written by the shell). `<scenario-id>` is the one
+> extracted in step 1; when the run carried none — it died before a scenario was built — name the
+> failing test class instead. The date is the day of the run being diagnosed, so a scenario that
+> fails again accumulates a second report beside the first rather than overwriting it. The path is
+> relative to the project's documentation root, exactly as `ui-generation/<scenario-id>/` is.
 
 ## Identity
 

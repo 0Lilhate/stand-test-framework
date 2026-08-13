@@ -16,7 +16,10 @@ registry, the original `ScenarioDesign.md`.
 ## Output
 
 Debugging report per
-[`debugging-report-template.md`](../skills/stand-test-debugging/debugging-report-template.md).
+[`debugging-report-template.md`](../skills/stand-test-debugging/debugging-report-template.md),
+written with the Write tool to **`debug/<scenario-id>-<YYYY-MM-DD>.md`** — `<scenario-id>` from
+step 1, the failing test class when the run carried none, the date being the run's. A diagnosis
+that stays in the reply is lost by the next session, which is the one that needs it.
 
 ## Steps
 

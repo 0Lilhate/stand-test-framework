@@ -80,7 +80,10 @@ From the exception message, `ScenarioResult`, or Allure test-case parameters:
 
 ## Step 6 — propose the fix
 
-Report per [`debugging-report-template.md`](../stand-test-debugging/debugging-report-template.md).
+Report per [`debugging-report-template.md`](../stand-test-debugging/debugging-report-template.md),
+written to **`debug/<scenario-id>-<YYYY-MM-DD>.md`** — a file, with the Write tool, and not only a
+reply: the next failure of the same test is read against this one. `<scenario-id>` is step 1's; when
+the run carried none, name the failing test class.
 Rules:
 
 - **Never hide the failure**: no try/catch, no `@Disabled` without a linked ticket, no
