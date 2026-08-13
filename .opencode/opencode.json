@@ -112,7 +112,7 @@
       "name": "AlfaGen",
       "options": {
         "baseURL": "https://alfagen.moscow.alfaintra.net/continue-dev",
-        "apiKey": "3244a85a-7aec-419a-9fc0-6baeb327bba6"
+        "apiKey": ""
       },
       "models": {
         "VIP-EVC-DeepSeek-V4-Flash": {
