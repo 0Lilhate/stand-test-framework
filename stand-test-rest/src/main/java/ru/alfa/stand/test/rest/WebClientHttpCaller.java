@@ -115,7 +115,7 @@ public final class WebClientHttpCaller implements HttpCaller {
         if (entity == null) {
             throw new StandTestException("HTTP response for " + request.method() + " " + request.path() + " was empty");
         }
-        Map<String, List<String>> headers = Map.copyOf(entity.getHeaders());
+        Map<String, List<String>> headers = Map.copyOf(entity.getHeaders().asMultiValueMap());
         String body = (entity.getBody() == null) ? "" : entity.getBody();
         return new RestResponse(entity.getStatusCode().value(), headers, body);
     }

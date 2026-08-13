@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.apache.kafka.clients.producer.MockProducer;
+import org.apache.kafka.clients.producer.Partitioner;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.serialization.StringSerializer;
@@ -29,7 +30,7 @@ class KafkaStepExecutorSendTest {
     private MockProducer<String, String> producer;
 
     private StepResult run(ScenarioStep step, StepExecutionContext context) {
-        this.producer = new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+        this.producer = new MockProducer<>(true, (Partitioner) null, new StringSerializer(), new StringSerializer());
         FakeKafkaClientFactory factory = new FakeKafkaClientFactory(this.producer, null);
         return new KafkaStepExecutor(factory, reference -> reference, Awaiter.create()).execute(step, context);
     }
@@ -108,7 +109,7 @@ class KafkaStepExecutorSendTest {
     @Test
     @DisplayName("the bootstrap reference is resolved and handed to the producer factory")
     void resolvesBootstrapReference() {
-        MockProducer<String, String> mock = new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+        MockProducer<String, String> mock = new MockProducer<>(true, (Partitioner) null, new StringSerializer(), new StringSerializer());
         FakeKafkaClientFactory factory = new FakeKafkaClientFactory(mock, null);
         new KafkaStepExecutor(factory, reference -> "broker:9092", Awaiter.create())
                 .execute(KafkaStep.send(KafkaTestSupport.REQUEST_ALIAS).body("{}").build(), context(new VariableStore()));
@@ -186,7 +187,7 @@ class KafkaStepExecutorSendTest {
     @Test
     @DisplayName("a broker-side send failure maps to a StandTestException naming topic and alias, and the producer is still closed")
     void sendFailureMapsToInfraAndClosesProducer() {
-        MockProducer<String, String> failing = new MockProducer<>(false, new StringSerializer(), new StringSerializer()) {
+        MockProducer<String, String> failing = new MockProducer<>(false, (Partitioner) null, new StringSerializer(), new StringSerializer()) {
 
             @Override
             public void flush() {

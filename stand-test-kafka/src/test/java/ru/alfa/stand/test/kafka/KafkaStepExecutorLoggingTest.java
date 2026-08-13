@@ -7,6 +7,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import org.apache.kafka.clients.producer.MockProducer;
+import org.apache.kafka.clients.producer.Partitioner;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -42,7 +43,7 @@ class KafkaStepExecutorLoggingTest {
                     .header("X-Secret-Header", SECRET_HEADER_VALUE)
                     .injectCorrelationId()
                     .build();
-            MockProducer<String, String> producer = new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+            MockProducer<String, String> producer = new MockProducer<>(true, (Partitioner) null, new StringSerializer(), new StringSerializer());
             FakeKafkaClientFactory factory = new FakeKafkaClientFactory(producer, null);
 
             StepResult result = new KafkaStepExecutor(factory, reference -> reference, Awaiter.create()).execute(step, context);
