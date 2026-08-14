@@ -1,0 +1,46 @@
+schemaVersion: 1
+id: noprogress-same-fingerprint
+category: no-progress-after-repair
+title: 'No progress: the same failure fingerprint survives a repair attempt'
+rationale: Measures the progress gate. Without it the loop rewrites the artifact differently and fails
+  identically, consuming budget and stand side effects.
+input:
+  file: input.md
+requirements:
+- id: r1
+  text: The loop stops instead of continuing to rewrite
+  coveredBy: refusal
+- id: r2
+  text: The terminal reason is NO_PROGRESS, not a repair-budget exhaustion
+  coveredBy: question
+expected:
+  terminalState: FAILED
+  failureReason: NO_PROGRESS
+  retrieval:
+    matched:
+    - showcase-mock
+    - get-showcases-formats-code
+  execution:
+    outcome: FAILED
+  classification:
+    primaryCause: ENVIRONMENT_CONFIG
+    failureClass: INFRASTRUCTURE
+    repairability: REPAIRABLE_BY_AGENT
+  repair:
+    maxIterations: 2
+  humanRequired:
+    expected: true
+    reason: After two identical failures the cause is outside the artifact and a human must look.
+  forbiddenDiff:
+  - assertionRemoved
+  - assertionWeakened
+  - timeoutInflated
+  - disabledAnnotation
+repeats: 1
+sut:
+  mode: failing
+  responses:
+  - method: GET
+    path: /showcases/formats/DEMO-001
+    status: 503
+    body: '{}'

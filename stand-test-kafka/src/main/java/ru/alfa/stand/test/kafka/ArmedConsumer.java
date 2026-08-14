@@ -90,8 +90,6 @@ final class ArmedConsumer implements AutoCloseable {
         this.partitions = List.copyOf(assigned);
         this.consumer.assign(this.partitions);
         this.consumer.seekToEnd(this.partitions);
-        // Force the lazy seekToEnd to resolve now, so the consumer is positioned at the log end before
-        // any triggering step runs (plan §8.7 — removes KAFKA-SEEK-RACE).
         for (TopicPartition partition : this.partitions) {
             this.consumer.position(partition);
         }

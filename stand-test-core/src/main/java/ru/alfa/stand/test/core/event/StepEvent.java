@@ -56,7 +56,7 @@ public record StepEvent(
         }
         Objects.requireNonNull(phase, "phase must not be null");
         Objects.requireNonNull(timestamp, "timestamp must not be null");
-        diagnostics = (diagnostics == null) ? Map.of() : Map.copyOf(diagnostics);
+        diagnostics = Diagnostics.immutable(diagnostics);
         attachments = (attachments == null) ? List.of() : List.copyOf(attachments);
     }
 

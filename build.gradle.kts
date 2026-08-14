@@ -1,26 +1,9 @@
-import org.gradle.api.artifacts.VersionCatalogsExtension
-import org.gradle.api.publish.PublishingExtension
-import org.gradle.api.publish.maven.MavenPublication
-
-// Root project is a pure aggregator for the stand-test SDK modules.
-// All shared configuration lives in the `subprojects { }` block below plus the version
-// catalog (gradle/libs.versions.toml) — mirroring the pakt-lgot-service style
-// (no buildSrc / build-logic / precompiled convention plugins).
-//
-// Build toolchain note: this project runs on Gradle 9.3.0 (the reference pakt-lgot-service
-// is on 8.14.4) — a deliberate, pre-existing scaffold choice we keep. Plugin versions only
-// RESERVED in the catalog for later phases (springBoot, springDependencyManagement) must be
-// re-validated for Gradle 9 before they are actually applied.
-
 allprojects {
   group = rootProject.group
   version = rootProject.version
 }
 
 subprojects {
-  // stand-test-bom is a `java-platform` project and must NOT receive the java-library /
-  // checkstyle / test configuration: `java-platform` is mutually exclusive with `java`.
-  // The BOM configures itself in stand-test-bom/build.gradle.kts.
   if (name == "stand-test-bom") {
     return@subprojects
   }
@@ -41,31 +24,20 @@ subprojects {
     toolchain {
       languageVersion.set(JavaLanguageVersion.of(ver("java").toInt()))
     }
-    // The SDK is consumed by other teams: publish -sources.jar (IDE navigation) and -javadoc.jar,
-    // both picked up automatically by the `maven` publication via components["java"]. The javadoc
-    // task runs on the JDK-21 toolchain with doclint disabled (below) — the SDK's Javadoc is written
-    // for humans, not for doclint's strict HTML/@-tag rules.
     withSourcesJar()
-    // stand-test-example is not published and its src/main holds only a package-info —
-    // `javadoc` fails there with "No public or protected classes found to document".
-    if (name != "stand-test-example") {
+    if (project.name != "stand-test-example") {
       withJavadocJar()
     }
   }
 
   tasks.withType<Javadoc>().configureEach {
     options.encoding = "UTF-8"
-    // Disable doclint: strict HTML/reference checks on JDK 21 would fail the build over cosmetic
-    // Javadoc issues; the jar exists for internal consumers' IDEs, not for lint-perfect HTML.
     (options as StandardJavadocDocletOptions).addStringOption("Xdoclint:none", "-quiet")
   }
 
   tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
     options.compilerArgs.add("-parameters")
-    // Compile with the JDK-21 toolchain but target Java 17 bytecode/API (`--release 17`), so the SDK is
-    // loadable by consumers on JDK 17/21/24 (plan §14). `--release` also bans APIs newer than 17, keeping
-    // the sources 17-compatible.
     options.release.set(ver("javaRelease").toInt())
   }
 
@@ -143,20 +115,6 @@ subprojects {
   }
 
   plugins.withId("maven-publish") {
-    extensions.configure<PublishingExtension> {
-      if (name != "stand-test-example") {
-        publications {
-          create<MavenPublication>("maven") {
-            from(components["java"])
-            pom {
-              name.set(project.name)
-              description.set(project.description ?: "stand-test SDK module '${project.name}'")
-            }
-          }
-        }
-      }
-    }
-
     fun prop(gradleName: String, envName: String): String? = providers.gradleProperty(gradleName)
       .orElse(providers.environmentVariable(envName))
       .orNull
@@ -169,11 +127,23 @@ subprojects {
       prop("standTestPublishReleasesUrl", "STAND_TEST_PUBLISH_RELEASES_URL") ?: commonUrl
     }
 
-    if (repoUrl != null) {
-      val repoUsername = prop("standTestPublishUsername", "STAND_TEST_PUBLISH_USERNAME")
-      val repoPassword = prop("standTestPublishPassword", "STAND_TEST_PUBLISH_PASSWORD")
-      val allowInsecure = prop("standTestPublishAllowInsecure", "STAND_TEST_PUBLISH_ALLOW_INSECURE").toBoolean()
-      extensions.configure<PublishingExtension> {
+    extensions.configure<PublishingExtension> {
+      if (project.name != "stand-test-example") {
+        publications {
+          create<MavenPublication>("maven") {
+            from(components["java"])
+            pom {
+              name.set(project.name)
+              description.set(project.description ?: "stand-test SDK module '${project.name}'")
+            }
+          }
+        }
+      }
+
+      if (repoUrl != null) {
+        val repoUsername = prop("standTestPublishUsername", "STAND_TEST_PUBLISH_USERNAME")
+        val repoPassword = prop("standTestPublishPassword", "STAND_TEST_PUBLISH_PASSWORD")
+        val allowInsecure = prop("standTestPublishAllowInsecure", "STAND_TEST_PUBLISH_ALLOW_INSECURE").toBoolean()
         repositories {
           maven {
             name = "internal"
@@ -188,9 +158,9 @@ subprojects {
           }
         }
       }
-    } else {
-      // Without a configured repository `publish` would silently succeed doing nothing — a CI footgun.
-      // Fail it loudly instead (publishToMavenLocal is unaffected).
+    }
+
+    if (repoUrl == null) {
       tasks.named("publish") {
         doFirst {
           throw GradleException(

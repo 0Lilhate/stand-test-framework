@@ -7,7 +7,11 @@ import io.qameta.allure.model.Parameter;
 import io.qameta.allure.model.Status;
 import io.qameta.allure.model.StatusDetails;
 import io.qameta.allure.model.StepResult;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -61,10 +65,21 @@ public final class DefaultAllureLifecycleFacade implements AllureLifecycleFacade
 
     @Override
     public void addAttachment(String name, String type, String fileExtension, String content) {
-        String extension = (fileExtension == null || fileExtension.isBlank())
-                ? ".txt"
-                : (fileExtension.startsWith(".") ? fileExtension : "." + fileExtension);
-        lifecycle.addAttachment(name, type, extension, content.getBytes(StandardCharsets.UTF_8));
+        lifecycle.addAttachment(name, type, normaliseExtension(fileExtension), content.getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Override
+    public void addAttachment(String name, String type, String fileExtension, Path file) {
+        byte[] body;
+        try {
+            body = Files.readAllBytes(file);
+        } catch (IOException e) {
+            // The publisher already skipped a missing file with a WARN, so reaching here means the file
+            // vanished between that check and this read. The publisher's guard swallows and logs it —
+            // reporting must never change a test outcome (plan §17).
+            throw new UncheckedIOException("cannot read attachment file " + file, e);
+        }
+        lifecycle.addAttachment(name, type, normaliseExtension(fileExtension), body);
     }
 
     @Override
@@ -86,6 +101,13 @@ public final class DefaultAllureLifecycleFacade implements AllureLifecycleFacade
             testResult.getLabels().addAll(modelLabels);
             testResult.getParameters().addAll(modelParameters);
         });
+    }
+
+    private static String normaliseExtension(String fileExtension) {
+        if (fileExtension == null || fileExtension.isBlank()) {
+            return ".txt";
+        }
+        return fileExtension.startsWith(".") ? fileExtension : "." + fileExtension;
     }
 
     private static List<Parameter> toParameters(Map<String, String> parameters) {

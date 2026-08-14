@@ -1,0 +1,239 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "alfagen/VIP-EVC-DeepSeek-V4-Flash",
+  "instructions": [
+    ".opencode/AGENTS.md",
+    ".opencode/rules/common/**/*.md",
+    ".opencode/rules/java/**/*.md",
+    "AGENTS.md"
+  ],
+  "subagent_depth": 5,
+  "permission": {
+    "skill": {
+      "*": "allow"
+    },
+    "mcp": {
+      "*": "allow"
+    },
+    "bash": {
+      "*": "ask",
+      "./gradlew*": "allow",
+      "JAVA_HOME=* ./gradlew*": "allow",
+      "mvn*": "allow",
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git show*": "allow",
+      "git branch*": "allow",
+      "git tag*": "allow",
+      "ls*": "allow",
+      "find*": "allow",
+      "grep*": "allow",
+      "rg*": "allow",
+      "cat*": "allow",
+      "head*": "allow",
+      "tail*": "allow",
+      "wc*": "allow",
+      "node*": "allow",
+      "rm -rf*": "deny",
+      "cmd.exe*": "deny",
+      "powershell*": "deny"
+    },
+    "edit": {
+      "**/checkstyle.xml": "deny",
+      "**/pmd.xml": "deny",
+      "**/pmd-ruleset.xml": "deny",
+      "**/spotbugs-exclude.xml": "deny",
+      "**/spotbugs-include.xml": "deny",
+      "**/detekt.yml": "deny",
+      "**/detekt-config.yml": "deny",
+      "**/.editorconfig": "deny",
+      "**/.gitignore": "deny",
+      "**/.env": "deny",
+      "**/.env.production": "deny",
+      "**/.env.local": "deny",
+      "**/tomcat/conf/context.xml": "deny",
+      "**/tomcat/conf/server.xml": "deny",
+      "**/tomcat/conf/web.xml": "deny"
+    },
+    "mcp_*": "ask"
+  },
+  "agent": {
+    "orchestrator": {
+      "mode": "subagent",
+      "permission": {
+        "task": {
+          "*": "deny",
+          "planner": "allow",
+          "architect": "allow",
+          "java-reviewer": "allow",
+          "kotlin-reviewer": "allow",
+          "database-reviewer": "allow",
+          "java-build-resolver": "allow",
+          "kotlin-build-resolver": "allow",
+          "doc-updater": "allow",
+          "docs-lookup": "allow",
+          "bash-expert": "allow",
+          "harness-optimizer": "allow",
+          "general": "allow",
+          "explore": "allow",
+          "scout": "allow"
+        }
+      }
+    },
+    "planner": {
+      "permission": {
+        "task": {
+          "*": "deny",
+          "explore": "allow"
+        }
+      }
+    },
+    "java-reviewer": {
+      "permission": {
+        "task": {
+          "*": "deny",
+          "explore": "allow"
+        }
+      }
+    },
+    "kotlin-reviewer": {
+      "permission": {
+        "task": {
+          "*": "deny",
+          "explore": "allow"
+        }
+      }
+    }
+  },
+  "provider": {
+    "alfagen": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "AlfaGen",
+      "options": {
+        "baseURL": "https://alfagen.moscow.alfaintra.net/continue-dev",
+        "apiKey": ""
+      },
+      "models": {
+        "VIP-EVC-DeepSeek-V4-Flash": {
+          "name": "LARGE",
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            },
+            "xhigh": {
+              "reasoningEffort": "max"
+            }
+          }
+        }
+      }
+    }
+  },
+  "mcp": {
+    "memory": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
+      "enabled": true
+    },
+    "sequential-thinking": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "enabled": true
+    },
+    "context7": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ],
+      "enabled": true
+    },
+    "playwright": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@playwright/mcp",
+        "--browser",
+        "chrome"
+      ],
+      "enabled": true
+    },
+    "postgres_prodcat": {
+      "type": "local",
+      "command": [
+        "docker",
+        "run",
+        "--rm",
+        "-i",
+        "--env-file",
+        "/Users/alfa/IdeaProjects/TinyTeams/alfa-prc/.opencode/.env_prodcat",
+        "us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:0.24.0",
+        "--prebuilt",
+        "postgres",
+        "--stdio"
+      ],
+      "enabled": true
+    },
+    "postgres_prodprofile_u": {
+      "type": "local",
+      "command": [
+        "docker",
+        "run",
+        "--rm",
+        "-i",
+        "--env-file",
+        "/Users/alfa/IdeaProjects/TinyTeams/alfa-prc/.opencode/.env_prodprofile_u",
+        "us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:0.24.0",
+        "--prebuilt",
+        "postgres",
+        "--stdio"
+      ],
+      "enabled": true
+    },
+    "postgres_designer": {
+      "type": "local",
+      "command": [
+        "docker",
+        "run",
+        "--rm",
+        "-i",
+        "--env-file",
+        "/Users/alfa/IdeaProjects/TinyTeams/alfa-prc/.opencode/.env_designer",
+        "us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:0.24.0",
+        "--prebuilt",
+        "postgres",
+        "--stdio"
+      ],
+      "enabled": true
+    },
+    "jetbrains": {
+      "type": "local",
+      "command": [
+        "/Users/alfa/Applications/IntelliJ IDEA.app/Contents/jbr/Contents/Home/bin/java",
+        "-classpath",
+        "/Users/alfa/Applications/IntelliJ IDEA.app/Contents/plugins/mcpserver/lib/mcpserver-frontend.jar:/Users/alfa/Applications/IntelliJ IDEA.app/Contents/lib/util-8.jar:/Users/alfa/Applications/IntelliJ IDEA.app/Contents/lib/intellij.libraries.kotlinx.coroutines.core.jar:/Users/alfa/Applications/IntelliJ IDEA.app/Contents/lib/intellij.libraries.ktor.client.cio.jar:/Users/alfa/Applications/IntelliJ IDEA.app/Contents/lib/intellij.libraries.ktor.client.jar:/Users/alfa/Applications/IntelliJ IDEA.app/Contents/lib/intellij.libraries.ktor.network.tls.jar:/Users/alfa/Applications/IntelliJ IDEA.app/Contents/lib/intellij.libraries.ktor.io.jar:/Users/alfa/Applications/IntelliJ IDEA.app/Contents/lib/intellij.libraries.ktor.utils.jar:/Users/alfa/Applications/IntelliJ IDEA.app/Contents/lib/intellij.libraries.kotlinx.io.jar:/Users/alfa/Applications/IntelliJ IDEA.app/Contents/lib/intellij.libraries.kotlinx.serialization.core.jar:/Users/alfa/Applications/IntelliJ IDEA.app/Contents/lib/intellij.libraries.kotlinx.serialization.json.jar",
+        "com.intellij.mcpserver.stdio.McpStdioRunnerKt"
+      ],
+      "environment": {
+        "IJ_MCP_SERVER_PORT": "64342"
+      },
+      "enabled": true
+    }
+  }
+}

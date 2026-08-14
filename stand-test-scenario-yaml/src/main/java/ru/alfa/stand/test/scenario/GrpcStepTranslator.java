@@ -1,7 +1,6 @@
 package ru.alfa.stand.test.scenario;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -28,17 +27,11 @@ final class GrpcStepTranslator {
         params.put(YamlStepKeys.TARGET, SurfaceValues.requireString(fields, "target", location));
         params.put(YamlStepKeys.METHOD_FULL_NAME, SurfaceValues.requireString(fields, "method", location));
         params.put(YamlStepKeys.DEADLINE_MILLIS, SurfaceValues.durationMillis(fields.get("timeout"), location + ".timeout"));
-        // Emit the flag only when the surface set it explicitly, so its absence means "default" (inject when
-        // the target declares a METADATA correlation carrier) rather than an explicit opt-out.
-        if (fields.containsKey("injectCorrelationId")) {
-            params.put(YamlStepKeys.INJECT_CORRELATION_ID, SurfaceValues.boolFlag(fields, "injectCorrelationId", location));
-        }
+        SurfaceValues.putOptionalFlag(params, fields, "injectCorrelationId", YamlStepKeys.INJECT_CORRELATION_ID, location);
         SurfaceValues.putInlineOrResource(params, fields, "request", "requestResource",
                 YamlStepKeys.REQUEST, YamlStepKeys.REQUEST_RESOURCE, false, location);
-        params.put(YamlStepKeys.ASSERTIONS, fields.containsKey("assert")
-                ? SurfaceValues.assertionsWithMatchers(fields.get("assert"), location + ".assert") : List.of());
-        params.put(YamlStepKeys.CAPTURES, fields.containsKey("capture")
-                ? SurfaceValues.captures(fields.get("capture"), YamlStepKeys.JSON_PATH, location + ".capture") : List.of());
+        SurfaceValues.putAssertions(params, fields, true, location);
+        SurfaceValues.putCaptures(params, fields, YamlStepKeys.JSON_PATH, location);
         return params;
     }
 }

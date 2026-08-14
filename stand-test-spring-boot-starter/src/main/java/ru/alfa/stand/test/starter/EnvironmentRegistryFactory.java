@@ -1,11 +1,13 @@
 package ru.alfa.stand.test.starter;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import ru.alfa.stand.test.core.environment.AuthConfig;
 import ru.alfa.stand.test.core.environment.CorrelationConfig;
 import ru.alfa.stand.test.core.environment.DatasourceDefinition;
+import ru.alfa.stand.test.core.environment.EnvironmentConfigFormat;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.GrpcTargetDefinition;
@@ -14,6 +16,12 @@ import ru.alfa.stand.test.core.environment.KafkaClusterDefinition;
 import ru.alfa.stand.test.core.environment.SecretReferences;
 import ru.alfa.stand.test.core.environment.ServiceEndpointDefinition;
 import ru.alfa.stand.test.core.environment.TopicDefinition;
+import ru.alfa.stand.test.core.environment.UiApplicationDefinition;
+import ru.alfa.stand.test.core.environment.UiAuthConfig;
+import ru.alfa.stand.test.core.environment.UiLoginChallenge;
+import ru.alfa.stand.test.core.environment.UiLoginFormConfig;
+import ru.alfa.stand.test.core.environment.UiTraceMode;
+import ru.alfa.stand.test.core.environment.ViewportProfile;
 
 /**
  * Assembles an immutable {@link EnvironmentRegistry} from the mutable {@link StandTestProperties} tree.
@@ -57,15 +65,16 @@ public final class EnvironmentRegistryFactory {
      * @return an immutable registry over the configured environments (possibly empty)
      */
     public static EnvironmentRegistry build(StandTestProperties properties) {
+        int version = EnvironmentConfigFormat.requireSupported(properties.getVersion(), "stand.test");
         Map<String, EnvironmentDefinition> environments = new LinkedHashMap<>();
         for (Map.Entry<String, StandTestProperties.Environment> entry : properties.getEnvironments().entrySet()) {
             String name = entry.getKey();
-            environments.put(name, toEnvironment(name, entry.getValue()));
+            environments.put(name, toEnvironment(name, entry.getValue(), version));
         }
         return new InMemoryEnvironmentRegistry(environments);
     }
 
-    private static EnvironmentDefinition toEnvironment(String name, StandTestProperties.Environment env) {
+    private static EnvironmentDefinition toEnvironment(String name, StandTestProperties.Environment env, int version) {
         try {
             return new EnvironmentDefinition(
                     name,
@@ -74,11 +83,112 @@ public final class EnvironmentRegistryFactory {
                     datasources(env),
                     grpcTargets(env),
                     kafkaCluster(env.getKafkaCluster()),
-                    kafkaClusters(env));
+                    kafkaClusters(env),
+                    uiApplications(env, name, version));
         } catch (IllegalArgumentException invalid) {
             throw new IllegalStateException(
                     "Invalid stand.test.environments." + name + " configuration: " + invalid.getMessage(), invalid);
         }
+    }
+
+    /**
+     * Maps the {@code ui-applications} section, gated by the same format-version rule the file surface
+     * applies: the section arrived in format version
+     * {@link EnvironmentConfigFormat#UI_APPLICATIONS_SINCE_VERSION}, so a configuration carrying it must
+     * declare at least that version. Both surfaces call the same core check, which is what keeps them from
+     * disagreeing about what they can read.
+     */
+    private static Map<String, UiApplicationDefinition> uiApplications(StandTestProperties.Environment env, String environment, int version) {
+        Map<String, StandTestProperties.UiApplication> configured = env.getUiApplications();
+        if (configured.isEmpty()) {
+            return Map.of();
+        }
+        EnvironmentConfigFormat.requireSectionSupported(
+                version, "ui-applications", EnvironmentConfigFormat.UI_APPLICATIONS_SINCE_VERSION,
+                "stand.test.environments." + environment + ".ui-applications");
+        Map<String, UiApplicationDefinition> result = new LinkedHashMap<>();
+        for (Map.Entry<String, StandTestProperties.UiApplication> entry : configured.entrySet()) {
+            String alias = entry.getKey();
+            StandTestProperties.UiApplication application = entry.getValue();
+            result.put(alias, new UiApplicationDefinition(
+                    alias,
+                    refOrLiteral(application.getBaseUrl(), application.getBaseUrlRef(), "base-url", "base-url-ref", alias),
+                    application.getDefaultViewport(),
+                    viewportProfiles(application, alias),
+                    UiTraceMode.fromConfig(application.getTrace()),
+                    uiAuth(application.getAuth(), alias, environment, version)));
+        }
+        return result;
+    }
+
+    private static Map<String, ViewportProfile> viewportProfiles(StandTestProperties.UiApplication application, String alias) {
+        Map<String, ViewportProfile> result = new LinkedHashMap<>();
+        for (Map.Entry<String, StandTestProperties.Viewport> entry : application.getViewportProfiles().entrySet()) {
+            StandTestProperties.Viewport viewport = entry.getValue();
+            try {
+                result.put(entry.getKey(), new ViewportProfile(viewport.getWidth(), viewport.getHeight()));
+            } catch (IllegalArgumentException invalid) {
+                throw new IllegalArgumentException("ui application '" + alias + "' viewport profile '" + entry.getKey() + "': " + invalid.getMessage(), invalid);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Maps a UI application's sign-in section, refusing any field whose format version the document does not
+     * declare — {@code auth.login}/{@code auth.challenge} arrived in version 3, the direct credential pair in
+     * version 4, its {@code *-ref} twins in version 5.
+     *
+     * <p>The account roster and the discovery account are references only: there is deliberately no value
+     * twin for either, so neither can be routed through (and left in) the Spring Environment the way an
+     * endpoint value can. The single-account pair is the one credential that has a twin here, and what its
+     * two spellings mean depends on the declared version — see {@link #uiCredential}, which owns that rule
+     * for both front-ends.
+     */
+    private static UiAuthConfig uiAuth(StandTestProperties.UiAuth auth, String alias, String environment, int version) {
+        if (auth == null) {
+            return null;
+        }
+        if (auth.getScheme() == null) {
+            throw new IllegalArgumentException("ui application '" + alias + "' auth.scheme must not be null");
+        }
+        String location = "stand.test.environments." + environment + ".ui-applications." + alias + ".auth";
+        if (auth.getLogin() != null) {
+            EnvironmentConfigFormat.requireSectionSupported(version, "auth.login", EnvironmentConfigFormat.UI_LOGIN_SINCE_VERSION, location + ".login");
+        }
+        if (auth.getChallenge() != null) {
+            EnvironmentConfigFormat.requireSectionSupported(version, "auth.challenge", EnvironmentConfigFormat.UI_LOGIN_SINCE_VERSION, location + ".challenge");
+        }
+        if (auth.getCredentialsUsername() != null || auth.getCredentialsPassword() != null) {
+            EnvironmentConfigFormat.requireSectionSupported(
+                    version, "auth.credentials-username/credentials-password", EnvironmentConfigFormat.UI_DIRECT_CREDENTIALS_SINCE_VERSION, location);
+        }
+        if (auth.getCredentialsUsernameRef() != null || auth.getCredentialsPasswordRef() != null) {
+            EnvironmentConfigFormat.requireSectionSupported(
+                    version, "auth.credentials-username-ref/credentials-password-ref",
+                    EnvironmentConfigFormat.UI_CREDENTIAL_VALUE_TWINS_SINCE_VERSION, location);
+        }
+        return new UiAuthConfig(
+                auth.getScheme(),
+                ref(auth.getCredentialsPoolRef(), "credentials-pool-ref", alias),
+                List.copyOf(auth.getRoles()),
+                ref(auth.getDiscoveryAccountRef(), "discovery-account-ref", alias),
+                uiLogin(auth.getLogin()),
+                (auth.getChallenge() == null) ? UiLoginChallenge.NONE : auth.getChallenge(),
+                uiCredential(auth.getCredentialsUsername(), auth.getCredentialsUsernameRef(), "credentials-username", alias, location, version),
+                uiCredential(auth.getCredentialsPassword(), auth.getCredentialsPasswordRef(), "credentials-password", alias, location, version));
+    }
+
+    /**
+     * Maps the sign-in form. Its fields are locator expressions, not references: a locator is not a secret,
+     * and it legitimately carries spaces and punctuation that {@code ref(...)} rejects. The one thing that
+     * must not appear here is a credential, and there is nowhere to put one.
+     */
+    private static UiLoginFormConfig uiLogin(StandTestProperties.UiLogin login) {
+        if (login == null) {
+            return null;
+        }
+        return new UiLoginFormConfig(login.getPath(), login.getUsernameLocator(), login.getPasswordLocator(), login.getSubmitLocator(), login.getSignedInLocator());
     }
 
     private static Map<String, ServiceEndpointDefinition> services(StandTestProperties.Environment env) {
@@ -95,9 +205,6 @@ public final class EnvironmentRegistryFactory {
         if (auth == null) {
             return null;
         }
-        // A missing scheme must surface as the environment-labelled IllegalStateException like every
-        // other misconfiguration, so it is rejected here as IllegalArgumentException rather than
-        // letting the core constructor's NullPointerException escape the toEnvironment wrapper.
         if (auth.getScheme() == null) {
             throw new IllegalArgumentException("service '" + alias + "' auth.scheme must not be null");
         }
@@ -106,6 +213,44 @@ public final class EnvironmentRegistryFactory {
                 refOrLiteral(auth.getUsername(), auth.getUsernameRef(), "username", "username-ref", alias),
                 refOrLiteral(auth.getPassword(), auth.getPasswordRef(), "password", "password-ref", alias),
                 refOrLiteral(auth.getToken(), auth.getTokenRef(), "token", "token-ref", alias));
+    }
+
+    /**
+     * One UI credential, by the rule the document's format version puts on it.
+     *
+     * <p><strong>Version 4 and below:</strong> the bare {@code credentials-username} is a REFERENCE — the
+     * name of an environment variable — and there is no value twin at all. That is the contract those
+     * documents were written against, and it keeps working unchanged.
+     *
+     * <p><strong>From version 5:</strong> the bare field is the VALUE, like {@code base-url} and every
+     * other twin here, and {@code *-ref} carries the reference. This is what makes
+     * {@code credentials-username: ${web_username:tks_Admin}} work on the starter at all: Spring resolves
+     * the placeholder before the SDK sees the field, so the SDK receives {@code tks_Admin} and cannot tell
+     * it from a variable name — the two meanings need two keys, and the registry's convention already says
+     * which is which.
+     *
+     * <p><strong>The cost of the value twin, stated where it is paid:</strong> a value routed this way
+     * lives in the Spring Environment for the life of the context, so actuator's {@code /env}, a heap dump
+     * and a context report can each show it, and any default written into the file stays in git history
+     * after the credential is rotated. For a PASSWORD that is a real exposure and {@code *-ref} remains the
+     * right spelling; for a login it is usually acceptable. The SDK offers both and refuses to decide for
+     * a consumer — but the kit's safety gate does have an opinion, and flags a password value in a registry
+     * document as a blocking finding.
+     */
+    private static String uiCredential(String value, String reference, String field, String alias, String location, int version) {
+        if (version < EnvironmentConfigFormat.UI_CREDENTIAL_VALUE_TWINS_SINCE_VERSION) {
+            return ref(value, field, alias);
+        }
+        if (value != null && reference != null && !reference.isBlank()) {
+            throw new IllegalArgumentException("ui application '" + alias + "' sets both '" + field + "' and '"
+                    + field + "-ref' — configure exactly one: the first is the value, the second the name of the variable holding it");
+        }
+        if (value == null) {
+            return ref(reference, field + "-ref", alias);
+        }
+        EnvironmentConfigFormat.rejectVariableNameAsCredentialValue(value, field, location);
+        SecretReferences.rejectLiteralMarkerInValue(value, field, location);
+        return SecretReferences.literal(value);
     }
 
     private static Map<String, TopicDefinition> topics(StandTestProperties.Environment env) {
@@ -177,6 +322,7 @@ public final class EnvironmentRegistryFactory {
             throw new IllegalArgumentException(
                     "alias '" + alias + "' sets both '" + valueField + "' and '" + refField + "' — configure exactly one");
         }
+        SecretReferences.rejectLiteralMarkerInValue(value, valueField, "alias '" + alias + "'");
         return SecretReferences.literal(value);
     }
 

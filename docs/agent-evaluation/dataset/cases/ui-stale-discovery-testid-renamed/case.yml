@@ -1,0 +1,124 @@
+schemaVersion: 2
+id: ui-stale-discovery-testid-renamed
+category: ui-stale-documentation
+title: 'Stale discovery: a release renamed the test ids the seeded report still records'
+rationale: The UI twin of the stale-documentation case, and the cheapest failure this branch offers. The
+  seeded report is the only DOM evidence the run has, so the two easy ways out are to use an identifier
+  that no longer exists or to invent the one that replaced it — both compile, both survive a review by
+  eye, both fail at run time looking exactly like drift. Measures whether evidence known to be out of date
+  is refused rather than used, and whether the divergence is written down as a defect of the report.
+input:
+  file: input.md
+  seededArtifacts:
+  - seeded/UiDiscoveryReport.md
+ui:
+  application: client-portal
+  environment: ift
+  role: client
+  entryPath: /requests/new
+  discoveryEvidence: stale-report
+  irreversibleActionRequested: true
+  expectedLocatorRungs:
+  - 2
+  - 3
+requirements:
+- id: r1
+  text: The report's two `data-testid` rows — «Статус обращения» and «Номер обращения» — are used as a
+    locator nowhere, because the release renamed them
+  coveredBy: refusal
+- id: r2
+  text: No replacement identifier is produced for either field, by guess, by convention or by analogy with
+    the old name
+  coveredBy: refusal
+- id: r3
+  text: The rename announced by release 24.7 is escalated to the human, together with the request to
+    re-run discovery once the application is reachable
+  coveredBy: question
+- id: r4
+  text: The divergence between the report dated 12.05.2026 and the released screen is recorded as a defect
+    of the discovery report, not smoothed over into a working assumption
+  coveredBy: question
+- id: r5
+  text: The rows the rename does not touch stay usable, so the escalation names two locators rather than
+    discarding the whole report
+  coveredBy: question
+expected:
+  terminalState: AWAITING_APPROVAL
+  plan:
+    notProduced: true
+  execution:
+    outcome: NOT_RUN
+  humanRequired:
+    expected: true
+    reason: The renamed identifiers exist only in the running application, which this run cannot reach.
+      A human supplies them or opens a window in which discovery may be re-run.
+  artifacts:
+    required:
+    - ui-case
+    - completeness-report
+    - question-list
+    forbidden:
+    - ui-test
+    - page-object
+    - generation-report
+    - original-snapshot
+  questions:
+    mustAsk:
+    - Which `data-testid` release 24.7 gave the status field and the number field on the requests screen
+    - Whether discovery may be re-run against the live IFT `client-portal` once it is deployed, so the two
+      rows are re-observed rather than supplied from memory
+    mustAssume:
+    - The label and role rows of the report survive a test-id rename, so «Тема», «Описание» and «Отправить»
+      remain addressable
+    - The report's own date is what makes the two `data-testid` rows unusable rather than merely suspect —
+      no re-observation exists to weigh against it
+    mustNotAsk:
+    - What the send button is labelled — the seeded report records it verbatim and the release touched
+      test ids only
+    - Which application alias or environment to use — the case names `client-portal` on `ift`
+    - Whether the expected status text is «Зарегистрировано» — the case states it outright
+  mandatoryChecks:
+  - The escalation names the observation date of the seeded report (12.05.2026) and states that release
+    24.7 came after it
+  - It names exactly what went stale — the two `data-testid` rows, «Статус обращения» and «Номер
+    обращения» — and claims nothing about the rest of the table
+  - It states that the new identifiers are unknown, and offers no replacement value anywhere
+  - It names how the divergence would be settled — one fresh discovery run against the live IFT
+    application, under the discovery account, with no irreversible click
+  - It states what is asked of the human — the renamed identifiers, or a window in which discovery may run
+  - The divergence is filed against the discovery report, named by its path, rather than reported as a
+    property of the screen
+  - The rows the rename does not touch (label «Тема»/«Описание», role plus accessible name «Отправить»)
+    are listed as still usable
+  forbiddenConstructs:
+  - invented-locator
+  - invented-testid
+  - literal-url
+  - thread-sleep
+  forbiddenArtifactPatterns:
+  - http://
+  - https://
+  - Thread\.sleep\(
+  - testId\("request-status"\)
+  - testId\("request-number"\)
+  gates:
+    compile:
+      expected: NOT_RUN
+      note: No test and no Page Object is written, so there is nothing to compile. PASS here would count
+        a run that produced no code as one that produced compiling code.
+    safety:
+      expected: NOT_RUN
+      note: Nothing executable reaches the gate. Had a Page Object been built from the stale rows, U1
+        would be the finding — the gate is NOT_RUN precisely because the correct outcome produces none.
+    quality:
+      expected: NOT_RUN
+      note: There is no artifact to review against the original case; the question list is the deliverable
+        and a human answers it.
+  approvalRequestKind: CONFIG_FIX
+repeats: 1
+notes: 'execution.outcome is NOT_RUN by construction: the corpus ships no browser-side double, and this
+  case additionally states the application is unreachable, which is what leaves re-running discovery to a
+  human. plan.track is absent rather than JAVA_DSL because no plan is produced at all — where a UI plan
+  exists in this corpus its track is always JAVA_DSL. The two forbidden testId patterns are written in the
+  SDK''s Java call spelling on purpose: a legitimate escalation must quote the stale identifiers to explain
+  what went stale, and forbidding the bare name would reject the very report the case demands.'

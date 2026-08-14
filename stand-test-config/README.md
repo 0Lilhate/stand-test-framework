@@ -36,6 +36,7 @@ Add the module (typically `testImplementation`) and drop a `stand-test-environme
 classpath (`src/test/resources`):
 
 ```yaml
+version: 2                                        # registry FORMAT version (optional; absent means 1)
 environments:
   ift:
     services:
@@ -61,7 +62,70 @@ environments:
     kafka-clusters:                                 # additional NAMED clusters
       audit:
         bootstrap-servers-ref: AUDIT_KAFKA_BOOTSTRAP
+    ui-applications:                                # requires version: 2 (auth.login: version: 3)
+      client-portal:
+        base-url-ref: CLIENT_PORTAL_IFT_URL         # env-var NAME, never the URL
+        default-viewport: desktop                   # must name a declared profile
+        viewport-profiles:
+          desktop: { width: 1440, height: 900 }
+          mobile: { width: 390, height: 844 }
+        trace: off                                  # off (default) | on-failure
+        auth:                                       # key `scheme`, as for services — never `type`
+          scheme: FORM                              # NONE | FORM | STORAGE_STATE | SSO
+          credentials-pool-ref: CLIENT_PORTAL_TEST_USERS   # env var holding the account ROSTER, not an account
+          roles: [client, operator]                 # declared roles ⇒ ui.login must name one
+          discovery-account-ref: CLIENT_PORTAL_DISCOVERY
+          challenge: none                           # none | mfa | otp | captcha — declared, never bypassed
+          login:                                    # required by FORM and STORAGE_STATE
+            path: /login
+            username-locator: testId=login-username
+            password-locator: testId=login-password # a LOCATOR: a value without `<strategy>=` is refused
+            submit-locator: "role=button:Sign in"
+            signed-in-locator: testId=user-menu     # present only once signed in
 ```
+
+`CLIENT_PORTAL_TEST_USERS` holds `portal-client-1:client;portal-operator-1:operator` — account ids,
+roles and (optionally, as two further `:`-separated fields) the NAMES of the variables holding the
+credentials. No login and no password exists at any level of this configuration.
+
+## Format version (root key `version`)
+
+`version` is the version of the **file format**, not of the SDK. It exists because this loader is
+fail-closed: without it, a file carrying a section a newer SDK introduced would fail on an older SDK
+with the unhelpful `Unknown field '<section>'`. The rules (shared with the Spring starter through
+`EnvironmentConfigFormat` in `stand-test-core`, so the two surfaces cannot disagree):
+
+| Declared | Behaviour |
+|---|---|
+| absent | read as `1` — every file written before versioning existed loads unchanged; warned about, because 1 is behind |
+| < supported | read, plus one `WARN` per document load |
+| = supported | read, silently |
+| > supported | refused with a message naming the file's version, the supported one and the action (upgrade `stand-test-*`) |
+| not a whole number, or ≤ 0 | configuration error (fail-closed) |
+
+**There is no compatibility window** (ADR-UI-004). Every version from `1` up to the supported one is
+read indefinitely, and this SDK does not acquire the right to stop reading a file because it lagged.
+The `WARN` therefore reports a fact and says outright that the file stays readable — it is not notice
+of a future refusal, and it must never be written as one: a warning that threatens a removal which
+never comes teaches the reader to ignore warnings from this SDK, including the ones that matter. The
+one refusal is the opposite case, a file *newer* than the SDK understands.
+
+The warning is attached to the parse of the document — once per load, per surface — rather than to
+alias resolution, so a scenario touching a dozen aliases does not print a dozen copies.
+
+A section introduced after version 1 requires the document to declare at least the version it arrived
+in — `ui-applications` requires `version: 2`, and the `auth.login` / `auth.challenge` keys inside it
+require `version: 3`. A field added to an existing section counts as a section for this purpose: an SDK
+built before those keys existed greets them with `Unknown field 'login'`, which is exactly the case the
+version key exists to replace.
+
+**UI applications.** `ui-applications` whitelists the aliases a UI scenario may address; a scenario
+names `client-portal`, and there is nowhere in a step to write a URL instead. Viewport, trace and
+sign-in are configuration, so switching a run to the mobile viewport changes this file, not a test.
+Note the YAML detail: unquoted `off` is the boolean `false` in YAML 1.1, which is accepted as the
+`off` mode; `on` is refused — the modes are `off` and `on-failure`. The `ui.*` step types are shipped by
+[stand-test-ui](../stand-test-ui/README.md), including `ui.login`, which is what reads the `auth`
+section here.
 
 **Multiple Kafka clusters:** the single `kafka-cluster` is the environment's default; `kafka-clusters`
 whitelists named clusters, and a topic selects one via `cluster: <alias>` (e.g.
@@ -99,6 +163,26 @@ file — unless you opt into an inline `${NAME:default}` (see above). Field name
 follow the same rule; note the shape guard cannot recognise a *bare* token pasted as a "name" (it catches
 whitespace, `://` and `Bearer `/`Basic ` prefixes) — the same residual trust applies to datasource
 passwords today.
+
+### The one thing this file cannot check: where a reference points
+
+A `*-ref` is a variable NAME, so the SDK never sees the address behind it. **It therefore cannot tell a
+DEV stand from production** — that is a property of the design, not an oversight, and the residual risk
+is **accepted in writing** (decision of 2026-08-09, `UITG-S029`, requirement `SEC-01`).
+
+What does hold, and holds by machine rather than by discipline:
+
+- a UI scenario can only name an **alias**, and an alias absent from `ui-applications` is refused
+  **before a browser starts** — `NON_WHITELISTED_UI_APPLICATION`, raised by the pre-flight validator;
+- a literal URL is **not expressible** in a step at all, so no scenario can route itself anywhere;
+- the environment vocabulary of the evaluation corpus is the enum `dev | ift`, whose own schema says
+  "Production is not expressible".
+
+So reaching production requires someone to point a whitelisted alias's variable at it deliberately.
+**A blocklist of forbidden hosts was considered and rejected**: it would be maintained by hand, would
+go stale, and a stale list gives false confidence — worse than a stated limit. What guards this instead
+is the same thing that guards the credentials: the variable's value is set on the stand, by the people
+who own it.
 
 ## Relationship to the Spring Boot starter
 

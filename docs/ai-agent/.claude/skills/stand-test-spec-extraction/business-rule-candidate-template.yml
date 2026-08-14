@@ -1,0 +1,28 @@
+# business-rules.candidates.yml — extracted conditional rules / acceptance criteria.
+# Validated by knowledge-base/schema/business-rule.schema.json.
+# SEMANTIC content: becomes the expected values and negative cases of a test; never enters the curated KB.
+documentId: <document-id>
+businessRules:
+  - id: <kebab-rule-id>
+    title: "<short rule name>"
+    condition: "<if ... (the predicate that selects this branch)>"
+    action: "<then ... (the expected outcome / status / code)>"
+    exceptions: ["<exception or override>", ...]
+    priority: high               # high | medium | low | null
+    appliesTo:
+      systems: [<system-alias>, ...]
+      operations: ["<operation>", ...]
+      entities: ["<entity>", ...]
+    testImplications:
+      positiveCases: ["<case the rule accepts>", ...]
+      negativeCases: ["<case the rule rejects, with expected error>", ...]
+    source:
+      documentId: <document-id>
+      documentName: "<document title>"
+      documentVersion: "<version or null>"
+      page: <n or null>
+      section: "<section>"
+      heading: "<heading>"
+      quote: "<redacted verbatim>"
+      extractionNotes: "<how this was derived>"
+    confidence: high             # high | medium | low

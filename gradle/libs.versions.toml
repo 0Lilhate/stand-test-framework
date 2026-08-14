@@ -1,61 +1,23 @@
 [versions]
-# `java` is the Gradle toolchain (which JDK compiles the build); `javaRelease` is the bytecode/API level
-# (`--release`). The toolchain is an LTS (21) while the release level stays 17, so the build runs on a JDK
-# every dev box already has yet produces artifacts loadable on JDK 17/21/24 (plan §14 resolution).
 java = "21"
 javaRelease = "17"
 checkstyle = "10.18.2"
-junit = "5.11.4"
-assertj = "3.26.3"
+junit = "6.0.3"
+assertj = "3.27.7"
 jacoco = "0.8.15"
-# ArchUnit pins the module dependency graph (core as a pure sink, no adapter-to-adapter edges,
-# allure/scenario-yaml/ai-schema/config core-only, nothing depends on the starter) as a JUnit test in the
-# example module — the only module with every SDK module on its classpath. TEST-ONLY.
 archunit = "1.3.0"
-# SLF4J is the SDK's logging facade (plan §17): every module logs through `slf4j-api` (a pure facade,
-# no binding, no IO). The published SDK ships ONLY the facade — the consumer supplies the binding
-# (Logback via Spring Boot, etc.), so there is never a multiple-bindings clash. Logback is TEST-ONLY:
-# it gives the build a working MDCAdapter plus a capturable ListAppender for asserting log output.
 slf4j = "2.0.16"
 logback = "1.5.12"
-# stand-test-rest adapter: mature HTTP client (Spring WebClient, plan §4) + JSONPath.
-# spring-webflux is used with the JDK HttpClient connector (JdkClientHttpConnector), so
-# reactor-netty is deliberately NOT pulled in; json-path uses the json-smart provider (no Jackson).
-springWebflux = "6.2.8"
-jsonPath = "2.9.0"
-# stand-test-kafka adapter: raw Apache kafka-clients (for assign/seek control) + JSONPath.
-# Pinned to the 3.x line: 4.x renamed the consumer reset enum and changed MockConsumer's constructor,
-# and 3.9.x keeps the OffsetResetStrategy-based MockConsumer used by the adapter's broker-free tests.
-kafkaClients = "3.9.2"
-# stand-test-db adapter: production code is JDK-only (java.sql); the JDBC driver is supplied by the
-# consumer. H2 is a TEST-ONLY in-memory database — the broker-free analog of Kafka's MockConsumer and
-# REST's HttpServer (plan §16) — never a runtime dependency of the published adapter.
+springWebflux = "7.0.8"
+jsonPath = "2.10.0"
+kafkaClients = "4.2.1"
 h2 = "2.3.232"
-# stand-test-allure adapter: Allure Java commons (lifecycle + model API, io.qameta.allure). The adapter
-# maps core reporting events to Allure steps/labels/attachments. allure-junit5 (the JUnit integration
-# that actually opens the Allure test case) is a consumer-side wiring concern, deliberately NOT a
-# dependency of this mapping module — it would pull JUnit onto a pure reporting adapter's classpath.
-allure = "2.29.1"
-# stand-test-scenario-yaml engine: SnakeYAML parses declarative scenarios into the generic Scenario model.
-# Jackson is deliberately avoided repo-wide (json-path uses json-smart), so SnakeYAML (a plain map/list/scalar
-# tree that maps straight onto GenericStep parameters) is the lightweight fit. Loaded via SafeConstructor +
-# LoaderOptions (no arbitrary type instantiation — mitigates the CVE-2022-1471 class of issues).
-snakeYaml = "2.3"
-# stand-test-ai-schema module: JSON Schema tooling used ONLY in that module's tests to validate the
-# example scenarios against the shipped schema resource. networknt transitively pulls jackson-databind,
-# so both are kept strictly in `testImplementation` there — Jackson never reaches the main graph (the
-# repo otherwise avoids Jackson; json-path uses json-smart). The published artifact is the schema
-# resource itself, which needs no runtime dependency.
-networknt = "1.5.6"
-jackson = "2.18.2"
-# stand-test-grpc adapter: grpc-java runtime/stub/protobuf + server-reflection client + JSON<->protobuf
-# (JsonFormat) so declarative scenarios call unary methods via DynamicMessage without generated stubs.
-# The transport (grpc-netty-shaded) is runtimeOnly — it stays off the consumer's compile graph — and the
-# in-process transport is test-only. Pinned as a compatible pair (grpc-java 1.68.x ships protobuf 3.25.x).
+allure = "2.35.4"
+snakeYaml = "2.6"
 grpc = "1.68.1"
 protobuf = "3.25.5"
-# Reserved for later phases (not applied at the skeleton stage):
-springBoot = "3.5.14"
+playwright = "1.61.0"
+springBoot = "4.1.0"
 springDependencyManagement = "1.1.7"
 
 [libraries]
@@ -67,8 +29,6 @@ junit-platform-testkit = { module = "org.junit.platform:junit-platform-testkit" 
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 archunit = { module = "com.tngtech.archunit:archunit", version.ref = "archunit" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
-# Test-only binding: provides a functional MDCAdapter and ch.qos.logback.core.read.ListAppender so
-# tests can capture and assert emitted log lines. Never a runtime dependency of any published module.
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 spring-webflux = { module = "org.springframework:spring-webflux", version.ref = "springWebflux" }
 json-path = { module = "com.jayway.jsonpath:json-path", version.ref = "jsonPath" }
@@ -76,21 +36,15 @@ kafka-clients = { module = "org.apache.kafka:kafka-clients", version.ref = "kafk
 h2 = { module = "com.h2database:h2", version.ref = "h2" }
 allure-java-commons = { module = "io.qameta.allure:allure-java-commons", version.ref = "allure" }
 snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeYaml" }
-networknt-json-schema-validator = { module = "com.networknt:json-schema-validator", version.ref = "networknt" }
-jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
 grpc-api = { module = "io.grpc:grpc-api", version.ref = "grpc" }
 grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
 grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }
 grpc-services = { module = "io.grpc:grpc-services", version.ref = "grpc" }
 grpc-netty-shaded = { module = "io.grpc:grpc-netty-shaded", version.ref = "grpc" }
 grpc-inprocess = { module = "io.grpc:grpc-inprocess", version.ref = "grpc" }
+playwright = { module = "com.microsoft.playwright:playwright", version.ref = "playwright" }
 protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
 protobuf-java-util = { module = "com.google.protobuf:protobuf-java-util", version.ref = "protobuf" }
-# stand-test-spring-boot-starter: Spring Boot auto-configuration. The library ships only the
-# `spring-boot`/`spring-boot-autoconfigure` API (the `org.springframework.boot` plugin is NOT applied —
-# this is a library, not a bootable app). `configuration-processor` is an annotationProcessor that
-# generates IDE metadata for `@ConfigurationProperties`; `spring-boot-test` (ApplicationContextRunner)
-# is test-only.
 spring-boot = { module = "org.springframework.boot:spring-boot", version.ref = "springBoot" }
 spring-boot-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure", version.ref = "springBoot" }
 spring-boot-configuration-processor = { module = "org.springframework.boot:spring-boot-configuration-processor", version.ref = "springBoot" }

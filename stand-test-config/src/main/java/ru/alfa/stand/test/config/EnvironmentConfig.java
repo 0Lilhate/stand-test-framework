@@ -13,6 +13,7 @@ import ru.alfa.stand.test.core.environment.AuthScheme;
 import ru.alfa.stand.test.core.environment.CorrelationConfig;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
 import ru.alfa.stand.test.core.environment.DatasourceDefinition;
+import ru.alfa.stand.test.core.environment.EnvironmentConfigFormat;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.GrpcTargetDefinition;
@@ -21,6 +22,13 @@ import ru.alfa.stand.test.core.environment.KafkaClusterDefinition;
 import ru.alfa.stand.test.core.environment.SecretReferences;
 import ru.alfa.stand.test.core.environment.ServiceEndpointDefinition;
 import ru.alfa.stand.test.core.environment.TopicDefinition;
+import ru.alfa.stand.test.core.environment.UiApplicationDefinition;
+import ru.alfa.stand.test.core.environment.UiAuthConfig;
+import ru.alfa.stand.test.core.environment.UiAuthScheme;
+import ru.alfa.stand.test.core.environment.UiLoginChallenge;
+import ru.alfa.stand.test.core.environment.UiLoginFormConfig;
+import ru.alfa.stand.test.core.environment.UiTraceMode;
+import ru.alfa.stand.test.core.environment.ViewportProfile;
 import ru.alfa.stand.test.core.exception.StandTestException;
 
 /**
@@ -33,14 +41,31 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  * config-class {@link StandTestException} with a dotted location. Field names are kebab-case
  * (canonical); the camelCase spelling is also accepted. Only <strong>references</strong>
  * (environment-variable names) are stored, never resolved addresses/secrets.
+ *
+ * <p>The one root key besides {@code environments} is {@code version}: the <em>format</em> version of the
+ * document, governed by {@link EnvironmentConfigFormat}. It is what turns "this file was written for a
+ * newer SDK" from {@code Unknown field '<new-section>'} into a message naming both versions and the
+ * action. Absent means version 1, so every file written before versioning existed keeps loading unchanged.
  */
 public final class EnvironmentConfig {
 
-    private static final Set<String> ROOT_KEYS = Set.of("environments");
-    private static final Set<String> ENV_KEYS = Set.of("services", "topics", "datasources", "grpc-targets", "grpcTargets", "kafka-cluster", "kafkaCluster", "kafka-clusters", "kafkaClusters");
+    private static final Set<String> ROOT_KEYS = Set.of("environments", EnvironmentConfigFormat.VERSION_FIELD);
+    private static final Set<String> ENV_KEYS = Set.of("services", "topics", "datasources", "grpc-targets", "grpcTargets", "kafka-cluster", "kafkaCluster", "kafka-clusters", "kafkaClusters", "ui-applications", "uiApplications");
     private static final Set<String> SERVICE_KEYS = Set.of("base-url-ref", "baseUrlRef", "correlation", "auth");
 
     private static final Set<String> AUTH_KEYS = Set.of("scheme", "username-ref", "usernameRef", "password-ref", "passwordRef", "token-ref", "tokenRef");
+    private static final Set<String> UI_APPLICATION_KEYS = Set.of("base-url-ref", "baseUrlRef", "default-viewport", "defaultViewport", "viewport-profiles", "viewportProfiles", "trace", "auth");
+    private static final Set<String> UI_AUTH_KEYS = Set.of(
+            "scheme", "credentials-pool-ref", "credentialsPoolRef", "credentials-username", "credentialsUsername", "credentials-password", "credentialsPassword",
+            "credentials-username-ref", "credentialsUsernameRef", "credentials-password-ref", "credentialsPasswordRef",
+            "roles", "discovery-account-ref", "discoveryAccountRef", "login", "challenge");
+    private static final Set<String> UI_LOGIN_KEYS = Set.of(
+            "path",
+            "username-locator", "usernameLocator",
+            "password-locator", "passwordLocator",
+            "submit-locator", "submitLocator",
+            "signed-in-locator", "signedInLocator");
+    private static final Set<String> VIEWPORT_KEYS = Set.of("width", "height");
     private static final Set<String> TOPIC_KEYS = Set.of("name", "correlation", "cluster");
     private static final Set<String> DATASOURCE_KEYS = Set.of("url-ref", "urlRef", "user-ref", "userRef", "password-ref", "passwordRef", "allowed-schemas", "allowedSchemas", "write-allowed", "writeAllowed");
     private static final Set<String> GRPC_KEYS = Set.of("target-ref", "targetRef", "correlation");
@@ -62,15 +87,16 @@ public final class EnvironmentConfig {
         }
         Map<String, Object> document = asMap(root, "<document>");
         checkKnownKeys(document, ROOT_KEYS, "<document>");
+        int version = EnvironmentConfigFormat.requireSupported(document.get(EnvironmentConfigFormat.VERSION_FIELD), "<document>");
         Map<String, Object> environments = namedMap(document.get("environments"), "environments");
         Map<String, EnvironmentDefinition> result = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : environments.entrySet()) {
-            result.put(entry.getKey(), environment(entry.getKey(), entry.getValue()));
+            result.put(entry.getKey(), environment(entry.getKey(), entry.getValue(), version));
         }
         return new InMemoryEnvironmentRegistry(result);
     }
 
-    private static EnvironmentDefinition environment(String name, Object value) {
+    private static EnvironmentDefinition environment(String name, Object value, int version) {
         String location = "environments." + name;
         Map<String, Object> fields = asMap(value, location);
         checkKnownKeys(fields, ENV_KEYS, location);
@@ -95,7 +121,150 @@ public final class EnvironmentConfig {
         for (Map.Entry<String, Object> entry : namedMap(pick(fields, "kafka-clusters", "kafkaClusters"), location + ".kafka-clusters").entrySet()) {
             kafkaClusters.put(entry.getKey(), kafkaCluster(entry.getValue(), location + ".kafka-clusters." + entry.getKey()));
         }
-        return build(location, () -> new EnvironmentDefinition(name, services, topics, datasources, grpcTargets, kafkaCluster, kafkaClusters));
+        Map<String, UiApplicationDefinition> uiApplications = uiApplications(pick(fields, "ui-applications", "uiApplications"), location, version);
+        return build(location, () -> new EnvironmentDefinition(name, services, topics, datasources, grpcTargets, kafkaCluster, kafkaClusters, uiApplications));
+    }
+
+    /**
+     * Reads the per-environment {@code ui-applications} section — the whitelist that makes a UI application
+     * addressable by a logical alias instead of a URL. The section arrived with format version
+     * {@link EnvironmentConfigFormat#UI_APPLICATIONS_SINCE_VERSION}, so a document carrying it must declare
+     * at least that version: without the declaration an SDK that predates the section would meet the bare
+     * {@code Unknown field 'ui-applications'} this versioning exists to replace.
+     */
+    private static Map<String, UiApplicationDefinition> uiApplications(Object value, String environmentLocation, int version) {
+        String location = environmentLocation + ".ui-applications";
+        if (value == null) {
+            return Map.of();
+        }
+        EnvironmentConfigFormat.requireSectionSupported(version, "ui-applications", EnvironmentConfigFormat.UI_APPLICATIONS_SINCE_VERSION, location);
+        Map<String, UiApplicationDefinition> result = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : namedMap(value, location).entrySet()) {
+            result.put(entry.getKey(), uiApplication(entry.getKey(), entry.getValue(), location + "." + entry.getKey(), version));
+        }
+        return result;
+    }
+
+    private static UiApplicationDefinition uiApplication(String alias, Object value, String location, int version) {
+        Map<String, Object> fields = asMap(value, location);
+        checkKnownKeys(fields, UI_APPLICATION_KEYS, location);
+        String baseUrlRef = requireReference(fields, "base-url-ref", "baseUrlRef", location);
+        String defaultViewport = optionalString(pick(fields, "default-viewport", "defaultViewport"), location + ".default-viewport");
+        Map<String, ViewportProfile> viewportProfiles = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : namedMap(pick(fields, "viewport-profiles", "viewportProfiles"), location + ".viewport-profiles").entrySet()) {
+            viewportProfiles.put(entry.getKey(), viewportProfile(entry.getValue(), location + ".viewport-profiles." + entry.getKey()));
+        }
+        UiTraceMode trace = traceMode(fields.get("trace"), location + ".trace");
+        UiAuthConfig auth = uiAuth(fields.get("auth"), location + ".auth", version);
+        return build(location, () -> new UiApplicationDefinition(alias, baseUrlRef, defaultViewport, viewportProfiles, trace, auth));
+    }
+
+    private static ViewportProfile viewportProfile(Object value, String location) {
+        Map<String, Object> fields = asMap(value, location);
+        checkKnownKeys(fields, VIEWPORT_KEYS, location);
+        int width = requireInt(fields.get("width"), location + ".width");
+        int height = requireInt(fields.get("height"), location + ".height");
+        return build(location, () -> new ViewportProfile(width, height));
+    }
+
+    /**
+     * Reads the {@code trace} flag through the core parser both surfaces share (which is also where the
+     * YAML-1.1 {@code off == false} subtlety is handled), re-labelling its rejection with this file's
+     * dotted location.
+     */
+    private static UiTraceMode traceMode(Object value, String location) {
+        try {
+            return UiTraceMode.fromConfig(value);
+        } catch (IllegalArgumentException rejected) {
+            throw new StandTestException("Field 'trace' at " + location + ": " + rejected.getMessage(), rejected);
+        }
+    }
+
+    private static UiAuthConfig uiAuth(Object value, String location, int version) {
+        if (value == null) {
+            return null;
+        }
+        Map<String, Object> fields = asMap(value, location);
+        checkKnownKeys(fields, UI_AUTH_KEYS, location);
+        UiAuthScheme scheme = uiAuthScheme(requireString(fields, "scheme", "scheme", location), location);
+        String credentialsPoolRef = optionalReference(fields, "credentials-pool-ref", "credentialsPoolRef", location);
+        if (fields.containsKey("credentials-username") || fields.containsKey("credentialsUsername")
+                || fields.containsKey("credentials-password") || fields.containsKey("credentialsPassword")) {
+            EnvironmentConfigFormat.requireSectionSupported(
+                    version, "auth.credentials-username/credentials-password", EnvironmentConfigFormat.UI_DIRECT_CREDENTIALS_SINCE_VERSION, location);
+        }
+        if (fields.containsKey("credentials-username-ref") || fields.containsKey("credentialsUsernameRef")
+                || fields.containsKey("credentials-password-ref") || fields.containsKey("credentialsPasswordRef")) {
+            EnvironmentConfigFormat.requireSectionSupported(
+                    version, "auth.credentials-username-ref/credentials-password-ref",
+                    EnvironmentConfigFormat.UI_CREDENTIAL_VALUE_TWINS_SINCE_VERSION, location);
+        }
+        String credentialsUsername = uiCredential(fields, "credentials-username", "credentialsUsername", location, version);
+        String credentialsPassword = uiCredential(fields, "credentials-password", "credentialsPassword", location, version);
+        String discoveryAccountRef = optionalReference(fields, "discovery-account-ref", "discoveryAccountRef", location);
+        List<String> roles = stringList(fields.get("roles"), location + ".roles");
+        if (fields.containsKey("login")) {
+            EnvironmentConfigFormat.requireSectionSupported(version, "auth.login", EnvironmentConfigFormat.UI_LOGIN_SINCE_VERSION, location + ".login");
+        }
+        if (fields.containsKey("challenge")) {
+            EnvironmentConfigFormat.requireSectionSupported(version, "auth.challenge", EnvironmentConfigFormat.UI_LOGIN_SINCE_VERSION, location + ".challenge");
+        }
+        UiLoginFormConfig login = uiLogin(fields.get("login"), location + ".login");
+        UiLoginChallenge challenge = uiLoginChallenge(fields.get("challenge"), location + ".challenge");
+        return build(location, () -> new UiAuthConfig(scheme, credentialsPoolRef, roles, discoveryAccountRef, login, challenge, credentialsUsername, credentialsPassword));
+    }
+
+    /**
+     * Reads the {@code login} section: where the sign-in form is and which elements it consists of. The
+     * values are locator <em>expressions</em> in the UI adapter's grammar ({@code testId=…},
+     * {@code role=button:Sign in}, {@code label=…}, {@code text=…}, {@code css=…}); this loader keeps them
+     * opaque, because the grammar belongs to the module that owns locators and core has none.
+     *
+     * <p>They are read as plain strings rather than through the {@code *-ref} shape check on purpose: a
+     * locator is not a secret and legitimately carries spaces and punctuation that the reference check
+     * rejects. What must never appear here is a credential, and there is nowhere to put one — the login
+     * and the password come from the account roster behind {@code credentials-pool-ref}.
+     */
+    private static UiLoginFormConfig uiLogin(Object value, String location) {
+        if (value == null) {
+            return null;
+        }
+        Map<String, Object> fields = asMap(value, location);
+        checkKnownKeys(fields, UI_LOGIN_KEYS, location);
+        String path = optionalString(fields.get("path"), location + ".path");
+        String username = optionalString(pick(fields, "username-locator", "usernameLocator"), location + ".username-locator");
+        String password = optionalString(pick(fields, "password-locator", "passwordLocator"), location + ".password-locator");
+        String submit = optionalString(pick(fields, "submit-locator", "submitLocator"), location + ".submit-locator");
+        String signedIn = optionalString(pick(fields, "signed-in-locator", "signedInLocator"), location + ".signed-in-locator");
+        return build(location, () -> new UiLoginFormConfig(path, username, password, submit, signedIn));
+    }
+
+    /**
+     * Reads the {@code challenge} flag. Declaring one does not make the SDK defeat it — there is
+     * deliberately no MFA/OTP/CAPTCHA bypass — it makes the UI adapter refuse with a message naming the
+     * gate instead of hanging on a screen it cannot pass.
+     */
+    private static UiLoginChallenge uiLoginChallenge(Object value, String location) {
+        if (value == null) {
+            return UiLoginChallenge.NONE;
+        }
+        String declared = optionalString(value, location);
+        if (declared == null) {
+            return UiLoginChallenge.NONE;
+        }
+        try {
+            return UiLoginChallenge.valueOf(declared.trim().replace('-', '_').toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException unknown) {
+            throw new StandTestException("Field 'challenge' at " + location + " must be one of " + Set.of(UiLoginChallenge.values()) + ", but was '" + declared + "'");
+        }
+    }
+
+    private static UiAuthScheme uiAuthScheme(String scheme, String location) {
+        try {
+            return UiAuthScheme.valueOf(scheme.trim().replace('-', '_').toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException unknown) {
+            throw new StandTestException("Field 'scheme' at " + location + " must be one of " + Set.of(UiAuthScheme.values()) + ", but was '" + scheme + "'");
+        }
     }
 
     private static ServiceEndpointDefinition service(String alias, Object value, String location) {
@@ -244,6 +413,34 @@ public final class EnvironmentConfig {
         return SecretReferences.requireReferenceShape(requireString(fields, kebab, camel, location), kebab, location);
     }
 
+    /**
+     * One UI credential, by the rule the document's format version puts on it — the same rule the Spring
+     * starter applies, so the two front-ends cannot drift apart on the one field where drift means signing
+     * in with the wrong string.
+     *
+     * <p>Up to version 4 the bare key is a REFERENCE and there is no twin. From version 5 the bare key is
+     * the VALUE and {@code *-ref} carries the reference. Here, unlike on the starter, a reference may still
+     * be written as {@code ${VAR:default}} — this loader resolves placeholders itself, which is precisely
+     * why the same spelling behaved differently on the two front-ends before version 5 existed.
+     */
+    private static String uiCredential(Map<String, Object> fields, String kebab, String camel, String location, int version) {
+        if (version < EnvironmentConfigFormat.UI_CREDENTIAL_VALUE_TWINS_SINCE_VERSION) {
+            return optionalReference(fields, kebab, camel, location);
+        }
+        String reference = optionalReference(fields, kebab + "-ref", camel + "Ref", location);
+        String value = optionalString(pick(fields, kebab, camel), location);
+        if (value != null && reference != null) {
+            throw new StandTestException("Fields '" + kebab + "' and '" + kebab + "-ref' at " + location
+                    + " are both set — configure exactly one: the first is the value, the second the name of the variable holding it");
+        }
+        if (value == null) {
+            return reference;
+        }
+        EnvironmentConfigFormat.rejectVariableNameAsCredentialValue(value, kebab, location);
+        SecretReferences.rejectLiteralMarkerInValue(value, kebab, location);
+        return SecretReferences.literal(value);
+    }
+
     private static String optionalReference(Map<String, Object> fields, String kebab, String camel, String location) {
         String value = optionalString(pick(fields, kebab, camel), location);
         return (value == null) ? null : SecretReferences.requireReferenceShape(value, kebab, location);
@@ -267,6 +464,34 @@ public final class EnvironmentConfig {
             throw new StandTestException("Field at " + location + " must be a boolean");
         }
         return flag;
+    }
+
+    private static int requireInt(Object value, String location) {
+        if (!(value instanceof Integer number)) {
+            throw new StandTestException("Field at " + location + " must be a whole number, but found " + typeOf(value));
+        }
+        return number;
+    }
+
+    /**
+     * Reads a list of non-blank strings, preserving order AND duplicates — unlike {@link #stringSet}, whose
+     * deduplication would hide a repeated entry from the value type's own invariant check.
+     */
+    private static List<String> stringList(Object value, String location) {
+        if (value == null) {
+            return List.of();
+        }
+        if (!(value instanceof List<?> list)) {
+            throw new StandTestException("Field at " + location + " must be a list of strings");
+        }
+        List<String> result = new ArrayList<>();
+        for (Object item : new ArrayList<>(list)) {
+            if (!(item instanceof String text) || text.isBlank()) {
+                throw new StandTestException("List at " + location + " must contain only non-blank strings");
+            }
+            result.add(text);
+        }
+        return List.copyOf(result);
     }
 
     private static Set<String> stringSet(Object value, String location) {

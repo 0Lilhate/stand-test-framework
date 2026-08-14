@@ -1,7 +1,6 @@
 package ru.alfa.stand.test.scenario;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import ru.alfa.stand.test.core.exception.StandTestException;
@@ -40,39 +39,28 @@ final class DbStepTranslator {
                 YamlStepKeys.SQL, YamlStepKeys.SQL_RESOURCE, true, location);
         params.put(YamlStepKeys.PARAMS, SurfaceValues.objectMap(fields.get("params"), location + ".params"));
         switch (type) {
-            case "db.query" -> params.put(YamlStepKeys.CAPTURES, fields.containsKey("capture")
-                    ? SurfaceValues.captures(fields.get("capture"), YamlStepKeys.COLUMN, location + ".capture") : List.of());
+            case "db.query" -> SurfaceValues.putCaptures(params, fields, YamlStepKeys.COLUMN, location);
             case "db.expectEventually" -> {
                 Object expected = fields.get("equals");
                 if (expected == null) {
                     throw new StandTestException("Field 'equals' at " + location + " is required for db.expectEventually and must not be null");
                 }
                 params.put(YamlStepKeys.EXPECTED_VALUE, expected);
-                if (fields.containsKey("timeout")) {
-                    params.put(YamlStepKeys.TIMEOUT_MILLIS, SurfaceValues.durationMillis(fields.get("timeout"), location + ".timeout"));
-                }
-                if (fields.containsKey("pollInterval")) {
-                    params.put(YamlStepKeys.POLL_INTERVAL_MILLIS, SurfaceValues.durationMillis(fields.get("pollInterval"), location + ".pollInterval"));
-                }
+                SurfaceValues.putOptionalDuration(params, fields, "timeout", YamlStepKeys.TIMEOUT_MILLIS, location);
+                SurfaceValues.putOptionalDuration(params, fields, "pollInterval", YamlStepKeys.POLL_INTERVAL_MILLIS, location);
             }
             case "db.cleanup" -> params.put(YamlStepKeys.WHERE_TEST_RUN_ID_COLUMN, SurfaceValues.requireString(fields, "whereTestRunId", location));
             case "db.seed" -> {
-                // taggedByTestRunId names the reap column an INSERT tags with :testRunId (the same column the
-                // paired cleanup filters); optional here but enforced at runtime by the write-guard for an
-                // INSERT (parallel isolation, plan §15) — mirrors DbStep.taggedByTestRunId(...).
                 String tagColumn = SurfaceValues.optionalString(fields, "taggedByTestRunId", location);
                 if (tagColumn != null) {
                     params.put(YamlStepKeys.SEED_TEST_RUN_ID_COLUMN, tagColumn);
                 }
-                // whereTestRunId is OPTIONAL for a seed (an INSERT needs no predicate); a write-scoped
-                // UPDATE/DELETE seed may declare it, mirroring DbStep which allows it on seed and cleanup.
                 String whereColumn = SurfaceValues.optionalString(fields, "whereTestRunId", location);
                 if (whereColumn != null) {
                     params.put(YamlStepKeys.WHERE_TEST_RUN_ID_COLUMN, whereColumn);
                 }
             }
             default -> {
-                // unreachable: the known-set switch above already rejected any other type.
             }
         }
         return params;

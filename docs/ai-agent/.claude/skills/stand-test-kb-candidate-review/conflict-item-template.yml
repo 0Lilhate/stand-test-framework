@@ -1,0 +1,50 @@
+# conflicts.candidates.yml — detected value disagreements.
+# Validated by knowledge-base/schema/conflict-item.schema.json.
+# Two axes: candidate vs existing curated KB, and candidate vs candidate across documents.
+# NEVER auto-resolved: autoResolvable is a constant false; whoDecides is a constant human.
+# Each side carries its own provenance (candidate side a document quote; existing-kb side a file+id ref).
+documentId: <document-id>
+generatedAt: "<YYYY-MM-DD>"
+conflicts:
+  - conflictId: <kebab: type--joinKey>
+    type: endpoint-path-mismatch    # endpoint-path-mismatch | endpoint-contract-mismatch |
+                                    # topic-direction-mismatch | topic-producer-consumer-mismatch |
+                                    # db-table-column-mismatch | business-rule-behavior-mismatch |
+                                    # document-version-conflict | duplicate-scenario-candidate |
+                                    # stale-source-document | correlation-mismatch | auth-mismatch | other
+    category: endpoints             # services|endpoints|kafkaTopics|datasources|dbTables|dbProbes|grpcTargets|business-rule|test-scenario
+    autoResolvable: false           # INVARIANT
+    whoDecides: human               # INVARIANT
+    status: unresolved              # unresolved | resolved
+    field: <the field in disagreement>
+    sides:
+      - side: existing-kb
+        value: { <field>: <curated value> }
+        provenance:
+          source: curated-kb
+          kbFile: <collection>/<service-id>.yml
+          kbEntryId: <curated-id>
+          lastPromotedFrom:         # from promotion-log.yml; enables stale/version detection
+            documentId: <prior-document-id>
+            documentVersion: "<version or null>"
+            documentDate: "<YYYY-MM-DD or null>"
+      - side: candidate
+        value: { <field>: <candidate value> }
+        provenance:
+          documentId: <document-id>
+          documentName: "<document title>"
+          documentVersion: "<version or null>"
+          page: <n or null>
+          section: "<section>"
+          heading: "<heading>"
+          quote: "<redacted verbatim stating the candidate value>"
+          extractionNotes: "<note>"
+    suggestedResolution:            # DETERMINISTIC but NON-BINDING hint
+      hint: prefer-candidate        # prefer-candidate | prefer-existing-kb | keep-both | manual | null
+      rationale: "<why - e.g. candidate documentDate newer>"
+      confidence: medium
+    resolution:                     # filled by the human on resolve; null until then
+      decidedBy: null
+      decidedAt: null
+      chosenSide: null              # existing-kb | candidate | neither | manual | null
+      note: null

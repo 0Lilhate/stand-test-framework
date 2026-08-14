@@ -42,8 +42,6 @@ public final class RestStep {
     private String id;
     private String body;
     private String bodyResource;
-    // Tri-state: null = unset (inject when the resolved service declares a HEADER correlation carrier —
-    // the safe default), TRUE = force-inject, FALSE = explicit opt-out.
     private Boolean injectCorrelationId;
     private Integer expectedStatus;
     private Long timeoutMillis;
@@ -410,24 +408,19 @@ public final class RestStep {
         return parameters;
     }
 
+    /** An EQUALS assertion omits the matcher key entirely — an absent wire matcher IS equals (core contract). */
     private List<Map<String, Object>> assertionMaps() {
-        List<Map<String, Object>> list = new ArrayList<>();
-        for (RestAssertion assertion : this.assertions) {
-            if (assertion.matcher() == AssertionMatcher.EQUALS) {
-                list.add(Map.of(RestStepParameters.JSON_PATH, assertion.jsonPath(), RestStepParameters.EXPECTED_VALUE, assertion.expectedValue()));
-            } else {
-                list.add(Map.of(RestStepParameters.JSON_PATH, assertion.jsonPath(), RestStepParameters.EXPECTED_VALUE, assertion.expectedValue(), RestStepParameters.MATCHER, assertion.matcher().name()));
-            }
-        }
-        return List.copyOf(list);
+        return this.assertions.stream()
+                .map(assertion -> assertion.matcher() == AssertionMatcher.EQUALS
+                        ? Map.<String, Object>of(RestStepParameters.JSON_PATH, assertion.jsonPath(), RestStepParameters.EXPECTED_VALUE, assertion.expectedValue())
+                        : Map.<String, Object>of(RestStepParameters.JSON_PATH, assertion.jsonPath(), RestStepParameters.EXPECTED_VALUE, assertion.expectedValue(), RestStepParameters.MATCHER, assertion.matcher().name()))
+                .toList();
     }
 
     private List<Map<String, Object>> captureMaps() {
-        List<Map<String, Object>> list = new ArrayList<>();
-        for (RestCapture capture : this.captures) {
-            list.add(Map.of(RestStepParameters.VARIABLE_NAME, capture.variableName(), RestStepParameters.JSON_PATH, capture.jsonPath()));
-        }
-        return List.copyOf(list);
+        return this.captures.stream()
+                .map(capture -> Map.<String, Object>of(RestStepParameters.VARIABLE_NAME, capture.variableName(), RestStepParameters.JSON_PATH, capture.jsonPath()))
+                .toList();
     }
 
     private static String requireNonBlank(String value, String what) {

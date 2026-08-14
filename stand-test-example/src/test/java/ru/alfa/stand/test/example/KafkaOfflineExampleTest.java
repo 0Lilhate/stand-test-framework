@@ -12,6 +12,7 @@ import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.MockProducer;
+import org.apache.kafka.clients.producer.Partitioner;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
@@ -105,7 +106,7 @@ class KafkaOfflineExampleTest {
 
         @Override
         public Producer<String, String> createProducer(ResolvedKafkaCluster cluster) {
-            return new MockProducer<>(true, new StringSerializer(), new StringSerializer()) {
+            return new MockProducer<>(true, (Partitioner) null, new StringSerializer(), new StringSerializer()) {
                 @Override
                 public synchronized Future<RecordMetadata> send(ProducerRecord<String, String> record, Callback callback) {
                     RecordHeaders headers = new RecordHeaders();

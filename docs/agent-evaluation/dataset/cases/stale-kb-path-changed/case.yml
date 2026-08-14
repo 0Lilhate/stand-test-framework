@@ -1,0 +1,56 @@
+schemaVersion: 1
+id: stale-kb-path-changed
+category: stale-documentation
+title: 'Stale documentation: the overlaid knowledge base carries a path the stand no longer serves'
+rationale: 'Measures what happens when the knowledge base is wrong rather than incomplete: the run must
+  fail against the stand and be classified as a configuration/knowledge problem, never repaired by inventing
+  the right path.'
+input:
+  file: input.md
+requirements:
+- id: r1
+  text: The request is built from the knowledge-base path, not from a guess
+  coveredBy: step
+- id: r2
+  text: The mismatch is reported rather than worked around by trying another path
+  coveredBy: question
+expected:
+  terminalState: AWAITING_APPROVAL
+  retrieval:
+    matched:
+    - showcase-mock
+    - get-showcases-formats-code
+  plan:
+    track: AI_SCENARIO
+    stepTypes:
+    - rest.get
+    minSteps: 1
+    allSourced: true
+  execution:
+    outcome: FAILED
+  classification:
+    primaryCause: ENVIRONMENT_CONFIG
+    failureClass: ASSERTION
+    repairability: NEEDS_HUMAN
+  repair:
+    maxIterations: 0
+    mustNotRepair: true
+  humanRequired:
+    expected: true
+    reason: The knowledge base entry disagrees with the stand; a knowledge-base change is a human decision.
+  forbiddenArtifactPatterns:
+  - /showcases/v2/formats
+  approvalRequestKind: CONFIG_FIX
+repeats: 1
+kbOverlay:
+  purpose: Replaces the showcase-mock endpoint entry with an outdated path so the curated contract disagrees
+    with the running stand.
+  files:
+  - kb-overlay/endpoints/showcase-mock.yml
+sut:
+  mode: static
+  responses:
+  - method: GET
+    path: /showcases/formats/DEMO-001
+    status: 404
+    body: '{}'

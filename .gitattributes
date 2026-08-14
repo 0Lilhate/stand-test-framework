@@ -1,0 +1,36 @@
+# Line endings are enforced by the repository, not by each developer's core.autocrlf.
+#
+# WHY: every blob currently stored here is LF, but only because the machine that committed it had
+# core.autocrlf=input — a personal setting. A contributor without it (Windows default is
+# core.autocrlf=true, and unset is common) would commit CRLF and produce a whole-file diff on an
+# otherwise one-line change. 129 files in the working tree are CRLF right now for exactly that
+# reason; they normalise on the next checkout.
+#
+# `eol=lf` (not bare `text=auto`) because .editorconfig declares `end_of_line = lf` for every file:
+# with plain `text=auto` a Windows checkout gets CRLF working copies that the editor then rewrites,
+# putting the two configs in a loop. The one deliberate exception is the Windows launcher below.
+* text=auto eol=lf
+
+# The Windows launcher needs CRLF: cmd.exe mis-parses an LF-only batch file. This intentionally
+# overrides .editorconfig's blanket [*] rule — .bat is the one place the two must disagree.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# Shell entry points stay LF even on a Windows checkout — CRLF breaks the shebang line.
+gradlew   text eol=lf
+*.sh      text eol=lf
+
+# Binary: never normalised, never diffed as text. The KB ingestion pipeline takes .docx/.pdf and
+# extracts .png/.emf; those live under gitignored _source/ today, but the guard is cheap and the
+# failure mode (a mangled binary silently committed) is not.
+*.jar     binary
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.ico     binary
+*.emf     binary
+*.pdf     binary
+*.docx    binary
+*.xlsx    binary
+*.zip     binary

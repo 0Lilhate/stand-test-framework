@@ -1,5 +1,6 @@
 package ru.alfa.stand.test.example;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -36,6 +37,11 @@ final class CapturingAllureLifecycleFacade implements AllureLifecycleFacade {
 
     @Override
     public void addAttachment(String name, String type, String fileExtension, String content) {
+        attachmentNames.add(name);
+    }
+
+    @Override
+    public void addAttachment(String name, String type, String fileExtension, Path file) {
         attachmentNames.add(name);
     }
 

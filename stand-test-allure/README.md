@@ -47,6 +47,20 @@ one of potentially several consumers of that contract. Keeping Allure out of cor
 does not use Allure (or uses a different reporter) never pays for it, and core stays a JDK-only
 dependency-graph sink.
 
+## Что потребитель обязан добавить рядом
+
+```kotlin
+testImplementation("ru.alfa.stand.test:stand-test-allure")
+testImplementation("io.qameta.allure:allure-junit5:2.29.1")   // ОБЯЗАТЕЛЬНО, см. ниже
+```
+
+Этот модуль тянет **`allure-java-commons`** — модель и жизненный цикл, — но **не** интеграцию с JUnit 5.
+Без `allure-junit5` на classpath потребителя жизненному циклу некуда складывать шаги: тест-кейс никто не
+открывает, `allure-results` остаётся пустым или лишённым шагов, а сообщения об ошибке при этом нет —
+отчёт просто ничего не показывает. Это уже стоило отладочной сессии на пилоте и подтверждено ручным
+прогоном `UITG-F003`. Отдельно проверьте, что расширение действительно включено: либо
+`junit.jupiter.extensions.autodetection.enabled=true`, либо явный `@ExtendWith(AllureJunit5.class)`.
+
 ## How the adapter connects to reporting events
 
 The runner publishes lifecycle events to whichever `ReportingEventPublisher` it was built with (the
@@ -97,6 +111,61 @@ Attachments are **generic** — there are no REST/Kafka/DB-specific attachment t
 - renders a step's `diagnostics` map (including await/timeout diagnostics) as a masked `KEY_VALUE`
   attachment named `diagnostics`.
 
+### Файловые вложения (ADR-UI-005)
+
+Ядро `Attachment` несёт **ровно одно** из двух тел: текстовое `content` **или** путь `file`. Файловая
+форма появилась потому, что тракт был текстовым насквозь (`content.getBytes(UTF_8)` в стоке), и PNG,
+WebM или ZIP через него не проходили; base64 в текстовое поле не помогает — расширение выводится из
+media type, и отчёт предлагал бы `.bin`-простыню вместо картинки.
+
+```java
+Attachment.of("response", "application/json", body);        // текст — как было
+Attachment.ofFile("screenshot", "image/png", pathToPng);    // файл — новое
+```
+
+Сток ветвится по `isBinary()`. Три свойства файловой ветки, о которых нужно знать:
+
+1. **Маскирование к ней неприменимо.** Байты скриншота нечем замаскировать постфактум, поэтому
+   `SecretMasker` файловую ветку не трогает — и именно отсюда требование маскировать чувствительные
+   зоны **в DOM до снятия** артефакта (SEC-05). Текстовая ветка маскируется как раньше.
+2. **Путь проверяется до открытия файла.** `AllureAttachmentPublisher` принимает каталог артефактов
+   прогона и публикует только файлы внутри него: путь резолвится до реального (`toRealPath()`, то есть
+   по символическим ссылкам) и обязан лежать под каталогом. Без этого канал отчётности стал бы каналом
+   раскрытия файлов: путь с `../` или ссылка наружу положили бы произвольный файл в отчёт, который потом
+   прикладывают к тикету.
+3. **Fail-closed дважды.** Публикатор, созданный **без** каталога артефактов, отвергает *любое* файловое
+   вложение: сток, не знающий каталога прогона, не отличит артефакт от `/etc/passwd`. И любой отказ —
+   это WARN и пропущенное вложение, никогда не исключение: отчётность side-channel и не меняет исход
+   теста. Пропавший файл ведёт себя так же — прогон идёт дальше без картинки.
+
+#### Каталог артефактов (`UITG-F003`)
+
+Каталог, относительно которого проверяется путь, определён **в ядре** —
+`ru.alfa.stand.test.core.event.RunArtifacts`: имя системного свойства `stand.test.ui.artifacts.dir`,
+умолчание `build/stand-test-ui` и чистая функция разрешения. `AllureReportingEventPublisher` разрешает
+его тем же вызовом, что и производящий адаптер (`UiRunSettings`), и передаёт в
+`AllureAttachmentPublisher`; перегрузка `AllureReportingEventPublisher(lifecycle, artifactsRoot)`
+остаётся для потребителя, который держит артефакты в другом месте.
+
+Одно определение на двоих — не украшение, а починка. Каталог читают двое, не видящие друг друга:
+производитель в адаптере и сток здесь (ребра между ними нет и быть не должно). Пока каждый читал своё,
+сток строился **без** каталога и fail-closed отвергал каждое файловое вложение — молча, WARN'ом, ровно
+как обещает пункт 3 выше. Дефект нашёлся только ручным прогоном
+([отчёт `34`](../docs/ui-test-generation/planning/34-allure-manual-run-report.md)); пинится тестом
+`UiRunSettingsTest.artefactsDirectoryIsCoresSingleDefinition` — отдельное написание свойства в
+UI-модуле его роняет.
+
+Оба бинарных типа, которые производит волна 1, проверены **прогоном у потребителя**, а не чтением:
+`image/png` — [отчёт `34`](../docs/ui-test-generation/planning/34-allure-manual-run-report.md), и
+`application/zip` (Playwright-трейс при `trace: on-failure`) —
+[отчёт `35`](../docs/ui-test-generation/planning/35-allure-trace-run-report.md); ZIP, скачанный из
+сгенерированного отчёта, побитно совпал с файлом на диске.
+
+Расширение для файла выводит `AttachmentType.extensionForBinaryMediaType`, а не текстовый маппер: у них
+**противоположный** fallback. Неизвестный media type у текста разумнее всего `txt`, у файла — `bin`;
+перепутать их значит предложить скриншот как текст. Известны `png`, `jpg`, `webm`, `zip`, `json`, `xml`
+и `text/*`; остальное — `bin` с WARN.
+
 ## Secret masking
 
 Masking is two-echelon: adapters redact at the source (the core `Attachment` pre-redaction contract),
@@ -128,14 +197,23 @@ JUnit/Allure execution order (no flakiness).
 Reporting is a best-effort side-channel (plan §17): every mapping call is wrapped, so a rendering error
 is swallowed and **never** replaces the test's real outcome, hides an SDK assertion failure, or turns a
 failed step green. The runner additionally swallows publisher exceptions — two independent guards.
+Swallowed is not silent: the publisher logs each such failure at WARN with its stack trace, so a broken
+Allure classpath shows up in the log instead of as an empty report.
 
 ## Limitations
 
 - The core event model carries no per-step **description** or **exception class** as first-class fields;
   the step name is `"<stepType> <stepId>"` and the failing exception's class is surfaced via the
   `exception.class` diagnostic the runner records.
-- Rich diagnostics/attachments on **thrown** failures depend on adapters populating them on the failure
-  path (a later phase); today the runner attaches the exception class on that path, and diagnostics/
-  attachments flow fully on the success and returned-`TIMEOUT` paths.
-- `BINARY` content travels as text because the core `Attachment` contract is textual.
+- Rich diagnostics/attachments on **thrown** failures depend on the adapter opting in via the core marker
+  `FailureAttachments`; the runner adds only `exception.class` by itself. Every **await timeout** now opts
+  in — `rest`/`kafka`/`db`/`ui` throw a `DiagnosticAssertionError` carrying `TimeoutDiagnostics.toMap()`,
+  so the `diagnostics` attachment of a timed-out step holds `attempts`/`elapsed`/`lastValue` plus the
+  adapter's own alias keys. Other thrown failures still carry only the exception class.
+- ~~Каталог артефактов прогона передаётся публикатору снаружи, и у проводки пока нет вызывающего.~~
+  **Исправлено `UITG-F003` 2026-08-07 (см. ниже «Каталог артефактов»).** Пункт продержался дольше, чем
+  был верен, и стоил ровно того, о чём предупреждал: пока проводки не было, **каждое** файловое вложение
+  молча отвергалось у потребителя, и картинка не доходила до отчёта ни разу.
+- Само **снятие** артефактов (скриншот, консоль, сеть, трейс) в этот срез не входит — `UITG-S013`…`S016`.
+  Здесь только канал.
 ```

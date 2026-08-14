@@ -1,8 +1,13 @@
+# Staged candidates for the pilot document. `status` is LIFECYCLE, not authority: the record of review
+# is review-decisions.yml beside this file (it is the only one carrying reviewedBy/reviewedOn), and the
+# record of what actually landed is candidates/promotion-log.yml. The three services below read
+# `applied` because they were promoted into services/pakt-lgoty.yml; tk-tariff-calculator was held at
+# medium and dwh at low, and they say so.
 documentId: fs-pk-pakt-lgoty-2025-04-17
 candidates:
   - candidateId: pk-product-catalog
     candidateType: service
-    status: new
+    status: applied
     confidence: high
     source:
       documentId: fs-pk-pakt-lgoty-2025-04-17
@@ -24,7 +29,7 @@ candidates:
       text: "В ПК реализуется REST-сервис обработки ЛТР/ИТР, операция обработки, Журнал ТР ПАКТ.Льготы, уведомление МУП через внутреннюю Kafka."
   - candidateId: mup-subscription-module
     candidateType: service
-    status: new
+    status: applied
     confidence: high
     source:
       documentId: fs-pk-pakt-lgoty-2025-04-17
@@ -64,7 +69,7 @@ candidates:
       alias: tk-tariff-calculator
   - candidateId: pakt-lgoty
     candidateType: service
-    status: new
+    status: applied
     confidence: high
     source:
       documentId: fs-pk-pakt-lgoty-2025-04-17

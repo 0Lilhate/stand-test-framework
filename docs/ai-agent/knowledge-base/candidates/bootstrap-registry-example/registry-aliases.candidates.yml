@@ -1,0 +1,83 @@
+# Worked example of the bootstrap output: one candidate per alias the registry declares.
+#
+# Confidence is `high` for a reason that is structural rather than optimistic — a person wrote these
+# aliases into the file the SDK refuses to start without. Bootstrap MOVES that fact; it infers
+# nothing. Which is also why no endpoint, field, table or method appears here: the registry says
+# `client-service` exists and where it resolves, and says nothing whatever about what it contains.
+#
+# The quote is the ALIAS LINE ONLY. The block beneath an alias holds `*-ref` env-var names, and a
+# quote is committed text — there is no benefit that would justify carrying a credential's name into
+# version control.
+documentId: bootstrap-registry
+candidates:
+  - candidateId: client-service
+    candidateType: service
+    status: new
+    confidence: high
+    source:
+      documentId: bootstrap-registry
+      documentName: "stand-test-environments.yml — реестр окружений проекта-потребителя"
+      quote: "client-service:"
+      extractionNotes: "environments.ift.services — алиас объявлен реестром; эндпоинты реестром не свидетельствуются и здесь не появляются"
+    normalized:
+      id: client-service
+      alias: client-service
+      title: "client-service"
+      description: "Алиас сервиса из реестра окружений; контракт эндпоинтов не установлен"
+    extracted:
+      correlationHeader: X-Correlation-Id
+    naturalKey:
+      alias: client-service
+
+  - candidateId: response-topic
+    candidateType: kafka-topic
+    status: new
+    confidence: high
+    source:
+      documentId: bootstrap-registry
+      documentName: "stand-test-environments.yml — реестр окружений проекта-потребителя"
+      quote: "response-topic:"
+      extractionNotes: "environments.ift.topics — алиас объявлен реестром; направление и схема сообщения неизвестны"
+    normalized:
+      id: response-topic
+      alias: response-topic
+      title: "response-topic"
+      description: "Алиас топика из реестра окружений; продюсер/консьюмер и полезная нагрузка не установлены"
+    naturalKey:
+      alias: response-topic
+
+  - candidateId: main-db
+    candidateType: datasource
+    status: new
+    confidence: high
+    source:
+      documentId: bootstrap-registry
+      documentName: "stand-test-environments.yml — реестр окружений проекта-потребителя"
+      quote: "main-db:"
+      extractionNotes: "environments.ift.datasources — реестр объявляет алиас, write-allowed и allowed-schemas; таблицы и колонки им не свидетельствуются"
+    normalized:
+      id: main-db
+      alias: main-db
+      title: "main-db"
+      description: "Алиас источника данных из реестра окружений; запись разрешена в схемы из allowed-schemas"
+    naturalKey:
+      alias: main-db
+
+  - candidateId: billing-grpc
+    candidateType: grpc-target
+    status: new
+    confidence: high
+    source:
+      documentId: bootstrap-registry
+      documentName: "stand-test-environments.yml — реестр окружений проекта-потребителя"
+      quote: "billing-grpc:"
+      extractionNotes: "environments.ift.grpc-targets — алиас объявлен реестром; методы берутся только из proto через /stand-test-kb-update"
+    normalized:
+      id: billing-grpc
+      alias: billing-grpc
+      title: "billing-grpc"
+      description: "Алиас gRPC-таргета из реестра окружений; набор методов не установлен"
+    extracted:
+      correlationHeader: x-correlation-id
+    naturalKey:
+      alias: billing-grpc

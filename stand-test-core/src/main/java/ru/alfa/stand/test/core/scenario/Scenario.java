@@ -30,8 +30,6 @@ public final class Scenario {
 
     private Scenario(Builder builder) {
         this.id = Objects.requireNonNull(builder.id, "scenario id must not be null");
-        // The model is permissive about environment (it may be blank here); the ScenarioValidator
-        // is the single place that flags a blank environment. See docs/arch §3 (Model -> Validator).
         this.environment = (builder.environment == null) ? "" : builder.environment;
         this.steps = List.copyOf(builder.steps);
         this.tags = Set.copyOf(builder.tags);

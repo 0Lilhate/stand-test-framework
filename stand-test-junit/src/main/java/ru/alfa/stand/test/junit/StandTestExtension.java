@@ -20,9 +20,9 @@ import ru.alfa.stand.test.core.StandClient;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.event.NoOpReportingEventPublisher;
 import ru.alfa.stand.test.core.event.ReportingEventPublisher;
+import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.execution.DefaultScenarioRunner;
 import ru.alfa.stand.test.core.execution.ScenarioRunner;
-import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.execution.StepExecutor;
 import ru.alfa.stand.test.core.validation.DefaultScenarioValidator;
 
@@ -78,26 +78,29 @@ public final class StandTestExtension implements ParameterResolver {
         if (type == StandClient.class || type == Awaiter.class) {
             return true;
         }
-        // A @StandScenarioId/@StandEnv parameter is claimed regardless of its type, so that a misuse (a
-        // non-String parameter, or both annotations at once) fails with a clear message from
-        // resolveParameter rather than JUnit's generic "no resolver registered" error.
         return parameterContext.isAnnotated(StandScenarioId.class) || parameterContext.isAnnotated(StandEnv.class);
     }
 
     @Override
     public Object resolveParameter(ParameterContext parameterContext, ExtensionContext extensionContext) {
+        boolean asStandScenarioId = parameterContext.isAnnotated(StandScenarioId.class);
+        boolean asEnvironment = parameterContext.isAnnotated(StandEnv.class);
+        if (asStandScenarioId || asEnvironment) {
+            return declaredString(parameterContext, extensionContext, asStandScenarioId, asEnvironment);
+        }
         Class<?> type = parameterContext.getParameter().getType();
         if (type == Awaiter.class) {
             return Awaiter.create();
         }
-        if (type == StandClient.class) {
-            return standClient(extensionContext);
-        }
-        boolean asStandScenarioId = parameterContext.isAnnotated(StandScenarioId.class);
-        boolean asEnvironment = parameterContext.isAnnotated(StandEnv.class);
+        return standClient(extensionContext);
+    }
+
+    private static String declaredString(
+            ParameterContext parameterContext, ExtensionContext extensionContext, boolean asStandScenarioId, boolean asEnvironment) {
         if (asStandScenarioId && asEnvironment) {
             throw new ParameterResolutionException("A parameter must not carry both @StandScenarioId and @StandEnv");
         }
+        Class<?> type = parameterContext.getParameter().getType();
         if (type != String.class) {
             throw new ParameterResolutionException(
                     "@StandScenarioId and @StandEnv may only annotate a String parameter, but found " + type.getTypeName());
@@ -166,14 +169,7 @@ public final class StandTestExtension implements ParameterResolver {
     }
 
     private static StandClient buildStandClient() {
-        List<StepExecutor> executors = new ArrayList<>();
-        ServiceLoader.load(StepExecutor.class).forEach(executors::add);
-        // Reporting and environment wiring are discovered through the same SPI as the executors, so junit
-        // gains no compile-time edge to any adapter (plan §8.5/§17). Exactly ONE provider is allowed per
-        // SPI: with more than one the pick would be silently classpath-order-dependent, so the build of
-        // the client fails loudly instead. With no reporting provider the NoOp publisher keeps behaviour
-        // unchanged; with no registry provider the fallback raises a distinct "no provider on the test
-        // classpath" diagnostic at first lookup instead of a misleading "not whitelisted" failure.
+        List<StepExecutor> executors = providers(StepExecutor.class);
         ReportingEventPublisher publisher = uniqueProvider(providers(ReportingEventPublisher.class), ReportingEventPublisher.class)
                 .orElse(NoOpReportingEventPublisher.INSTANCE);
         EnvironmentRegistry registry = uniqueProvider(providers(EnvironmentRegistry.class), EnvironmentRegistry.class)

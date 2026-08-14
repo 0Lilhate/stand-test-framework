@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.Map;
+import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import ru.alfa.stand.test.await.Awaiter;
 import ru.alfa.stand.test.await.DefaultAwaiter;
+import ru.alfa.stand.test.core.exception.DiagnosticAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.execution.StepExecutionContext;
@@ -94,6 +96,26 @@ class RestStepExecutorPollTest {
                 .hasMessageContaining("rest.expectEventually")
                 .hasMessageContaining("did not observe the expected response")
                 .hasMessageContaining("Expected HTTP status 200 but got 503");
+    }
+
+    @Test
+    @DisplayName("a timed-out poll carries the await's structured diagnostics into the report, not only into its message")
+    void timeout_carriesReportableDiagnostics() {
+        FakeHttpCaller caller = new FakeHttpCaller().respondWith(json(503, "{}"));
+        ScenarioStep step = RestStep.expectEventually(RestTestSupport.SERVICE, "/api/status")
+                .expectStatus(200)
+                .withinSeconds(2)
+                .build();
+
+        assertThatThrownBy(() -> executor(caller, fakeTimeAwaiter()).execute(step, context(new VariableStore())))
+                .isInstanceOf(DiagnosticAssertionError.class)
+                .asInstanceOf(InstanceOfAssertFactories.type(DiagnosticAssertionError.class))
+                .extracting(DiagnosticAssertionError::failureDiagnostics)
+                .satisfies(diagnostics -> assertThat(diagnostics)
+                        .containsEntry("timeout", "PT2S")
+                        .containsEntry("rest.service", RestTestSupport.SERVICE)
+                        .containsEntry("rest.path", "/api/status")
+                        .containsKeys("await", "attempts", "elapsed", "pollInterval"));
     }
 
     @Test

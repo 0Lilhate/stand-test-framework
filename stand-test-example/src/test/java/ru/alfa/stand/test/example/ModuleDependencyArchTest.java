@@ -1,18 +1,22 @@
 package ru.alfa.stand.test.example;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
+import java.lang.reflect.Field;
+import java.util.Arrays;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import ru.alfa.stand.test.core.scenario.Scenario;
 
 /**
  * Pins the module dependency graph (CLAUDE.md "Module graph"): a future edit that added a forbidden Gradle
  * edge AND used it — {@code implementation(project(":stand-test-kafka"))} in core, an adapter-to-adapter
- * edge, a non-core dependency in {@code allure}/{@code scenario-yaml}/{@code ai-schema}/{@code config}, or
+ * edge, a non-core dependency in {@code allure}/{@code scenario-yaml}/{@code config}, or
  * anything depending on the starter — would otherwise compile and pass the green build with nothing failing.
  * This module is the only one with every SDK module on its test classpath, so it is where the whole graph
  * can be analysed at once. ArchUnit inspects the main bytecode of the SDK modules (tests excluded), so it
@@ -28,9 +32,11 @@ class ModuleDependencyArchTest {
     private static final String KAFKA = BASE + "kafka..";
     private static final String DB = BASE + "db..";
     private static final String GRPC = BASE + "grpc..";
+    private static final String UI = BASE + "ui..";
+    private static final String UI_DRIVER = BASE + "ui.playwright..";
+    private static final String PLAYWRIGHT = "com.microsoft.playwright..";
     private static final String ALLURE = BASE + "allure..";
     private static final String SCENARIO = BASE + "scenario..";
-    private static final String AI = BASE + "ai..";
     private static final String CONFIG = BASE + "config..";
     private static final String STARTER = BASE + "starter..";
     private static final String EXAMPLE = BASE + "example..";
@@ -52,31 +58,114 @@ class ModuleDependencyArchTest {
     void coreIsASink() {
         noClasses().that().resideInAPackage(CORE)
                 .should().dependOnClassesThat().resideInAnyPackage(
-                        AWAIT, JUNIT, REST, KAFKA, DB, GRPC, ALLURE, SCENARIO, AI, CONFIG, STARTER, EXAMPLE)
+                        AWAIT, JUNIT, REST, KAFKA, DB, GRPC, UI, ALLURE, SCENARIO, CONFIG, STARTER, EXAMPLE)
                 .as("stand-test-core must depend on no sibling module (it is the dependency-graph sink)")
                 .check(SDK);
     }
 
     @Test
-    @DisplayName("adapter modules (rest/kafka/db/grpc) do not depend on each other")
-    void adaptersDoNotDependOnEachOther() {
-        noClasses().that().resideInAPackage(REST).should().dependOnClassesThat().resideInAnyPackage(KAFKA, DB, GRPC).check(SDK);
-        noClasses().that().resideInAPackage(KAFKA).should().dependOnClassesThat().resideInAnyPackage(REST, DB, GRPC).check(SDK);
-        noClasses().that().resideInAPackage(DB).should().dependOnClassesThat().resideInAnyPackage(REST, KAFKA, GRPC).check(SDK);
-        noClasses().that().resideInAPackage(GRPC).should().dependOnClassesThat().resideInAnyPackage(REST, KAFKA, DB).check(SDK);
+    @DisplayName("stand-test-core depends on nothing but the JDK and the slf4j facade — no Playwright, no IO library, ever")
+    void coreHasNoUiOrIoDependencies() {
+        // The sink rule above pins the SDK-internal edges; this one pins the EXTERNAL ones, which nothing
+        // checked before: `implementation(libs.playwright)` in core would have compiled and passed the
+        // whole suite. The allow-list is deliberately explicit — widening it is a reviewed decision.
+        classes().that().resideInAPackage(CORE)
+                .should().onlyDependOnClassesThat().resideInAnyPackage("java..", "javax..", "org.slf4j..", CORE, "")
+                .as("stand-test-core must depend only on the JDK and slf4j-api")
+                .check(SDK);
     }
 
     @Test
-    @DisplayName("allure / scenario-yaml / ai-schema / config depend on core only (no adapters, no await/junit, no each other, no starter)")
+    @DisplayName("stand-test-await depends on core alone among the siblings — it is the second sink, and every adapter is built on it")
+    void awaitIsCoreOnly() {
+        noClasses().that().resideInAPackage(AWAIT)
+                .should().dependOnClassesThat().resideInAnyPackage(
+                        JUNIT, REST, KAFKA, DB, GRPC, UI, ALLURE, SCENARIO, CONFIG, STARTER, EXAMPLE)
+                .as("stand-test-await must depend on no sibling but core")
+                .check(SDK);
+    }
+
+    @Test
+    @DisplayName("stand-test-await pulls in no third-party polling engine — the promise a consumer's classpath actually cashes")
+    void awaitHasNoThirdPartyEngine() {
+        // The module's whole dependency argument is "no Awaitility, so a consumer never inherits or
+        // conflicts with a transitive version of one". Until now nothing held it: adding a polling library
+        // to await would have compiled and passed this suite, exactly as adding Playwright to core would
+        // have before coreHasNoUiOrIoDependencies existed. Same shape of rule, one module over.
+        classes().that().resideInAPackage(AWAIT)
+                .should().onlyDependOnClassesThat().resideInAnyPackage("java..", "javax..", "org.slf4j..", CORE, AWAIT, "")
+                .as("stand-test-await must depend only on the JDK, slf4j-api and core")
+                .check(SDK);
+    }
+
+    @Test
+    @DisplayName("stand-test-junit sees core, await and JUnit — and no adapter, so the bridge cannot acquire a transport")
+    void junitBridgeHasNoAdapterOrTransport() {
+        classes().that().resideInAPackage(JUNIT)
+                .should().onlyDependOnClassesThat().resideInAnyPackage(
+                        "java..", "javax..", "org.slf4j..", "org.junit..", CORE, AWAIT, JUNIT, "")
+                .as("stand-test-junit must depend only on the JDK, JUnit, slf4j-api, core and await")
+                .check(SDK);
+    }
+
+    @Test
+    @DisplayName("the Scenario model carries no UI fields: a browser, a viewport and a base URL are configuration, not scenario")
+    void scenarioHasNoUiFields() {
+        assertThat(Arrays.stream(Scenario.class.getDeclaredFields()).filter(field -> !field.isSynthetic()).map(Field::getName))
+                .as("a new Scenario component is an architectural decision, not a refactoring — update this list deliberately")
+                .containsExactlyInAnyOrder("id", "environment", "steps", "tags", "title", "description", "cleanupPolicy");
+    }
+
+    @Test
+    @DisplayName("Playwright is confined to the ui.playwright package: no other SDK type may import com.microsoft.playwright")
+    void playwrightIsConfinedToDriverPackage() {
+        noClasses().that().resideOutsideOfPackage(UI_DRIVER)
+                .should().dependOnClassesThat().resideInAnyPackage(PLAYWRIGHT)
+                .as("only ru.alfa.stand.test.ui.playwright may see Playwright — otherwise a browser lands on every consumer's classpath")
+                .check(SDK);
+    }
+
+    @Test
+    @DisplayName("the confinement rule is not vacuous: the driver package really does use Playwright")
+    void playwrightConfinementIsNotVacuous() {
+        // A rule of the form "nobody outside package P may use X" passes trivially if X is absent from the
+        // import altogether. Prove X is there before trusting the rule that constrains it.
+        assertThat(SDK.stream()
+                .filter(imported -> imported.getPackageName().startsWith("ru.alfa.stand.test.ui.playwright"))
+                .anyMatch(imported -> imported.getDirectDependenciesFromSelf().stream()
+                        .anyMatch(dependency -> dependency.getTargetClass().getPackageName().startsWith("com.microsoft.playwright"))))
+                .as("the ui.playwright package must actually depend on Playwright, or playwrightIsConfinedToDriverPackage proves nothing")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("adapter modules (rest/kafka/db/grpc/ui) do not depend on each other")
+    void adaptersDoNotDependOnEachOther() {
+        noClasses().that().resideInAPackage(REST).should().dependOnClassesThat().resideInAnyPackage(KAFKA, DB, GRPC, UI).check(SDK);
+        noClasses().that().resideInAPackage(KAFKA).should().dependOnClassesThat().resideInAnyPackage(REST, DB, GRPC, UI).check(SDK);
+        noClasses().that().resideInAPackage(DB).should().dependOnClassesThat().resideInAnyPackage(REST, KAFKA, GRPC, UI).check(SDK);
+        noClasses().that().resideInAPackage(GRPC).should().dependOnClassesThat().resideInAnyPackage(REST, KAFKA, DB, UI).check(SDK);
+        noClasses().that().resideInAPackage(UI).should().dependOnClassesThat().resideInAnyPackage(REST, KAFKA, DB, GRPC).check(SDK);
+    }
+
+    @Test
+    @DisplayName("nothing depends on stand-test-ui: it joins a run through the core SPI, so no protocol test drags in a browser")
+    void nothingDependsOnUi() {
+        noClasses().that().resideOutsideOfPackage(UI)
+                .should().dependOnClassesThat().resideInAPackage(UI)
+                .as("the ui adapter must be a leaf: it is discovered by ServiceLoader, never depended on")
+                .check(SDK);
+    }
+
+    @Test
+    @DisplayName("allure / scenario-yaml / config depend on core only (no adapters, no await/junit, no each other, no starter)")
     void satelliteModulesAreCoreOnly() {
         noClasses().that().resideInAPackage(ALLURE).should().dependOnClassesThat()
-                .resideInAnyPackage(AWAIT, JUNIT, REST, KAFKA, DB, GRPC, SCENARIO, AI, CONFIG, STARTER, EXAMPLE).check(SDK);
+                .resideInAnyPackage(AWAIT, JUNIT, REST, KAFKA, DB, GRPC, SCENARIO, CONFIG, STARTER, EXAMPLE).check(SDK);
         noClasses().that().resideInAPackage(SCENARIO).should().dependOnClassesThat()
-                .resideInAnyPackage(AWAIT, JUNIT, REST, KAFKA, DB, GRPC, ALLURE, AI, CONFIG, STARTER, EXAMPLE).check(SDK);
-        noClasses().that().resideInAPackage(AI).should().dependOnClassesThat()
-                .resideInAnyPackage(AWAIT, JUNIT, REST, KAFKA, DB, GRPC, ALLURE, SCENARIO, CONFIG, STARTER, EXAMPLE).check(SDK);
+                .resideInAnyPackage(AWAIT, JUNIT, REST, KAFKA, DB, GRPC, ALLURE, CONFIG, STARTER, EXAMPLE).check(SDK);
         noClasses().that().resideInAPackage(CONFIG).should().dependOnClassesThat()
-                .resideInAnyPackage(AWAIT, JUNIT, REST, KAFKA, DB, GRPC, ALLURE, SCENARIO, AI, STARTER, EXAMPLE).check(SDK);
+                .resideInAnyPackage(AWAIT, JUNIT, REST, KAFKA, DB, GRPC, ALLURE, SCENARIO, STARTER, EXAMPLE).check(SDK);
     }
 
     @Test

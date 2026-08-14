@@ -1,6 +1,5 @@
 package ru.alfa.stand.test.rest;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -9,6 +8,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
+import java.util.stream.Collectors;
 import ru.alfa.stand.test.core.assertion.AssertionMatcher;
 import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.scenario.StepParameterKeys;
@@ -135,29 +135,29 @@ public final class RestStepParameters {
         if (!(value instanceof Map<?, ?> raw)) {
             throw new StandTestException("REST step parameter '" + key + "' must be a map");
         }
-        Map<String, String> result = new LinkedHashMap<>();
-        for (Map.Entry<?, ?> entry : raw.entrySet()) {
-            result.put(String.valueOf(entry.getKey()), String.valueOf(entry.getValue()));
-        }
-        return result;
+        return raw.entrySet().stream()
+                .collect(Collectors.toMap(entry -> String.valueOf(entry.getKey()), entry -> String.valueOf(entry.getValue()),
+                        (first, second) -> second, LinkedHashMap::new));
     }
 
     static List<RestAssertion> assertions(Map<String, Object> parameters) {
-        List<RestAssertion> result = new ArrayList<>();
-        for (Map<String, Object> entry : entryList(parameters, ASSERTIONS)) {
-            Object path = entry.get(JSON_PATH);
-            Object expected = entry.get(EXPECTED_VALUE);
-            if (!(path instanceof String text)) {
-                throw new StandTestException("REST assertion '" + JSON_PATH + "' must be a string");
-            }
-            if (expected == null) {
-                throw new StandTestException("REST assertion '" + EXPECTED_VALUE + "' must not be null");
-            }
-            AssertionMatcher matcher = matcher(entry);
-            validateMatcherOperand(matcher, expected, text);
-            result.add(new RestAssertion(text, expected, matcher));
+        return entryList(parameters, ASSERTIONS).stream()
+                .map(RestStepParameters::assertion)
+                .toList();
+    }
+
+    private static RestAssertion assertion(Map<String, Object> entry) {
+        Object path = entry.get(JSON_PATH);
+        Object expected = entry.get(EXPECTED_VALUE);
+        if (!(path instanceof String text)) {
+            throw new StandTestException("REST assertion '" + JSON_PATH + "' must be a string");
         }
-        return result;
+        if (expected == null) {
+            throw new StandTestException("REST assertion '" + EXPECTED_VALUE + "' must not be null");
+        }
+        AssertionMatcher matcher = matcher(entry);
+        validateMatcherOperand(matcher, expected, text);
+        return new RestAssertion(text, expected, matcher);
     }
 
     private static AssertionMatcher matcher(Map<String, Object> entry) {
@@ -212,16 +212,16 @@ public final class RestStepParameters {
     }
 
     static List<RestCapture> captures(Map<String, Object> parameters) {
-        List<RestCapture> result = new ArrayList<>();
-        for (Map<String, Object> entry : entryList(parameters, CAPTURES)) {
-            Object name = entry.get(VARIABLE_NAME);
-            Object path = entry.get(JSON_PATH);
-            if (!(name instanceof String variableName) || !(path instanceof String jsonPath)) {
-                throw new StandTestException("REST capture requires string '" + VARIABLE_NAME + "' and '" + JSON_PATH + "'");
-            }
-            result.add(new RestCapture(variableName, jsonPath));
-        }
-        return result;
+        return entryList(parameters, CAPTURES).stream()
+                .map(entry -> {
+                    Object name = entry.get(VARIABLE_NAME);
+                    Object path = entry.get(JSON_PATH);
+                    if (!(name instanceof String variableName) || !(path instanceof String jsonPath)) {
+                        throw new StandTestException("REST capture requires string '" + VARIABLE_NAME + "' and '" + JSON_PATH + "'");
+                    }
+                    return new RestCapture(variableName, jsonPath);
+                })
+                .toList();
     }
 
     @SuppressWarnings("unchecked")
@@ -233,13 +233,13 @@ public final class RestStepParameters {
         if (!(value instanceof List<?> list)) {
             throw new StandTestException("REST step parameter '" + key + "' must be a list");
         }
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (Object item : list) {
-            if (!(item instanceof Map<?, ?>)) {
-                throw new StandTestException("REST step parameter '" + key + "' entries must be maps");
-            }
-            result.add((Map<String, Object>) item);
-        }
-        return result;
+        return list.stream()
+                .map(item -> {
+                    if (!(item instanceof Map<?, ?>)) {
+                        throw new StandTestException("REST step parameter '" + key + "' entries must be maps");
+                    }
+                    return (Map<String, Object>) item;
+                })
+                .toList();
     }
 }

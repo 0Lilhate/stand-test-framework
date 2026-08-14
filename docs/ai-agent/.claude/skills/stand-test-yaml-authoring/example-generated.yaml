@@ -1,0 +1,62 @@
+# Example: AI-format scenario for case OT-101 (happy path, executable subset).
+# Derived from ../stand-test-scenario-design/example-scenario-design.md. Generic aliases; validate with the
+# stand-test-ai-schema JSON Schema, then parse with AiScenarioParser (both must pass).
+#
+# Runner test (consumer project):
+#   Scenario scenario = new AiScenarioParser().parseResource("ai/order-created-projection.yaml");
+#   ScenarioResult result = stand.run(scenario);
+#   assertThat(result.isSuccessful()).isTrue();
+
+id: order-created-projection
+title: Created order is accepted, published as ORDER_CREATED and projected as DONE
+environment: ift
+tags: [integration, orders]
+
+steps:
+  - id: create-order
+    type: rest.post
+    service: order-service
+    path: /api/orders
+    headers:
+      Content-Type: application/json
+    correlation:
+      inject: true
+    body:
+      fixture: fixtures/order-created-projection/create-order.json
+    expect:
+      status: 200
+    assert:
+      - path: $.status
+        equals: ACCEPTED
+      - path: $.orderId
+        matches: ord-[0-9]+
+    capture:
+      orderId: $.orderId
+
+  - id: await-order-event
+    type: kafka.expect
+    topic: order-events
+    correlation:
+      fromContext: true
+    timeout: 30s
+    assert:
+      - path: $.status
+        equals: CREATED
+
+  - id: verify-projection
+    type: db.expectEventually
+    datasource: orders-db
+    timeout: 30s
+    query: SELECT status FROM orders WHERE order_id = :orderId
+    params:
+      orderId: ${orderId}
+    expect:
+      singleValue: DONE
+
+# Companion fixture (fixtures/order-created-projection/create-order.json):
+#   {
+#     "externalId": "order-${testRunId}",
+#     "amount": 100,
+#     "currency": "EUR",
+#     "customerName": "Test Customer"
+#   }

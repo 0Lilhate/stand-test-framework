@@ -1,0 +1,22 @@
+# KnowledgeBaseLookupResult — the single output format of stand-test-kb-lookup.
+# Machine-readable; ids are verbatim KB entry ids (never invented). Keep every section,
+# use [] / absent optional keys rather than dropping sections silently.
+caseId: <kebab-case-case-id>            # stable id derived from the ticket/case title
+environment: <env-id or null>           # resolved environment; null only with a matching missing row
+matched:
+  services: []                          # KB service ids
+  endpoints: []                         # KB endpoint ids
+  kafkaTopics: []                       # KB topic ids
+  datasources: []                       # KB datasource ids
+  dbProbes: []                          # KB probe ids
+  grpcTargets: []                       # KB target ids
+  grpcMethods: []                       # KB method ids (within matched targets)
+missing:                                # everything the KB could not answer - NEVER guessed
+  - field: <what is unresolved>         # e.g. "endpoint for 'cancel request'"
+    reason: <why>                       # no-entry | ambiguous | no-kb-directory | empty-environment-intersection
+assumptions:                            # defaults taken instead of questions - visible, reviewable
+  - <assumption, one line each>
+conflicts: []                           # the ONLY home for case-text vs KB disagreements (human resolves);
+                                        # projected into the testCaseMapping as missing rows ("case/KB conflict: ...")
+confidence:
+  overall: <high|medium|low>            # low => stop and ask before designing

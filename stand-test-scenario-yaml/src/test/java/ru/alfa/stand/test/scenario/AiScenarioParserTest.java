@@ -106,8 +106,6 @@ class AiScenarioParserTest {
                       fixture: fixtures/cmd.json
                 """);
         assertThat(scenario.steps()).hasSize(2);
-        // A step that omits `correlation` leaves injectCorrelationId UNSET (not defaulted to false), so the
-        // executor applies the default-on behaviour (inject when the endpoint declares a correlation carrier).
         assertThat(params(scenario.steps().get(0))).containsEntry("method", "GET").doesNotContainKey("injectCorrelationId");
         Map<String, Object> send = params(scenario.steps().get(1));
         assertThat(send).containsEntry("topic", "commands").containsEntry("key", "k").containsEntry("bodyResource", "fixtures/cmd.json")

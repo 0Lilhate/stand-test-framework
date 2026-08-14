@@ -1,11 +1,13 @@
 package ru.alfa.stand.test.kafka;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import java.util.Map;
 import org.apache.kafka.clients.consumer.MockConsumer;
+import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import ru.alfa.stand.test.await.Awaiter;
@@ -14,6 +16,7 @@ import ru.alfa.stand.test.core.environment.CorrelationConfig;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.TopicDefinition;
+import ru.alfa.stand.test.core.exception.DiagnosticAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.execution.StepExecutionContext;
@@ -171,6 +174,24 @@ class KafkaStepExecutorExpectTest {
     }
 
     @Test
+    @DisplayName("a timed-out expect carries messagesSeen into the report as a row of its own — zero means nothing arrived, non-zero means nothing matched")
+    void timeout_carriesReportableDiagnostics() {
+        KafkaStepExecutor executor = executor(new DefaultAwaiter(new FakeTimeSource()));
+        ScenarioStep step = KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).correlationIdFromContext().within(Duration.ofMillis(100)).build();
+        executor.prepare(step, this.context);
+        addResponse(0L, "k-seen", "{\"n\":1}", "different-correlation");
+
+        assertThatThrownBy(() -> executor.execute(step, this.context))
+                .isInstanceOf(DiagnosticAssertionError.class)
+                .asInstanceOf(InstanceOfAssertFactories.type(DiagnosticAssertionError.class))
+                .extracting(DiagnosticAssertionError::failureDiagnostics)
+                .satisfies(diagnostics -> assertThat(diagnostics)
+                        .containsEntry("kafka.topic", KafkaTestSupport.RESPONSE_ALIAS)
+                        .containsEntry("kafka.messagesSeen", 1)
+                        .containsKeys("await", "attempts", "elapsed", "timeout", "kafka.realTopic"));
+    }
+
+    @Test
     @DisplayName("a non-matching message is seen but not selected, so expect still times out with a message sample")
     void nonMatchingMessageStillTimesOut() {
         KafkaStepExecutor executor = executor(new DefaultAwaiter(new FakeTimeSource()));
@@ -197,11 +218,8 @@ class KafkaStepExecutorExpectTest {
         KafkaStepExecutor executor = new KafkaStepExecutor(localFactory, reference -> reference, Awaiter.create());
         ScenarioStep step = KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).correlationIdFromContext().assertPath("$.fresh", true).build();
         executor.prepare(step, localContext);
-        // Backlog carrying the run's own correlation id — would be selected if the consumer replayed from
-        // the beginning instead of seeking to the end.
         backlogConsumer.addRecord(KafkaTestSupport.record(KafkaTestSupport.RESPONSE_NAME, 0L, null, "{\"fresh\":false}", Map.of(KafkaTestSupport.CORRELATION_HEADER, correlation)));
         backlogConsumer.addRecord(KafkaTestSupport.record(KafkaTestSupport.RESPONSE_NAME, 1L, null, "{\"fresh\":false}", Map.of(KafkaTestSupport.CORRELATION_HEADER, correlation)));
-        // The fresh message produced after arming, at the end of the log.
         backlogConsumer.addRecord(KafkaTestSupport.record(KafkaTestSupport.RESPONSE_NAME, 2L, null, "{\"fresh\":true}", Map.of(KafkaTestSupport.CORRELATION_HEADER, correlation)));
 
         StepResult result = executor.execute(step, localContext);
@@ -221,6 +239,30 @@ class KafkaStepExecutorExpectTest {
         assertThatThrownBy(() -> executor.execute(step, this.context))
                 .isInstanceOf(StandTestAssertionError.class)
                 .hasMessageContaining("$.status");
+    }
+
+    @Test
+    @DisplayName("numbers are compared by value, so an expected int matches a JSON decimal — the shared core evaluator, not a kafka-local copy")
+    void numericAssertionComparesByValue() {
+        KafkaStepExecutor executor = executor(Awaiter.create());
+        ScenarioStep step = KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).correlationIdFromContext().assertPath("$.amount", 100).build();
+        executor.prepare(step, this.context);
+        addResponse(0L, null, "{\"amount\":100.0}", correlationId());
+
+        assertThatCode(() -> executor.execute(step, this.context)).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("a type change other than numeric is a genuine mismatch — the value is never string-coerced")
+    void typeChangeIsNotCoerced() {
+        KafkaStepExecutor executor = executor(Awaiter.create());
+        ScenarioStep step = KafkaStep.expect(KafkaTestSupport.RESPONSE_ALIAS).correlationIdFromContext().assertPath("$.amount", "100").build();
+        executor.prepare(step, this.context);
+        addResponse(0L, null, "{\"amount\":100}", correlationId());
+
+        assertThatThrownBy(() -> executor.execute(step, this.context))
+                .isInstanceOf(StandTestAssertionError.class)
+                .hasMessageContaining("$.amount");
     }
 
     @Test
@@ -375,8 +417,6 @@ class KafkaStepExecutorExpectTest {
 
         executor.prepare(step, auditContext);
 
-        // The identity reference resolver passes the ref through, so the recorded cluster shows which
-        // definition was picked: the named audit cluster, not the environment default.
         assertThat(auditFactory.consumerCluster().bootstrapServers()).isEqualTo(KafkaTestSupport.AUDIT_BOOTSTRAP_REF);
         auditContext.resourceScope().closeAll();
     }

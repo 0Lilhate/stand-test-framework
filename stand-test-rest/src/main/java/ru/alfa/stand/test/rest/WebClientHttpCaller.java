@@ -101,9 +101,6 @@ public final class WebClientHttpCaller implements HttpCaller {
     }
 
     private static URI buildUri(RestRequest request) {
-        // The path and query values are already fully resolved literals (no ${...} templates), so they
-        // are percent-encoded as literal data and the builder is told they are already encoded
-        // (build(true)); otherwise UriComponentsBuilder would treat a literal '{'/'}' as a URI template.
         UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(request.baseUrl())
                 .path(UriUtils.encodePath(request.path(), StandardCharsets.UTF_8));
         request.query().forEach((name, value) -> builder.queryParam(encodeQueryComponent(name), encodeQueryComponent(value)));
@@ -111,9 +108,6 @@ public final class WebClientHttpCaller implements HttpCaller {
     }
 
     private static String encodeQueryComponent(String value) {
-        // UriUtils.encodeQueryParam leaves a literal '+' unencoded (it is a valid query sub-delimiter),
-        // but form-decoding servers (servlet/Spring MVC) read '+' as a space, silently corrupting values
-        // such as base64 tokens or '+03:00' offsets. Encode it explicitly so it survives on the wire.
         return UriUtils.encodeQueryParam(value, StandardCharsets.UTF_8).replace("+", "%2B");
     }
 
@@ -121,7 +115,7 @@ public final class WebClientHttpCaller implements HttpCaller {
         if (entity == null) {
             throw new StandTestException("HTTP response for " + request.method() + " " + request.path() + " was empty");
         }
-        Map<String, List<String>> headers = Map.copyOf(entity.getHeaders());
+        Map<String, List<String>> headers = Map.copyOf(entity.getHeaders().asMultiValueMap());
         String body = (entity.getBody() == null) ? "" : entity.getBody();
         return new RestResponse(entity.getStatusCode().value(), headers, body);
     }

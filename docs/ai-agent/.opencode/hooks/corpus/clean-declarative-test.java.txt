@@ -1,0 +1,38 @@
+// SAFETY FIXTURE — a Java test that stays inside the SDK: nothing here is a finding.
+// Stored as .java.txt so nothing compiles it. It exists so every positive fixture has a
+// counterpart, because a detector is only useful if something makes it stay quiet.
+package ru.alfa.qa.test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.time.Duration;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import ru.alfa.stand.test.core.client.StandClient;
+import ru.alfa.stand.test.core.scenario.Scenario;
+import ru.alfa.stand.test.junit.StandTest;
+import ru.alfa.stand.test.rest.RestStep;
+
+@StandTest
+class CleanDeclarativeTest {
+
+    // Каноническая константа: тип коллекционный, но содержимое неизменяемо по построению, поэтому
+    // писать в неё не может ни один поток и находки 17 здесь нет. Стоит в ЧИСТОЙ фикстуре
+    // намеренно — правило про разделяемое МУТАБЕЛЬНОЕ состояние, а не про слово List, и HIGH на этой
+    // строке однажды уже прилетал.
+    private static final List<String> EXPECTED_FORMATS = List.of("DEMO-001", "DEMO-002");
+
+    @Test
+    void formatIsReturned(StandClient stand) {
+        Scenario scenario = Scenario.builder("showcase-format")
+                .environment("ift")
+                .step(RestStep.get("client-service", "/showcases/formats/DEMO-001")
+                        .id("fetch-format")
+                        .timeout(Duration.ofSeconds(10))
+                        .expectStatus(200)
+                        .build())
+                .build();
+
+        assertThat(stand.run(scenario).isSuccessful()).isTrue();
+    }
+}

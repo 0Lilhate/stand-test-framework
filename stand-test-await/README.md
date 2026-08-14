@@ -28,7 +28,7 @@ in, so consumers never inherit/conflict with a transitive version).
 | `DefaultAwaiter` | Minimal polling loop; constructed with a `TimeSource` (defaults to the system one). |
 | `AwaitPolicy` | Immutable timing/behaviour: `description`, `timeout`, `pollInterval`, `pollDelay`, `ignoreExceptions`. |
 | `AwaitResult<T>` | Outcome: `satisfied`, `value`, `attempts`, `elapsed`, `lastError`, `timeoutDiagnostics`. |
-| `TimeoutDiagnostics` | Why it timed out: description, timeout, interval, attempts, elapsed, last value/error, free-form `attributes` (scenarioId/testRunId/correlationId/probe details). `toMap()`/`summary()` for reporting. |
+| `TimeoutDiagnostics` | Why it timed out: description, timeout, interval, attempts, elapsed, last value/error, free-form `attributes`. `summary()` renders one line for an exception message; `toMap()` renders the structured form. |
 | `TimeSource` | Monotonic reading + sleep seam; `TimeSource.system()` in production. |
 
 ## Usage sketch
@@ -49,5 +49,25 @@ String status = awaiter
 ## Not here
 
 No transport logic, no reporting/Allure wiring, no scenario execution — the awaiter is a primitive the
-adapters and runner build on. Diagnostics are surfaced via `TimeoutDiagnostics` (its `toMap()` feeds a
-`StepEvent`/`StepResult` diagnostics map); the awaiter does not publish reporting events itself.
+adapters and runner build on. It publishes no reporting events itself: it returns `TimeoutDiagnostics`
+and the caller decides what to do with them.
+
+### How a timeout reaches the report
+
+Both renderings are used, for two different readers. `summary()` goes into the thrown failure's
+**message**, for whoever reads a stack trace. `toMap()` goes into the failure's **diagnostics**, for
+whoever reads the report: every adapter's timeout throws a
+`ru.alfa.stand.test.core.exception.DiagnosticAssertionError`, which implements the core marker
+`FailureAttachments`, and `DefaultScenarioRunner` folds that map into the failing `StepEvent`. In Allure
+the await then renders as key/value rows — `attempts=30`, `elapsed=PT30S`, `lastValue=PENDING` — instead
+of one long sentence.
+
+`withAttribute(...)` is how an adapter adds what the await engine cannot know, and each one does:
+`rest.service`/`rest.path`, `kafka.topic`/`kafka.realTopic`/`kafka.messagesSeen`,
+`db.datasource`/`db.expected`/`db.sql`, `ui.application`/`ui.locator`. Keys are namespaced by adapter so
+they cannot collide with the engine's own (`await`, `timeout`, `pollInterval`, `attempts`, `elapsed`,
+`lastValue`, `lastError`), and an attribute can never overwrite one — `toMap()` appends with
+`putIfAbsent`.
+
+Anything put here is rendered verbatim into a report, so it must be metadata: an alias, a count, a
+bounded query. Never a response body, a message payload or anything a producer has not already redacted.

@@ -1,5 +1,9 @@
 .gradle
 build/
+# CI keeps Gradle's home and the run metrics inside the workspace (GitLab can only cache paths under
+# $CI_PROJECT_DIR) — both are per-run state, and `.gradle` above does not match `.gradle-home`.
+.gradle-home/
+ci-metrics/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
@@ -44,13 +48,29 @@ bin/
 .DS_Store
 
 ### Claude Code / local tooling (never commit — may contain secrets) ###
+# `**/` matters: the harness lives in BOTH `.claude/` (repo root) and `docs/ai-agent/.claude/`
+# (the shippable bundle). A root-anchored `.claude/settings.local.json` misses the bundle copy,
+# which until now was covered only by a machine-global ~/.config/git/ignore — protection that
+# does not survive a fresh clone on another machine. Keep these repo-local and path-agnostic.
 .mcp.json
-.claude/settings.local.json
+**/.claude/settings.local.json
+**/.claude/scheduled_tasks.lock
+**/.claude/**/.fetched-*
+
+# Machine-local config that was parked inside the SHIPPED bundle and has been moved out of it.
+# The rules above are anchored to `.claude/`, so a file that leaves that directory leaves their
+# cover with it — this whole directory is ignored instead, because what lives in it is exactly the
+# kind of thing that must never be committed: one developer's allow-list, absolute paths into
+# another repository, and DEV database credentials.
+.agent-local/
 
 ### Env files (never commit — secrets) ###
-.env
+# `.env*` is the catch-all and MUST stay first: the earlier rules `.env` / `*.env` / `.env.*` all
+# require the name to END with `.env` or to have a DOT after `.env`, so a suffix spelled with an
+# underscore (`.env_prodcat`, `.env_designer`) matched none of them and three files with live DEV
+# Postgres credentials reached origin/master. Do not narrow this pattern again.
+.env*
 *.env
-.env.*
 
 ### stand-test KB ingestion — verbatim source stays LOCAL (never commit) ###
 # The whole _source/ tree (raw binaries, converter output normalized.md, extracted media/*.emf)
@@ -60,3 +80,11 @@ docs/ai-agent/knowledge-base/candidates/**/_source/
 knowledge-base/candidates/**/_source/
 # Ad-hoc drop location for raw spec documents fed into ingestion — same rule: verbatim, never commit.
 docs/source/
+### stand-guard per-run state (never commit) ###
+# The kit's hooks keep one state file per PROJECT: which artifacts a session wrote, which gates
+# covered which content hash, the run journal. It is an artefact of one session in one checkout —
+# committing it would make a stale gate verdict travel to everyone else, and the Stop gate would then
+# hold a session over an artifact nobody in that checkout has. The bundle's own .gitignore covers the
+# copy under docs/ai-agent/; this covers the root harness, where running the guard by hand leaves it.
+.claude/.stand-test/
+.opencode/.stand-test/

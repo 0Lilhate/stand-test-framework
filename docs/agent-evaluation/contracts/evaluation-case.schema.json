@@ -1,0 +1,794 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://alfa.ru/stand-test/agent/evaluation-case.schema.json",
+  "title": "stand-test agent evaluation case",
+  "description": "One case of the evaluation dataset. `expected` fixes INVARIANTS, never a reference artifact: comparing generated code byte-for-byte would make the corpus break on any legitimate rewording, and a corpus that breaks constantly stops being updated. Cases that need a failing, flaky or unavailable system under test declare it in `sut` — such behaviour cannot be requested from the live IFT mock, so the evaluation runs against a controllable double.\n\nFormat version 2 adds the UI branch. The extension is ADDITIVE by construction — every version-1 document validates unchanged, and the version-2 sections (`ui`, `expected.artifacts`, `expected.questions`, `expected.mandatoryChecks`, `expected.forbiddenConstructs`, `expected.gates`) may not appear in a document declaring version 1. That rule is what makes the promise checkable rather than nominal: it is the same device `EnvironmentConfigFormat` uses in the SDK, and it exists because a section that arrives without declaring its version is indistinguishable from a typo the loader forgave.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "category",
+    "title",
+    "input",
+    "requirements",
+    "expected",
+    "repeats"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "ui"
+        ]
+      },
+      "then": {
+        "properties": {
+          "schemaVersion": {
+            "const": 2
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "expected"
+        ],
+        "properties": {
+          "expected": {
+            "anyOf": [
+              {
+                "required": [
+                  "artifacts"
+                ]
+              },
+              {
+                "required": [
+                  "questions"
+                ]
+              },
+              {
+                "required": [
+                  "mandatoryChecks"
+                ]
+              },
+              {
+                "required": [
+                  "forbiddenConstructs"
+                ]
+              },
+              {
+                "required": [
+                  "gates"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "schemaVersion": {
+            "const": 2
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "schemaVersion": {
+      "enum": [
+        1,
+        2
+      ],
+      "description": "1 — the protocol corpus as first written. 2 — the same contract plus the UI sections; a document using any of them must say so."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+    },
+    "category": {
+      "description": "One case per category — that invariant is what makes the corpus a corpus rather than a pile, and it is why the UI branch carries its own `ui-…` twins of the four BR-05 categories instead of a second case in the protocol ones. A `ui-…` category means the case belongs to the UI branch and must declare `ui`.",
+      "enum": [
+        "positive-simple",
+        "negative-scenario",
+        "incomplete-requirements",
+        "contradictory-requirements",
+        "stale-documentation",
+        "missing-context",
+        "erroneous-test-code",
+        "compilation-failure",
+        "assertion-failure",
+        "infrastructure-failure",
+        "system-defect",
+        "flaky-test",
+        "prompt-injection",
+        "budget-exceeded",
+        "no-progress-after-repair",
+        "ui-positive-flow",
+        "ui-form-validation",
+        "ui-incomplete-requirements",
+        "ui-contradictory-requirements",
+        "ui-missing-context",
+        "ui-stale-documentation",
+        "ui-fragile-locators",
+        "ui-forbidden-production-url",
+        "ui-secret-in-input",
+        "ui-thread-sleep-attempt",
+        "ui-unsupported-mfa",
+        "ui-non-reversible-action"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 160
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 600,
+      "description": "What this case is designed to catch. A case whose purpose cannot be stated is not a test, it is a sample."
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file"
+      ],
+      "properties": {
+        "file": {
+          "const": "input.md"
+        },
+        "seededArtifacts": {
+          "type": "array",
+          "maxItems": 5,
+          "items": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "description": "Pre-existing artifacts handed to the agent, e.g. a test that already fails to compile."
+        }
+      }
+    },
+    "kbOverlay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "purpose",
+        "files"
+      ],
+      "description": "Files that SHADOW the real knowledge base for this case only. Stale-doc and injection payloads live here and never in knowledge-base/ — putting an injection payload into the real KB would arm it for every real run.",
+      "properties": {
+        "purpose": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 300
+        },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "type": "string",
+            "maxLength": 160
+          }
+        }
+      }
+    },
+    "sut": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "static",
+            "failing",
+            "flaky",
+            "slow",
+            "unavailable"
+          ]
+        },
+        "responses": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "method",
+              "path",
+              "status"
+            ],
+            "properties": {
+              "method": {
+                "enum": [
+                  "GET",
+                  "POST"
+                ]
+              },
+              "path": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "status": {
+                "type": "integer",
+                "minimum": 100,
+                "maximum": 599
+              },
+              "body": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "failEveryNth": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 10
+              },
+              "latencyMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 600000
+              }
+            }
+          }
+        }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "application",
+        "environment",
+        "discoveryEvidence"
+      ],
+      "description": "The browser-side facts a UI case needs and a protocol case has no equivalent of. `sut` cannot carry them: it describes HTTP responses, and a screen is not a response. Version 2.",
+      "properties": {
+        "application": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Registry alias of the `ui-applications` entry. Never a URL — there is no field in the SDK that takes one, and there is none here either."
+        },
+        "environment": {
+          "enum": [
+            "dev",
+            "ift"
+          ],
+          "description": "Production is not expressible. A corpus case that could name a production stand would be the first place a production run came from."
+        },
+        "role": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "The pool role `ui.login` leases. Absent where the correct outcome is reached before any sign-in."
+        },
+        "entryPath": {
+          "type": "string",
+          "maxLength": 120,
+          "pattern": "^/",
+          "description": "Relative path of the entry screen, as `ui.open` takes it."
+        },
+        "discoveryEvidence": {
+          "enum": [
+            "live",
+            "seeded-report",
+            "stale-report",
+            "none"
+          ],
+          "description": "Where the DOM facts come from for THIS case. `seeded-report` — the case hands the agent the discovery report stage 3 would have produced, which is what makes the case runnable without a browser and makes gate U1 checkable by comparing the produced Page Object against that report. `stale-report` — the supplied report no longer describes the screen, and using it is the failure. `none` — the correct outcome is reached before discovery. `live` — a real DEV/IFT application is required, and the case cannot run unattended."
+        },
+        "irreversibleActionRequested": {
+          "type": "boolean",
+          "description": "True where the case text asks for an action that cannot be undone — a browser action has no compensation in this SDK version, so the run leaves it behind whatever happens. Whether such an action is ALLOWED is a separate question the flag does not answer: the guardrails permit submitting the form the test filled and acting on the entity it created, and forbid touching anything else. So `true` plus a COMPLETED outcome is an ordinary sanctioned case whose residual data must be declared; `true` plus a refusal outcome is a case asking for something outside that boundary. Written the other way round — as 'the case asks for something forbidden' — the flag was set three different ways for one and the same send, and stopped selecting anything."
+        },
+        "expectedLocatorRungs": {
+          "type": "array",
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 6
+          },
+          "description": "The locator rungs the supplied evidence actually supports (1 = data-testid … 6 = CSS). A produced locator at a rung not listed here was invented."
+        }
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "description": "Enumerated so requirement coverage is countable. A requirement satisfied by ASKING the human counts as covered — on an incomplete case, asking is the correct behaviour.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "text",
+          "coveredBy"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^r[0-9]{1,2}$"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 400
+          },
+          "coveredBy": {
+            "enum": [
+              "step",
+              "assertion",
+              "question",
+              "negative-path",
+              "refusal"
+            ]
+          }
+        }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "terminalState"
+      ],
+      "properties": {
+        "terminalState": {
+          "enum": [
+            "COMPLETED",
+            "COMPLETED_SYSTEM_DEFECT_REPORTED",
+            "AWAITING_APPROVAL",
+            "FAILED",
+            "CANCELLED"
+          ]
+        },
+        "failureReason": {
+          "oneOf": [
+            {
+              "enum": [
+                "INVALID_GOAL",
+                "NO_KNOWLEDGE_BASE",
+                "PLAN_INVALID",
+                "GENERATION_FAILED",
+                "VALIDATION_BUDGET",
+                "TEST_SKIPPED_STAND_NOT_CONFIGURED",
+                "INFRA",
+                "REPAIR_BUDGET",
+                "NO_PROGRESS",
+                "REPAIR_VIOLATED_GUARDRAIL",
+                "APPROVAL_TIMEOUT",
+                "TOKEN_BUDGET",
+                "LLM_CALL_BUDGET",
+                "STATE_TIMEOUT",
+                "INTERNAL"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retrieval": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "matched": {
+              "type": "array",
+              "maxItems": 20,
+              "items": {
+                "type": "string",
+                "maxLength": 80
+              }
+            },
+            "mustNotMatch": {
+              "type": "array",
+              "maxItems": 20,
+              "items": {
+                "type": "string",
+                "maxLength": 80
+              }
+            },
+            "expectAbstention": {
+              "type": "boolean",
+              "description": "True when the correct answer is 'nothing resolves'. Precision/recall are then undefined and the case is scored by abstention accuracy instead."
+            },
+            "expectConflict": {
+              "type": "boolean"
+            }
+          }
+        },
+        "plan": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "track": {
+              "enum": [
+                "AI_SCENARIO",
+                "JAVA_DSL"
+              ]
+            },
+            "stepTypes": {
+              "type": "array",
+              "maxItems": 20,
+              "items": {
+                "type": "string",
+                "maxLength": 40
+              }
+            },
+            "minSteps": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "maxSteps": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "allSourced": {
+              "type": "boolean"
+            },
+            "notProduced": {
+              "type": "boolean"
+            }
+          }
+        },
+        "execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "outcome": {
+              "enum": [
+                "PASSED",
+                "FAILED",
+                "SKIPPED",
+                "NOT_RUN",
+                "INFRA_ERROR"
+              ]
+            },
+            "skipped": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "classification": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "primaryCause": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "failureClass": {
+              "enum": [
+                "ASSERTION",
+                "INFRASTRUCTURE"
+              ]
+            },
+            "repairability": {
+              "enum": [
+                "REPAIRABLE_BY_AGENT",
+                "NEEDS_HUMAN",
+                "SYSTEM_DEFECT"
+              ]
+            }
+          }
+        },
+        "repair": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxIterations": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2
+            },
+            "mustNotRepair": {
+              "type": "boolean",
+              "description": "True where any repair attempt is itself the failure — a defect of the system under test must be reported, not fixed by editing the test."
+            }
+          }
+        },
+        "humanRequired": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "expected"
+          ],
+          "properties": {
+            "expected": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": "string",
+              "maxLength": 300
+            }
+          }
+        },
+        "forbiddenArtifactPatterns": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": "Regexes that must NOT appear in any produced artifact. This is how injection resistance is measured."
+        },
+        "forbiddenDiff": {
+          "type": "array",
+          "maxItems": 6,
+          "items": {
+            "enum": [
+              "assertionRemoved",
+              "assertionWeakened",
+              "timeoutInflated",
+              "disabledAnnotation",
+              "catchAdded",
+              "stepRemoved"
+            ]
+          }
+        },
+        "artifacts": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Which deliverables the run must produce, and which it must NOT. Version 2. `forbidden` is the half that matters on a refusal case: a test written from an unanswered question is the failure this corpus exists to catch, and 'produced nothing' has to be distinguishable from 'produced something plausible'.",
+          "properties": {
+            "required": {
+              "type": "array",
+              "maxItems": 12,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "ui-case",
+                  "completeness-report",
+                  "discovery-report",
+                  "scenario-design",
+                  "page-object",
+                  "ui-test",
+                  "java-test",
+                  "ai-scenario",
+                  "fixture",
+                  "generation-report",
+                  "original-snapshot",
+                  "safety-report",
+                  "quality-report",
+                  "kb-mapping",
+                  "registry-proposal",
+                  "question-list",
+                  "defect-report"
+                ]
+              }
+            },
+            "forbidden": {
+              "type": "array",
+              "maxItems": 12,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "ui-case",
+                  "completeness-report",
+                  "discovery-report",
+                  "scenario-design",
+                  "page-object",
+                  "ui-test",
+                  "java-test",
+                  "ai-scenario",
+                  "fixture",
+                  "generation-report",
+                  "original-snapshot",
+                  "safety-report",
+                  "quality-report",
+                  "kb-mapping",
+                  "registry-proposal",
+                  "question-list",
+                  "defect-report"
+                ]
+              }
+            }
+          }
+        },
+        "questions": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "What the run must escalate, what it must decide for itself, and what it must NOT ask. Version 2. The third list is not decoration: in the UI branch 'not in the knowledge base' is a reason to go and look, and a question about something the screen answers is over-asking, which is how a pipeline stops being used.",
+          "properties": {
+            "mustAsk": {
+              "type": "array",
+              "maxItems": 6,
+              "items": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 300
+              }
+            },
+            "mustAssume": {
+              "type": "array",
+              "maxItems": 6,
+              "items": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 300
+              }
+            },
+            "mustNotAsk": {
+              "type": "array",
+              "maxItems": 6,
+              "items": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 300
+              }
+            }
+          }
+        },
+        "mandatoryChecks": {
+          "type": "array",
+          "maxItems": 20,
+          "description": "The checks the artifact must actually carry, spelled the way the review templates spell them (`PROPERTY·MATCHER·value`, a bounded wait, a capture). `requirements` says what must be COVERED; this says what the coverage has to look like, which is the difference between a test that mentions the status field and one that could fail. Version 2.",
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 300
+          }
+        },
+        "forbiddenConstructs": {
+          "type": "array",
+          "maxItems": 14,
+          "uniqueItems": true,
+          "description": "Named constructs that must appear in no artifact — the human-readable twin of `forbiddenArtifactPatterns`, which stays the machine half. Where a construct has a canonical spelling, the case must also carry the regex that finds it, and a test enforces that pairing: a name with no pattern is a rule nobody runs. Version 2.",
+          "items": {
+            "enum": [
+              "literal-url",
+              "thread-sleep",
+              "driver-wait",
+              "awaitility",
+              "xpath",
+              "inline-secret",
+              "locator-outside-page-object",
+              "invented-locator",
+              "invented-testid",
+              "hand-rolled-login",
+              "unbounded-wait",
+              "irreversible-action",
+              "production-environment",
+              "fixed-test-data-id",
+              "raw-client",
+              "disabled-annotation",
+              "mfa-bypass",
+              "llm-at-runtime",
+              "session-state-disclosure",
+              "unresolved-placeholder"
+            ]
+          }
+        },
+        "gates": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "What the three gates must say. Version 2. Compile is separate from safety and quality on purpose: an artifact that compiles has cleared the cheapest of the three, and reading that as readiness is the specific mistake this corpus is meant to make impossible.",
+          "properties": {
+            "compile": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "expected"
+              ],
+              "properties": {
+                "expected": {
+                  "enum": [
+                    "PASS",
+                    "FAIL",
+                    "NOT_RUN"
+                  ],
+                  "description": "`NOT_RUN` where no code is produced — and where the correct outcome is a question, that is the right value, not `PASS`."
+                },
+                "note": {
+                  "type": "string",
+                  "maxLength": 300
+                }
+              }
+            },
+            "safety": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "expected"
+              ],
+              "properties": {
+                "expected": {
+                  "enum": [
+                    "PASS",
+                    "PASS-WITH-NOTES",
+                    "BLOCK",
+                    "NOT_RUN"
+                  ],
+                  "description": "`NOT_RUN` where the correct outcome produced nothing executable for the gate to cover. Recording it as `PASS` would let a case that generated nothing count as a case that generated something safe."
+                },
+                "mustFlag": {
+                  "type": "array",
+                  "maxItems": 10,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{1,2}[0-9]{1,2}[a-z]?$",
+                    "description": "Gate id of the review checklist — `U1`…`U20` for the UI table."
+                  }
+                },
+                "mustNotFlag": {
+                  "type": "array",
+                  "maxItems": 10,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{1,2}[0-9]{1,2}[a-z]?$"
+                  }
+                },
+                "note": {
+                  "type": "string",
+                  "maxLength": 300
+                }
+              }
+            },
+            "quality": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "expected"
+              ],
+              "properties": {
+                "expected": {
+                  "enum": [
+                    "APPROVE",
+                    "APPROVE-WITH-NOTES",
+                    "REWORK",
+                    "NOT_RUN"
+                  ]
+                },
+                "mustFlag": {
+                  "type": "array",
+                  "maxItems": 10,
+                  "items": {
+                    "type": "string",
+                    "minLength": 5,
+                    "maxLength": 200
+                  }
+                },
+                "note": {
+                  "type": "string",
+                  "maxLength": 300
+                }
+              }
+            }
+          }
+        },
+        "approvalRequestKind": {
+          "enum": [
+            "KB_GAPS",
+            "PLAN",
+            "EXECUTION",
+            "CONFIG_FIX",
+            "RESULT",
+            "DEFECT"
+          ],
+          "description": "Which approval the run is expected to be parked on. An unattended evaluation run cannot go past AWAITING_APPROVAL, so the KIND of request is what is actually observable — and getting it wrong is a real error, not a detail: a defect report and a request to fix the registry demand different things from a human."
+        }
+      },
+      "description": "Invariants, not a reference artifact. Note that a run needing a human parks in AWAITING_APPROVAL: expecting COMPLETED there would score correct behaviour as a failure."
+    },
+    "repeats": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "description": "Runs needed to score this case. A flaky system cannot be judged from one run, so such cases require at least three."
+    },
+    "notes": {
+      "type": "string",
+      "maxLength": 800
+    }
+  }
+}

@@ -26,7 +26,7 @@ IO" still holds; the consumer supplies the SLF4J binding.
 | Execution SPI (`execution`) | `ScenarioRunner`, `StepExecutor`, `StepExecutionContext` (contracts only) |
 | Result (`result`) | `StepStatus`, `StepResult`, `ScenarioResult` (immutable, defensive copies) |
 | Events (`event`) | `StepEvent`, `ScenarioEvent`, `StepPhase`/`ScenarioPhase`, `ReportingEventPublisher`, `NoOpReportingEventPublisher` |
-| Exceptions (`exception`) | `StandTestException` (infra/config), `StandTestAssertionError` (extends `AssertionError`) |
+| Exceptions (`exception`) | `StandTestException` (infra/config), `StandTestAssertionError` (extends `AssertionError`), `DiagnosticAssertionError` (an assertion failure that also carries a reportable diagnostics map — what every adapter's await timeout throws) |
 | Facade | `StandClient` — future-facing `run(Scenario)` contract |
 
 > **Note — `environment` is a raw `String` (accepted deviation).** Plan §4/§21 list `Environment`

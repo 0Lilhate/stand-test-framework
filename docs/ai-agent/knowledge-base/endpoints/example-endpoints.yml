@@ -23,6 +23,9 @@ endpoints:
       valueHints:
         clientId: run-unique      # derive from ${testRunId}; a literal here is a review finding
         amount: constant          # fixed business value from the case
+        accountId: entity-handle  # points at a row that must EXIST on the stand: provisioned via a
+                                  # create-endpoint and captured, or seeded — never copied from the
+                                  # case. No provisioning path ⇒ blocking missing info, not a constant
     response:
       status:
         success: 200

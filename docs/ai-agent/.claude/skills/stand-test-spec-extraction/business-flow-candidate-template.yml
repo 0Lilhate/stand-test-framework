@@ -1,0 +1,37 @@
+# business-flows.candidates.yml — extracted end-to-end flows.
+# Validated by knowledge-base/schema/business-flow.schema.json.
+# SEMANTIC content: feeds stand-test-scenario-design (step order); never enters the curated KB.
+# Every free-text field rejects URLs and inline secrets. Provenance + confidence mandatory.
+documentId: <document-id>
+businessFlows:
+  - id: <kebab-flow-id>
+    title: "<short flow name>"
+    actors: ["<actor>", ...]
+    systems: [<system-alias>, ...]
+    trigger: "<what starts the flow - reference an endpoint/event by its candidate id, not a URL>"
+    preconditions: ["<precondition>", ...]
+    steps:
+      - order: 1
+        actor: "<who acts>"
+        action: "<what happens>"
+        target: "<system/alias/topic/table>"
+        expectedEffect: "<observable effect>"
+      # - order: 2 ...
+    expectedResult: "<terminal expected result>"
+    failureBehavior: "<what happens on the negative path>"
+    parallelism: "<concurrency/ordering constraints, if stated>"
+    source:
+      documentId: <document-id>
+      documentName: "<document title>"
+      documentVersion: "<version or null>"
+      page: <n or null>
+      section: "<section>"
+      heading: "<heading>"
+      quote: "<redacted verbatim - host placeholders, no secrets>"
+      extractionNotes: "<how this was derived>"
+    confidence: medium            # high | medium | low
+    relatedArtifacts:
+      endpoints: [<endpoint-candidate-id>, ...]
+      kafkaTopics: [<topic-candidate-id>, ...]
+      dbTables: [<schema.table>, ...]
+      grpcMethods: [<grpc-method-id>, ...]

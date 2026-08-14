@@ -1,6 +1,7 @@
 ---
 name: stand-test-kb-lookup
 description: Resolve a text test case against the stand-test knowledge base (knowledge-base or docs/ai-agent/knowledge-base layout) into a deterministic KnowledgeBaseLookupResult - matched services/endpoints/topics/datasources/dbProbes/grpcTargets/grpcMethods, missing entries, recorded assumptions. Never invents contract details; no KB entry means a missing item, not a guess. Use right after stand-test-case-analysis, before stand-test-environment-mapping.
+version: 1
 ---
 
 # Skill: stand-test-kb-lookup
@@ -67,6 +68,43 @@ guessing or to scraping URLs from the case text.
    `assumptions` only; each `conflicts` row becomes a `missing` row with reason
    `case/KB conflict: <detail>`; `confidence` is NOT carried. While `environment` is `null` the
    projection is deferred — resolve the blocking item first.
+
+## An alias the registry attests, but the KB has never heard of
+
+A `missing` item is not always a question for a human, and exactly one case is not: an ALIAS that
+`stand-test-environments.yml` (or `stand.test.environments.*`) declares while the KB holds no entry
+for it. That alias was curated by a person — the SDK does not start without that file — so it is a
+fact the project already stated, merely not stated twice.
+
+Such an alias becomes a recorded `assumption` plus a TODO, not a blocking question:
+
+```yaml
+assumptions:
+  - subject: order-service
+    kind: registry-attested-alias
+    statement: "alias declared in the environment registry, no KB entry yet"
+    todo: "/stand-test-bootstrap-kb, then the review→apply gate"
+```
+
+Establish attestation MECHANICALLY, never from memory or from the case text:
+
+```bash
+node .opencode/hooks/stand-guard.mjs kb-status --json
+```
+
+An alias in that command's `registry` list is attested. An alias that is not is a blocking `missing`
+item as before.
+
+**This is a rule, not a start-up mode.** It does not expire when the KB fills up, and it does not
+widen when the KB is empty, because it never rested on the KB being empty in the first place — it
+rests on who wrote the registry. Two boundaries follow and neither may be softened:
+
+- It covers ALIASES ONLY. A path, a JSON field, a table, a column, a gRPC method, an environment id
+  — no registry anywhere attests any of them, so they stay blocking `missing` items whatever else is
+  known about the alias that owns them. An empty KB therefore still produces many questions on a
+  contract-heavy case; that is the correct outcome and the report says so.
+- It never invents the alias's CONTENT. "The registry declares `order-service`" licenses using that
+  alias where the case names that system. It licenses nothing about which endpoints it has.
 
 ## Determinism rules
 

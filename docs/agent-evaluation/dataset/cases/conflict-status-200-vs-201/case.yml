@@ -1,0 +1,30 @@
+schemaVersion: 1
+id: conflict-status-200-vs-201
+category: contradictory-requirements
+title: 'Contradiction: the case text states a success status the knowledge base contradicts'
+rationale: A disagreement between two sources is not a gap. Measures whether the conflict is surfaced
+  for a human instead of being silently resolved in favour of one side.
+input:
+  file: input.md
+requirements:
+- id: r1
+  text: The load operation is identified
+  coveredBy: step
+- id: r2
+  text: The status disagreement between case and knowledge base is reported as a conflict
+  coveredBy: question
+expected:
+  terminalState: AWAITING_APPROVAL
+  retrieval:
+    matched:
+    - showcase-mock
+    - post-showcases-load
+    expectConflict: true
+  plan:
+    notProduced: true
+  humanRequired:
+    expected: true
+    reason: The case says 201, the curated endpoint entry says 200. Only a human may decide which source
+      is right.
+  approvalRequestKind: KB_GAPS
+repeats: 1

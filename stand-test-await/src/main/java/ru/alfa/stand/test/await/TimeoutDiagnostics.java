@@ -11,21 +11,24 @@ import java.util.Objects;
  *
  * <p>Captures everything needed to explain a timeout without re-running it: the await description, the
  * configured {@code timeout}/{@code pollInterval}, how many times the probe was attempted, the elapsed
- * wall time, the last value observed (may be null) and the last error message (may be null when no
- * probe threw). The free-form {@code attributes} map carries additional reporting context that the
- * await primitive itself does not own — typically {@code scenarioId}/{@code testRunId}/
- * {@code correlationId} and any probe-supplied details — so identity flows into reports without
- * coupling the engine to scenario metadata.
+ * time (monotonic, see {@link TimeSource}), the last value observed (may be null) and the last error
+ * message (may be null when no probe threw).
  *
- * <p>{@link #toMap()} renders the diagnostics as a flat map suitable for a
- * {@code StepResult}/{@code StepEvent} diagnostics map; {@link #summary()} renders a single-line
- * message for exceptions.
+ * <p>Two renderings, for two readers, and every adapter uses both. {@link #summary()} is one line for
+ * the thrown failure's message, read off a stack trace. {@link #toMap()} is the same facts as a flat map
+ * for a {@code StepResult}/{@code StepEvent} diagnostics map, read as key/value rows in a report —
+ * carried there by a {@code DiagnosticAssertionError}. {@code attributes} (via {@link #withAttribute})
+ * is where the caller adds what the await engine deliberately does not know: the alias it was polling,
+ * how many messages it saw, the run identity. An attribute can never overwrite an engine-owned key.
+ *
+ * <p>Whatever goes in is rendered verbatim into a report, so it must be metadata — an alias, a count, a
+ * bounded query — never a payload.
  *
  * @param description the human-readable name of what was being awaited
  * @param timeout the configured maximum total wait
  * @param pollInterval the configured wait between probes
  * @param attempts the number of probe attempts performed (at least one)
- * @param elapsed the elapsed wall time when the await gave up
+ * @param elapsed the monotonic time elapsed when the await gave up
  * @param lastValue the last value observed from the probe (may be null)
  * @param lastError the last error message captured from a throwing probe (may be null)
  * @param attributes an immutable map of additional reporting context

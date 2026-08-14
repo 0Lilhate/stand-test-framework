@@ -1,7 +1,6 @@
 package ru.alfa.stand.test.scenario;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -47,12 +46,8 @@ final class RestStepTranslator {
     private static Map<String, Object> expectEventually(Map<String, Object> fields, String location) {
         SurfaceValues.checkKnownKeys(fields, EXPECT_KNOWN, location);
         Map<String, Object> params = common(fields, "GET", location);
-        if (fields.containsKey("timeout")) {
-            params.put(YamlStepKeys.TIMEOUT_MILLIS, SurfaceValues.durationMillis(fields.get("timeout"), location + ".timeout"));
-        }
-        if (fields.containsKey("pollInterval")) {
-            params.put(YamlStepKeys.POLL_INTERVAL_MILLIS, SurfaceValues.durationMillis(fields.get("pollInterval"), location + ".pollInterval"));
-        }
+        SurfaceValues.putOptionalDuration(params, fields, "timeout", YamlStepKeys.TIMEOUT_MILLIS, location);
+        SurfaceValues.putOptionalDuration(params, fields, "pollInterval", YamlStepKeys.POLL_INTERVAL_MILLIS, location);
         if (!fields.containsKey("expectStatus") && !fields.containsKey("assert")) {
             throw new StandTestException("rest.expectEventually at " + location + " requires at least one expectation: 'expectStatus' or 'assert'");
         }
@@ -66,15 +61,9 @@ final class RestStepTranslator {
         params.put(YamlStepKeys.PATH, SurfaceValues.requireString(fields, "path", location));
         params.put(YamlStepKeys.QUERY, SurfaceValues.stringMap(fields.get("query"), location + ".query"));
         params.put(YamlStepKeys.HEADERS, SurfaceValues.stringMap(fields.get("headers"), location + ".headers"));
-        // Emit the flag only when the surface set it explicitly, so its absence means "default" (inject when
-        // the service declares a HEADER correlation carrier) rather than an explicit opt-out.
-        if (fields.containsKey("injectCorrelationId")) {
-            params.put(YamlStepKeys.INJECT_CORRELATION_ID, SurfaceValues.boolFlag(fields, "injectCorrelationId", location));
-        }
-        params.put(YamlStepKeys.ASSERTIONS, fields.containsKey("assert")
-                ? SurfaceValues.assertionsWithMatchers(fields.get("assert"), location + ".assert") : List.of());
-        params.put(YamlStepKeys.CAPTURES, fields.containsKey("capture")
-                ? SurfaceValues.captures(fields.get("capture"), YamlStepKeys.JSON_PATH, location + ".capture") : List.of());
+        SurfaceValues.putOptionalFlag(params, fields, "injectCorrelationId", YamlStepKeys.INJECT_CORRELATION_ID, location);
+        SurfaceValues.putAssertions(params, fields, true, location);
+        SurfaceValues.putCaptures(params, fields, YamlStepKeys.JSON_PATH, location);
         if (fields.containsKey("expectStatus")) {
             params.put(YamlStepKeys.EXPECTED_STATUS, SurfaceValues.requireInteger(fields, "expectStatus", location));
         }

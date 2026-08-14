@@ -176,8 +176,6 @@ public final class GrpcStepExecutor implements StepExecutor {
             }
             throw new StandTestException("Run-scoped resource under key '" + key + "' is not a gRPC channel");
         }
-        // Resolve the target reference (an env-var lookup) only when a channel must actually be created,
-        // so a cache hit does not re-read the environment on every step.
         ManagedChannel channel = this.channelFactory.create(resolve(target));
         scope.register(key, new ManagedChannelResource(channel));
         return channel;
@@ -186,15 +184,11 @@ public final class GrpcStepExecutor implements StepExecutor {
     private static String correlationId(Map<String, Object> parameters, GrpcTargetDefinition target, String targetAlias, StepExecutionContext context) {
         CorrelationConfig correlation = target.correlation();
         boolean hasMetadataCarrier = correlation != null && correlation.source() == CorrelationSource.METADATA;
-        // Default-on: inject when the target declares a METADATA carrier, unless the step opted in/out
-        // explicitly. The SDK owns correlationId (plan §8), so end-to-end traceability is the safe default
-        // rather than a builder call an AI author can silently forget.
         boolean shouldInject = GrpcStepParameters.injectCorrelationIdFlag(parameters).orElse(hasMetadataCarrier);
         if (!shouldInject) {
             return null;
         }
         if (!hasMetadataCarrier) {
-            // Only reachable when the step forced injection on a target that declares no METADATA carrier.
             throw new StandTestException("Correlation id injection was requested for gRPC target '" + targetAlias + "', but it has no METADATA correlation config");
         }
         return context.scenarioContext().correlationId().value();

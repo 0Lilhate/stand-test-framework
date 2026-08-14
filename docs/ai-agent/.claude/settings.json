@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "Read(./**/.env*)",
+      "Read(./**/*.pem)",
+      "Read(./**/id_rsa*)",
+      "Read(./**/*.p12)",
+      "Edit(./**/.env*)",
+      "Edit(./**/checkstyle.xml)",
+      "Edit(./**/pmd.xml)",
+      "Edit(./**/pmd-ruleset.xml)",
+      "Edit(./**/spotbugs-exclude.xml)",
+      "Edit(./**/spotbugs-include.xml)",
+      "Edit(./**/detekt.yml)",
+      "Edit(./**/detekt-config.yml)",
+      "Edit(./**/.editorconfig)",
+      "Edit(./**/.gitignore)",
+      "Edit(./**/tomcat/conf/context.xml)",
+      "Edit(./**/tomcat/conf/server.xml)",
+      "Edit(./**/tomcat/conf/web.xml)",
+      "Edit(./.claude/settings.json)",
+      "Edit(./.claude/rules/**)",
+      "Edit(./.claude/hooks/**)",
+      "Edit(./.claude/agents/**)",
+      "Edit(./.claude/skills/**)",
+      "Edit(./.claude/commands/**)",
+      "Edit(./.claude/workflows/**)",
+      "Edit(./.claude/reference/**)",
+      "Edit(./knowledge-base/schema/**)",
+      "Bash(node .claude/hooks/stand-guard.mjs subagent-stop:*)",
+      "Bash(node .claude/hooks/stand-guard.mjs pre-write:*)",
+      "Bash(node .claude/hooks/stand-guard.mjs post-write:*)",
+      "Bash(node .claude/hooks/stand-guard.mjs pre-bash:*)",
+      "Bash(node .claude/hooks/stand-guard.mjs post-run:*)",
+      "Bash(node .claude/hooks/stand-guard.mjs stop:*)",
+      "Bash(node .claude/hooks/stand-guard.mjs status:*)",
+      "Bash(rm -rf:*)",
+      "Bash(git push:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(psql:*)",
+      "Bash(mysql:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(powershell:*)"
+    ],
+    "ask": [
+      "Edit(./knowledge-base/**)",
+      "Edit(./stand-test-environments.yml)",
+      "Edit(./**/application*.yml)",
+      "Bash(./gradlew test:*)",
+      "Bash(./gradlew check:*)",
+      "Bash(git commit:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)"
+    ],
+    "allow": [
+      "Read(./**)",
+      "Grep",
+      "Glob",
+      "Bash(./gradlew compileTestJava:*)",
+      "Bash(./gradlew checkstyleTest:*)",
+      "Bash(./gradlew dependencies:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(node .claude/hooks/stand-guard.mjs scan:*)",
+      "Bash(node .claude/hooks/stand-guard.mjs doctor:*)",
+      "Bash(node .claude/hooks/stand-guard.mjs kb-status:*)",
+      "Bash(node .claude/hooks/stand-guard.mjs kb-validate:*)",
+      "Bash(node .claude/hooks/stand-guard.mjs alias-check:*)",
+      "Bash(node .claude/hooks/stand-guard.mjs kb-write-permit:*)",
+      "Bash(node .claude/hooks/stand-guard.mjs record-gate:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/stand-guard.mjs pre-write",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/stand-guard.mjs pre-bash",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/stand-guard.mjs post-write",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/stand-guard.mjs post-run",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/stand-guard.mjs stop",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/stand-guard.mjs subagent-stop",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/stand-guard.mjs status",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

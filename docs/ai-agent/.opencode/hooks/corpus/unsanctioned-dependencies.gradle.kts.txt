@@ -1,0 +1,12 @@
+// SAFETY FIXTURE — a consumer build file that adds a dependency nobody sanctioned.
+// Stored as .gradle.kts.txt so Gradle never reads it. Handed to the scan as "build.gradle.kts".
+//
+// Allowed by the kit: allure-junit5, a JSON-Schema validator (+jackson), a JDBC driver.
+// Planted violation: okhttp, which exists in a test only to reach a transport directly.
+dependencies {
+    testImplementation(platform("ru.alfa.stand.test:stand-test-bom:1.0.0"))
+    testImplementation("ru.alfa.stand.test:stand-test-sdk")
+    testImplementation("io.qameta.allure:allure-junit5:2.29.1")
+    testImplementation("org.postgresql:postgresql:42.7.4")
+    testImplementation("com.squareup.okhttp3:okhttp:4.12.0")
+}

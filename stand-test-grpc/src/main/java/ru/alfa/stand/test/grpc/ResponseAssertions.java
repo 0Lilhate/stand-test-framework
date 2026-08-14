@@ -30,7 +30,7 @@ final class ResponseAssertions {
         try {
             return JsonPath.parse(value);
         } catch (InvalidJsonException | IllegalArgumentException invalid) {
-            throw new StandTestAssertionError("Response is not valid JSON: " + invalid.getMessage());
+            throw new StandTestAssertionError("Response is not valid JSON (" + value.length() + " characters, parse failed)");
         }
     }
 
@@ -41,8 +41,6 @@ final class ResponseAssertions {
             try {
                 actual = document.read(assertion.jsonPath());
             } catch (PathNotFoundException notFound) {
-                // An absent path is not an error here: EXISTS(false)/NOT_NULL evaluate it. Captures still
-                // fail closed on a missing path (they use read()).
                 pathPresent = false;
             }
             if (AssertionMatchers.matches(assertion.matcher(), assertion.expectedValue(), pathPresent, actual)) {

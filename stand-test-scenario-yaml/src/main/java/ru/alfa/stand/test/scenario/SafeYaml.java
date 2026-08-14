@@ -21,8 +21,6 @@ final class SafeYaml {
     static Object load(String source) {
         LoaderOptions options = new LoaderOptions();
         options.setAllowDuplicateKeys(false);
-        // Explicit, conservative limits: this format is aimed at AI-generated scenarios (plan §4), so
-        // reject alias/nesting bombs at parse time rather than relying on library defaults.
         options.setMaxAliasesForCollections(10);
         options.setNestingDepthLimit(50);
         try {

@@ -32,8 +32,10 @@ the **JDK HttpClient connector** (`JdkClientHttpConnector`), so reactor-netty is
   poll interval 200ms; both validator-bounded at 1 hour). Captures apply to the final, satisfied
   response only. A transport failure (connection refused) aborts immediately as an infrastructure
   error, while an HTTP 5xx is just a not-yet observation — transient error statuses are polled
-  through. The timeout raises a `StandTestAssertionError` carrying the await diagnostics and the last
-  mismatch (leaf values at asserted paths are echoed; the response body never is).
+  through. The timeout raises a `DiagnosticAssertionError` (a `StandTestAssertionError`) whose message
+  carries the await summary and the last mismatch, and whose reportable diagnostics carry the same facts
+  as key/value rows plus `rest.service`/`rest.path`. Leaf values at asserted paths are echoed; the
+  response body never is.
 - **`${...}` variable substitution** in path, query, headers and body (built-ins `scenarioId` /
   `testRunId` / `correlationId` / `environment` plus captured variables).
 

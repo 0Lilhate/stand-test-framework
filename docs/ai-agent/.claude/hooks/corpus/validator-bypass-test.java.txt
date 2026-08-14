@@ -1,0 +1,27 @@
+// SAFETY FIXTURE — a Java test that runs a scenario around the validator.
+// Stored as .java.txt so nothing compiles it. The artifact handed to the scan carries the
+// relativePath "ValidatorBypassTest.java".
+//
+// Planted violations:
+//   1. the runner constructed directly, so the pre-flight validator never runs
+//   2. a bean that replaces the validator with one that permits everything
+package ru.alfa.qa.test;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
+
+class ValidatorBypassTest {
+
+    @Bean
+    @Primary
+    ScenarioValidator scenarioValidator() {
+        return scenario -> ValidationResult.valid();
+    }
+
+    @Test
+    void runsWithoutTheGuardrails() {
+        ScenarioRunner runner = new DefaultScenarioRunner(registry, executors);
+        runner.run(scenario);
+    }
+}

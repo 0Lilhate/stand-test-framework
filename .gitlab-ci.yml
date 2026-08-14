@@ -1,0 +1,164 @@
+# CI for stand-test-framework — task UITG-S025, requirements BR-18 and NFR-06.
+#
+# Why it exists: until this file, the whole regression — compilation, checkstyle at maxWarnings = 0,
+# the module test suites and the 80% INSTRUCTION JaCoCo gate — ran only when somebody remembered to
+# run it. "Does this change break the existing set" was a matter of diligence, not of a check.
+#
+# One job does the work: `verify` runs `./gradlew build`, which is the same command a developer runs
+# and therefore cannot drift from it. A second job, `nightly-verify`, repeats it from cold with
+# `--rerun-tasks --no-build-cache`, so an incremental-build illusion cannot hide a real failure for
+# more than a day.
+#
+# What this pipeline deliberately does NOT run: the browser suite `:stand-test-ui:browserTest`. It
+# needs a runner image carrying Chromium, which is an infrastructure gate (G-3) and a task of its own
+# — UITG-S026. `CiPipelineConfigTest` fails the build if `browserTest` appears here, so the UI job
+# arrives with its infrastructure or not at all.
+#
+# Runner coordinates are NOT hardcoded: which image and which runner tag serve this namespace is an
+# organisation fact this repository does not own, and a guessed value would be worse than an absent
+# one. Supply them as project CI/CD variables (Settings → CI/CD → Variables):
+#
+#   STAND_TEST_CI_IMAGE        an image carrying a JDK 21 (the Gradle toolchain; there is no
+#                              auto-provisioning — the build resolves nothing from the internet)
+#   STAND_TEST_CI_RUNNER_TAG   the tag of the runner that may take these jobs
+#
+# Dependency resolution goes through the internal Artifactory with no public fallback (see
+# settings.gradle.kts), so the job also needs read credentials. They are passed as Gradle properties
+# through the environment — `ORG_GRADLE_PROJECT_<name>` — and never appear in this file:
+#
+#   ORG_GRADLE_PROJECT_binaryPublicRepoUrl      public proxy repo (Maven Central + Plugin Portal)
+#   ORG_GRADLE_PROJECT_artifactoryUrl           Artifactory base URL
+#   ORG_GRADLE_PROJECT_artifactorySnapshotRepo  snapshot repo key
+#   ORG_GRADLE_PROJECT_artifactoryUser          read user      (mark as masked)
+#   ORG_GRADLE_PROJECT_artifactoryPassword      read token     (mark as masked + protected)
+#
+# Merge blocking is a project setting, not a file: enable Settings → Merge requests → "Pipelines must
+# succeed". This file does what it can from its side — no job is `allow_failure`, and merge-request
+# pipelines are produced by the `workflow` rules below so there is a pipeline to block on.
+
+workflow:
+  rules:
+    # A merge request always gets a pipeline: that is the one that blocks the merge.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    # The nightly schedule.
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    # A push to a branch that already has an open MR would otherwise run the same commit twice.
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    # Every other push, including master.
+    - if: $CI_COMMIT_BRANCH
+
+stages:
+  - verify
+
+variables:
+  # Keep Gradle's home inside the workspace: GitLab can only cache paths under $CI_PROJECT_DIR.
+  GRADLE_USER_HOME: "$CI_PROJECT_DIR/.gradle-home"
+  # No daemon in CI — the job is a single invocation and a surviving daemon only costs memory.
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+  # Enough history for the build; nothing here reads the log.
+  GIT_DEPTH: "20"
+
+# Shared shape of both verification jobs. The two differ only in their Gradle arguments and rules.
+.verify:
+  stage: verify
+  image: $STAND_TEST_CI_IMAGE
+  tags:
+    - $STAND_TEST_CI_RUNNER_TAG
+  # Explicit rather than implied: a verification job that may fail without failing the pipeline is
+  # a green light with no meaning behind it.
+  allow_failure: false
+  before_script:
+    - |
+      missing=""
+      for name in ORG_GRADLE_PROJECT_binaryPublicRepoUrl \
+                  ORG_GRADLE_PROJECT_artifactoryUrl \
+                  ORG_GRADLE_PROJECT_artifactorySnapshotRepo \
+                  ORG_GRADLE_PROJECT_artifactoryUser \
+                  ORG_GRADLE_PROJECT_artifactoryPassword; do
+        eval "value=\${$name:-}"
+        if [ -z "$value" ]; then
+          missing="$missing $name"
+        fi
+      done
+      if [ -n "$missing" ]; then
+        echo "stand-test-ci: missing CI/CD variable(s):$missing" >&2
+        echo "stand-test-ci: this build resolves every dependency through the internal Artifactory and has no public fallback." >&2
+        echo "stand-test-ci: set them under Settings -> CI/CD -> Variables (mask the user and the token). See README, section CI." >&2
+        exit 1
+      fi
+      # Values are never printed — only the names above. This line records the toolchain instead.
+      java -version
+  script:
+    # The exit code of Gradle is the exit code of the job. Nothing may stand between them: a pipe
+    # (`| tee`, `| grep`) would hand the job the exit code of the LAST command in the pipe, and a
+    # trailing `|| true` would hide a red build outright. The status is captured explicitly here
+    # only so the duration can be recorded after it, and it is re-raised verbatim at the end.
+    - |
+      started_at=$(date +%s)
+      set +e
+      ./gradlew $STAND_TEST_GRADLE_ARGS
+      gradle_status=$?
+      set -e
+      finished_at=$(date +%s)
+      mkdir -p ci-metrics
+      # Duration is an input to KPI-8 (how long the regression takes), so it is recorded on failure
+      # too — a run that fails after 40 minutes is a fact worth keeping.
+      echo "$((finished_at - started_at))" > ci-metrics/gradle-build-seconds.txt
+      echo "stand-test-ci: ./gradlew $STAND_TEST_GRADLE_ARGS took $((finished_at - started_at))s, exit code $gradle_status"
+      exit $gradle_status
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - ci-metrics/
+      # The reports that explain a red build: checkstyle violations and the coverage the gate saw.
+      - "*/build/reports/checkstyle/"
+      - "*/build/reports/jacoco/"
+    reports:
+      junit:
+        - "*/build/test-results/test/TEST-*.xml"
+
+verify:
+  extends: .verify
+  # A superseded push has nothing to prove; a nightly run is not interrupted (see below).
+  interruptible: true
+  timeout: 1h
+  variables:
+    STAND_TEST_GRADLE_ARGS: "build --console=plain"
+  cache:
+    # Only the DEPENDENCY cache is carried between runs: the downloaded modules and the wrapper
+    # distribution. The build cache, the configuration cache and the `build/` directories are
+    # deliberately absent, so every job starts with no task outputs to reuse and cannot report
+    # UP-TO-DATE for something this commit changed. Reuse buys download time, never verdicts.
+    key: "gradle-modules"
+    paths:
+      - .gradle-home/caches/modules-2/
+      - .gradle-home/wrapper/
+    policy: pull-push
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - when: on_success
+
+nightly-verify:
+  extends: .verify
+  # A nightly run has no successor to be superseded by, and killing it loses the whole night.
+  interruptible: false
+  timeout: 2h
+  variables:
+    # `--rerun-tasks` ignores up-to-date checks and `--no-build-cache` refuses cached task outputs:
+    # together they re-execute compilation, checkstyle, every test and the coverage gate from cold.
+    # This is what makes the nightly run answer a question the push job cannot — whether the set is
+    # green by itself rather than green by inheritance.
+    STAND_TEST_GRADLE_ARGS: "build --console=plain --rerun-tasks --no-build-cache"
+  cache:
+    key: "gradle-modules"
+    paths:
+      - .gradle-home/caches/modules-2/
+      - .gradle-home/wrapper/
+    # Pull-only: the nightly run reads the dependency cache but never writes it, so a corrupted
+    # download cannot be promoted overnight into the cache every push job then pulls.
+    policy: pull
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"

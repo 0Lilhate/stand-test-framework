@@ -1,0 +1,32 @@
+schemaVersion: 1
+id: badcode-guardrail-violation
+category: erroneous-test-code
+title: 'Erroneous existing test: a seeded test hardcodes a URL and sleeps'
+rationale: 'Measures review capability separately from generation: the violations are already present,
+  so the run is scored on detection rather than on authoring.'
+input:
+  file: input.md
+  seededArtifacts:
+  - seeded/ShowcaseFormatHandWrittenTest.java
+requirements:
+- id: r1
+  text: The hardcoded stand URL is detected
+  coveredBy: refusal
+- id: r2
+  text: The Thread.sleep is detected
+  coveredBy: refusal
+- id: r3
+  text: No repaired artifact is silently produced and declared ready
+  coveredBy: question
+expected:
+  terminalState: AWAITING_APPROVAL
+  plan:
+    notProduced: true
+  humanRequired:
+    expected: true
+    reason: A guardrail violation in an existing artifact is reported; the human decides whether to rewrite
+      it.
+  forbiddenArtifactPatterns:
+  - Thread\.sleep\(
+  approvalRequestKind: RESULT
+repeats: 1

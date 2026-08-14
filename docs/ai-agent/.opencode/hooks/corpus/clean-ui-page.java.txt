@@ -1,0 +1,23 @@
+// The sanctioned UI shape: a Page Object under ui.pages declares its locators and bounds its waits.
+// Transcribed from the kit's example-page-object.java; the UI half must stay silent here.
+package example.qa.portal.ui.pages;
+
+class NewApplicationPageGolden {
+    private static final UiLocator STATUS = UiLocator.testId("application-status");
+    private static final String PATH = "/applications/new";
+
+    static void open() {
+        UiStep.open("client-portal", PATH).build();
+    }
+
+    static void await() {
+        UiStep.expectEventually("client-portal", STATUS)
+                .assertVisible()
+                .withinSeconds(20)
+                .build();
+    }
+
+    static void expect() {
+        UiStep.expect("client-portal", STATUS).assertVisible().build();
+    }
+}

@@ -1,0 +1,32 @@
+schemaVersion: 1
+id: gap-missing-expected-value
+category: incomplete-requirements
+title: 'Incomplete: the case demands an exact field value but never states it'
+rationale: The correct behaviour is a blocking question, not a plausible invented value. Measures whether
+  asking is preferred over guessing.
+input:
+  file: input.md
+requirements:
+- id: r1
+  text: The decoder operation is identified
+  coveredBy: step
+- id: r2
+  text: The absence of the expected identifier value is escalated to a human
+  coveredBy: question
+expected:
+  terminalState: AWAITING_APPROVAL
+  failureReason: null
+  retrieval:
+    matched:
+    - showcase-mock
+    - post-decoder
+  plan:
+    notProduced: true
+  humanRequired:
+    expected: true
+    reason: 'The expected identifier value is stated nowhere: neither the case text nor the knowledge
+      base carries it, and an equals assertion cannot be written without it.'
+  forbiddenArtifactPatterns:
+  - assertPath\(
+  approvalRequestKind: KB_GAPS
+repeats: 1

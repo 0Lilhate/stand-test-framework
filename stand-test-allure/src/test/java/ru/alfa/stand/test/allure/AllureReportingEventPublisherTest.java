@@ -3,6 +3,8 @@ package ru.alfa.stand.test.allure;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -17,6 +19,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import ru.alfa.stand.test.allure.lifecycle.AllureLabel;
 import ru.alfa.stand.test.allure.lifecycle.AllureLifecycleFacade;
 import ru.alfa.stand.test.allure.lifecycle.AllureStatus;
@@ -24,6 +27,7 @@ import ru.alfa.stand.test.allure.lifecycle.FakeAllureLifecycleFacade;
 import ru.alfa.stand.test.allure.lifecycle.FakeAllureLifecycleFacade.RecordedAttachment;
 import ru.alfa.stand.test.allure.lifecycle.FakeAllureLifecycleFacade.UpdatedStep;
 import ru.alfa.stand.test.core.event.Attachment;
+import ru.alfa.stand.test.core.event.RunArtifacts;
 import ru.alfa.stand.test.core.event.ScenarioEvent;
 import ru.alfa.stand.test.core.event.ScenarioPhase;
 import ru.alfa.stand.test.core.event.StepEvent;
@@ -67,6 +71,50 @@ class AllureReportingEventPublisherTest {
             assertThat(step.status()).isEqualTo(AllureStatus.FAILED);
             assertThat(step.message()).isEqualTo("expected 200 but was 500");
         });
+    }
+
+    @Test
+    @DisplayName("the publisher the ServiceLoader builds really delivers a file attachment — the consumer wiring, not a hand-passed root (UITG-F003)")
+    void fileAttachment_reachesTheReportThroughTheProductionConstructor() throws Exception {
+        Path picture = Files.createDirectories(RunArtifacts.directory(System::getProperty)).resolve("f003-screenshot.png");
+        Files.write(picture, new byte[] {(byte) 0x89, 'P', 'N', 'G'});
+        try {
+            // The constructor the SPI provider delegates to. Passing an artefacts root by hand here would
+            // test the guard and miss the defect: production passed none, so every file attachment was
+            // refused and the picture never reached the report.
+            AllureReportingEventPublisher wired = new AllureReportingEventPublisher(lifecycle);
+
+            wired.publish(stepStarted("s1", "ui.expect"));
+            wired.publish(stepFinished("s1", "ui.expect", StepStatus.FAILED, "expected <Принята> but got <Черновик>",
+                    Map.of(), List.of(Attachment.ofFile("ui-screenshot", "image/png", picture))));
+
+            assertThat(lifecycle.fileAttachments()).singleElement().satisfies(attachment -> {
+                assertThat(attachment.name()).isEqualTo("ui-screenshot");
+                assertThat(attachment.type()).isEqualTo("image/png");
+                assertThat(attachment.fileExtension()).isEqualTo("png");
+                // The publisher hands over the path it resolved through symlinks, not the one it was given:
+                // the containment guard proves the REAL location belongs to the run, and publishing the
+                // unresolved path would open the file a second time by a name that was never checked.
+                assertThat(attachment.file()).isEqualTo(picture.toRealPath());
+            });
+        } finally {
+            Files.deleteIfExists(picture);
+        }
+    }
+
+    @Test
+    @DisplayName("a file outside the run's artefacts directory is still refused — resolving the root did not open the channel")
+    void fileAttachmentOutsideTheArtefactsDirectory_isStillRefused(@TempDir Path elsewhere) throws Exception {
+        Path picture = elsewhere.resolve("not-ours.png");
+        Files.write(picture, new byte[] {(byte) 0x89, 'P', 'N', 'G'});
+
+        AllureReportingEventPublisher wired = new AllureReportingEventPublisher(lifecycle);
+
+        wired.publish(stepStarted("s1", "ui.expect"));
+        wired.publish(stepFinished("s1", "ui.expect", StepStatus.FAILED, "boom",
+                Map.of(), List.of(Attachment.ofFile("ui-screenshot", "image/png", picture))));
+
+        assertThat(lifecycle.fileAttachments()).isEmpty();
     }
 
     @Test
@@ -380,6 +428,10 @@ class AllureReportingEventPublisherTest {
 
         @Override
         public void addAttachment(String name, String type, String fileExtension, String content) {
+        }
+
+        @Override
+        public void addAttachment(String name, String type, String fileExtension, java.nio.file.Path file) {
         }
 
         @Override

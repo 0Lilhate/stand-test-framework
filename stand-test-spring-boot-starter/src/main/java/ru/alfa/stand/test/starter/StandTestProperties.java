@@ -8,6 +8,8 @@ import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import ru.alfa.stand.test.core.environment.AuthScheme;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
+import ru.alfa.stand.test.core.environment.UiAuthScheme;
+import ru.alfa.stand.test.core.environment.UiLoginChallenge;
 
 /**
  * Bindable configuration for the stand-test SDK, rooted at {@code stand.test}.
@@ -33,6 +35,15 @@ public class StandTestProperties {
      */
     private boolean enabled = true;
 
+    /**
+     * Declared <strong>format</strong> version of the environment registry (not the SDK version), mirroring
+     * the root {@code version} key of {@code stand-test-environments.yml}. Absent means version 1, so every
+     * configuration written before versioning existed keeps binding unchanged; a version newer than this
+     * SDK reads is rejected with a message naming both versions. See
+     * {@link ru.alfa.stand.test.core.environment.EnvironmentConfigFormat}.
+     */
+    private Integer version;
+
     private final Await await = new Await();
 
     private final Reporting reporting = new Reporting();
@@ -45,6 +56,14 @@ public class StandTestProperties {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public Integer getVersion() {
+        return version;
+    }
+
+    public void setVersion(Integer version) {
+        this.version = version;
     }
 
     public Await getAwait() {
@@ -125,8 +144,8 @@ public class StandTestProperties {
     }
 
     /**
-     * A single whitelisted environment: its logical services, datasources, topics, gRPC targets and
-     * (optional) Kafka cluster, all keyed by alias.
+     * A single whitelisted environment: its logical services, datasources, topics, gRPC targets, UI
+     * applications and (optional) Kafka cluster, all keyed by alias.
      */
     public static class Environment {
 
@@ -139,6 +158,8 @@ public class StandTestProperties {
         private final Map<String, GrpcTarget> grpcTargets = new LinkedHashMap<>();
 
         private final Map<String, KafkaCluster> kafkaClusters = new LinkedHashMap<>();
+
+        private final Map<String, UiApplication> uiApplications = new LinkedHashMap<>();
 
         private KafkaCluster kafkaCluster;
 
@@ -168,6 +189,311 @@ public class StandTestProperties {
 
         public Map<String, KafkaCluster> getKafkaClusters() {
             return kafkaClusters;
+        }
+
+        public Map<String, UiApplication> getUiApplications() {
+            return uiApplications;
+        }
+    }
+
+    /**
+     * A logical UI application: the alias a scenario addresses instead of a URL. {@code baseUrlRef} is a
+     * reference (an env-var name), {@code baseUrl} its Spring-resolved value twin — mutually exclusive,
+     * exactly as for a {@link Service}. Everything about how the run is performed (viewport, trace, sign-in)
+     * lives here rather than in the scenario, so the core scenario model stays free of browser fields.
+     *
+     * <p>Requires {@code stand.test.version: 2} or higher — the format version in which this section
+     * arrived.
+     */
+    public static class UiApplication {
+
+        private String baseUrl;
+
+        private String baseUrlRef;
+
+        private String defaultViewport;
+
+        private final Map<String, Viewport> viewportProfiles = new LinkedHashMap<>();
+
+        /**
+         * Whether a browser trace may be recorded: {@code off} (default) or {@code on-failure}. Bound as a
+         * string rather than the enum because YAML resolves an unquoted {@code off} to the boolean
+         * {@code false}; the shared core parser turns both spellings into the same mode.
+         */
+        private String trace;
+
+        private UiAuth auth;
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+
+        public String getBaseUrlRef() {
+            return baseUrlRef;
+        }
+
+        public void setBaseUrlRef(String baseUrlRef) {
+            this.baseUrlRef = baseUrlRef;
+        }
+
+        public String getDefaultViewport() {
+            return defaultViewport;
+        }
+
+        public void setDefaultViewport(String defaultViewport) {
+            this.defaultViewport = defaultViewport;
+        }
+
+        public Map<String, Viewport> getViewportProfiles() {
+            return viewportProfiles;
+        }
+
+        public String getTrace() {
+            return trace;
+        }
+
+        public void setTrace(String trace) {
+            this.trace = trace;
+        }
+
+        public UiAuth getAuth() {
+            return auth;
+        }
+
+        public void setAuth(UiAuth auth) {
+            this.auth = auth;
+        }
+    }
+
+    /**
+     * A named viewport size of a {@link UiApplication}, in CSS pixels.
+     */
+    public static class Viewport {
+
+        private int width;
+
+        private int height;
+
+        public int getWidth() {
+            return width;
+        }
+
+        public void setWidth(int width) {
+            this.width = width;
+        }
+
+        public int getHeight() {
+            return height;
+        }
+
+        public void setHeight(int height) {
+            this.height = height;
+        }
+    }
+
+    /**
+     * Sign-in configuration of a {@link UiApplication}. The scheme is spelled {@code scheme} — the same key
+     * a service's {@link Auth} uses.
+     *
+     * <p>The account roster ({@code credentialsPoolRef}) and the discovery account
+     * ({@code discoveryAccountRef}) are references and only references: there is deliberately no value twin
+     * for either, because a roster routed through the Spring {@code Environment} would sit there for the
+     * life of the context. There is no {@code credentialsPool} / {@code discoveryAccount} setter, so the
+     * value spelling binds nothing rather than binding something weaker.
+     *
+     * <p>{@code credentialsUsername}/{@code credentialsPassword} name one account directly, for an
+     * application that has exactly one; they exclude {@code credentialsPoolRef}. <strong>What that pair
+     * means depends on the declared format version</strong>, and the rule lives in one place —
+     * {@code EnvironmentRegistryFactory.uiCredential}, which the file front-end mirrors exactly:
+     *
+     * <ul>
+     *   <li><b>Version 4:</b> the bare field is a REFERENCE — the name of an environment variable — and
+     *       {@code *Ref} does not exist yet. Such a document keeps that meaning forever.</li>
+     *   <li><b>From version 5:</b> the bare field is the VALUE, resolved by Spring like {@code baseUrl} and
+     *       every other twin, while {@code credentialsUsernameRef}/{@code credentialsPasswordRef} carry the
+     *       reference. This is what makes {@code credentials-username: ${web_username:tks_Admin}} work here
+     *       at all: Spring expands the placeholder before the SDK sees the field, so a value and a variable
+     *       name arrive as the same string and cannot share one key.</li>
+     * </ul>
+     *
+     * <p>The placeholder trap therefore applies to every {@code *Ref} field on this surface, this pair
+     * included: <strong>a {@code *Ref} takes a bare variable NAME, never {@code ${VAR:default}}</strong>.
+     * Spring expands the placeholder at context startup, and the SDK then reads the expanded text as the
+     * name of a variable that does not exist — a rejected sign-in that looks like a wrong password. The
+     * {@code ${VAR:value}} spelling belongs in the value field here, and in either field of
+     * {@code stand-test-environments.yml}, whose loader expands placeholders itself.
+     */
+    public static class UiAuth {
+
+        private UiAuthScheme scheme;
+
+        private String credentialsPoolRef;
+
+        private String credentialsUsername;
+
+        private String credentialsPassword;
+
+        private String credentialsUsernameRef;
+
+        private String credentialsPasswordRef;
+
+        private final List<String> roles = new ArrayList<>();
+
+        private String discoveryAccountRef;
+
+        private UiLogin login;
+
+        private UiLoginChallenge challenge;
+
+        public UiAuthScheme getScheme() {
+            return scheme;
+        }
+
+        public void setScheme(UiAuthScheme scheme) {
+            this.scheme = scheme;
+        }
+
+        public String getCredentialsPoolRef() {
+            return credentialsPoolRef;
+        }
+
+        public void setCredentialsPoolRef(String credentialsPoolRef) {
+            this.credentialsPoolRef = credentialsPoolRef;
+        }
+
+        public String getCredentialsUsername() {
+            return credentialsUsername;
+        }
+
+        public void setCredentialsUsername(String credentialsUsername) {
+            this.credentialsUsername = credentialsUsername;
+        }
+
+        public String getCredentialsPassword() {
+            return credentialsPassword;
+        }
+
+        public void setCredentialsPassword(String credentialsPassword) {
+            this.credentialsPassword = credentialsPassword;
+        }
+
+        /**
+         * The NAME of the environment variable holding the login, when the value must not pass through the
+         * Spring Environment. From format version 5 this is the reference spelling; the bare
+         * {@code credentials-username} beside it is the value itself.
+         */
+        public String getCredentialsUsernameRef() {
+            return credentialsUsernameRef;
+        }
+
+        public void setCredentialsUsernameRef(String credentialsUsernameRef) {
+            this.credentialsUsernameRef = credentialsUsernameRef;
+        }
+
+        /**
+         * The NAME of the environment variable holding the password. Preferred over the value twin for a
+         * secret: a resolved value materialises in the Spring Environment, which actuator, a heap dump and
+         * a context report can all show.
+         */
+        public String getCredentialsPasswordRef() {
+            return credentialsPasswordRef;
+        }
+
+        public void setCredentialsPasswordRef(String credentialsPasswordRef) {
+            this.credentialsPasswordRef = credentialsPasswordRef;
+        }
+
+        public List<String> getRoles() {
+            return roles;
+        }
+
+        public String getDiscoveryAccountRef() {
+            return discoveryAccountRef;
+        }
+
+        public void setDiscoveryAccountRef(String discoveryAccountRef) {
+            this.discoveryAccountRef = discoveryAccountRef;
+        }
+
+        public UiLogin getLogin() {
+            return login;
+        }
+
+        public void setLogin(UiLogin login) {
+            this.login = login;
+        }
+
+        public UiLoginChallenge getChallenge() {
+            return challenge;
+        }
+
+        public void setChallenge(UiLoginChallenge challenge) {
+            this.challenge = challenge;
+        }
+    }
+
+    /**
+     * The sign-in form of a {@link UiApplication}: where it is and which elements it consists of.
+     *
+     * <p>Every value is a locator <em>expression</em> in the UI adapter's grammar ({@code testId=…},
+     * {@code role=button:Sign in}, {@code label=…}, {@code text=…}, {@code css=…}) — not a reference and not
+     * a credential. {@code signedIn} is the element present only once signed in; it is what tells a
+     * completed sign-in from rejected credentials, and a live reused session from an expired one.
+     */
+    public static class UiLogin {
+
+        private String path;
+
+        private String usernameLocator;
+
+        private String passwordLocator;
+
+        private String submitLocator;
+
+        private String signedInLocator;
+
+        public String getPath() {
+            return path;
+        }
+
+        public void setPath(String path) {
+            this.path = path;
+        }
+
+        public String getUsernameLocator() {
+            return usernameLocator;
+        }
+
+        public void setUsernameLocator(String usernameLocator) {
+            this.usernameLocator = usernameLocator;
+        }
+
+        public String getPasswordLocator() {
+            return passwordLocator;
+        }
+
+        public void setPasswordLocator(String passwordLocator) {
+            this.passwordLocator = passwordLocator;
+        }
+
+        public String getSubmitLocator() {
+            return submitLocator;
+        }
+
+        public void setSubmitLocator(String submitLocator) {
+            this.submitLocator = submitLocator;
+        }
+
+        public String getSignedInLocator() {
+            return signedInLocator;
+        }
+
+        public void setSignedInLocator(String signedInLocator) {
+            this.signedInLocator = signedInLocator;
         }
     }
 

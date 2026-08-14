@@ -1,7 +1,6 @@
 package ru.alfa.stand.test.scenario;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -34,23 +33,13 @@ final class KafkaStepTranslator {
         if (send) {
             SurfaceValues.putInlineOrResource(params, fields, "body", "bodyResource",
                     YamlStepKeys.BODY, YamlStepKeys.BODY_RESOURCE, true, location);
-            // Emit the flag only when the surface set it explicitly, so its absence means "default" (inject
-            // when the topic declares a HEADER correlation carrier) rather than an explicit opt-out.
-            if (fields.containsKey("injectCorrelationId")) {
-                params.put(YamlStepKeys.INJECT_CORRELATION_ID, SurfaceValues.boolFlag(fields, "injectCorrelationId", location));
-            }
+            SurfaceValues.putOptionalFlag(params, fields, "injectCorrelationId", YamlStepKeys.INJECT_CORRELATION_ID, location);
         } else {
             params.put(YamlStepKeys.CORRELATION_FROM_CONTEXT, SurfaceValues.boolFlag(fields, "correlationIdFromContext", location));
-            params.put(YamlStepKeys.ASSERTIONS, fields.containsKey("assert")
-                    ? SurfaceValues.assertions(fields.get("assert"), location + ".assert") : List.of());
-            params.put(YamlStepKeys.CAPTURES, fields.containsKey("capture")
-                    ? SurfaceValues.captures(fields.get("capture"), YamlStepKeys.JSON_PATH, location + ".capture") : List.of());
-            if (fields.containsKey("timeout")) {
-                params.put(YamlStepKeys.TIMEOUT_MILLIS, SurfaceValues.durationMillis(fields.get("timeout"), location + ".timeout"));
-            }
-            if (fields.containsKey("pollTimeout")) {
-                params.put(YamlStepKeys.POLL_TIMEOUT_MILLIS, SurfaceValues.durationMillis(fields.get("pollTimeout"), location + ".pollTimeout"));
-            }
+            SurfaceValues.putAssertions(params, fields, false, location);
+            SurfaceValues.putCaptures(params, fields, YamlStepKeys.JSON_PATH, location);
+            SurfaceValues.putOptionalDuration(params, fields, "timeout", YamlStepKeys.TIMEOUT_MILLIS, location);
+            SurfaceValues.putOptionalDuration(params, fields, "pollTimeout", YamlStepKeys.POLL_TIMEOUT_MILLIS, location);
         }
         return params;
     }

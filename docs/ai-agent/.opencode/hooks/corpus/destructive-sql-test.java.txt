@@ -1,0 +1,55 @@
+// VIOLATION FIXTURE — SQL the SDK's write-guard would refuse. Stored as .java.txt so nothing
+// compiles it.
+//
+// It plants FOUR statements of finding 3, and each is here to say something the sanctioned fixture
+// cannot. The pair matters: sanctioning `db.cleanup` and `db.write` is a hole unless the shape of the
+// sanction is exactly the SDK's own condition, and these are the near-misses.
+//
+// 1. DELETE with an author's own WHERE, WITH whereTestRunId beside it — the companion does not
+//    launder a statement the SDK would not produce: it appends its own WHERE and expects none.
+// 2. DELETE with no companion at all — nothing scopes it to this run.
+// 3. TRUNCATE with a companion beside it — DDL is sanctioned by nothing.
+// 4. INSERT carrying a second statement, WITH identifiedBy beside it — multi-statement is refused by
+//    the classifier before the question of a companion is asked.
+package ru.alfa.qa.test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
+import ru.alfa.stand.test.core.client.StandClient;
+import ru.alfa.stand.test.core.scenario.Scenario;
+import ru.alfa.stand.test.db.DbStep;
+import ru.alfa.stand.test.junit.StandTest;
+
+@StandTest
+class DestructiveSqlTest {
+
+    @Test
+    void ordersAreWiped(StandClient stand) {
+        Scenario scenario = Scenario.builder("orders-wipe")
+                .environment("ift")
+                .step(DbStep.cleanup("orders-db")
+                        .id("cleanup-with-own-where")
+                        .sql("DELETE FROM test_data.orders WHERE status = 'NEW'")
+                        .whereTestRunId("test_run_id")
+                        .build())
+                .step(DbStep.cleanup("orders-db")
+                        .id("cleanup-unscoped")
+                        .sql("DELETE FROM test_data.orders")
+                        .build())
+                .step(DbStep.cleanup("orders-db")
+                        .id("truncate-everything")
+                        .sql("TRUNCATE TABLE test_data.orders")
+                        .whereTestRunId("test_run_id")
+                        .build())
+                .step(DbStep.write("clients-db")
+                        .id("write-then-wipe")
+                        .sql("INSERT INTO app.clients(client_id) VALUES (:client_id); DELETE FROM app.clients")
+                        .param("client_id", "client-${testRunId}")
+                        .identifiedBy("client_id")
+                        .build())
+                .build();
+
+        assertThat(stand.run(scenario).isSuccessful()).isTrue();
+    }
+}

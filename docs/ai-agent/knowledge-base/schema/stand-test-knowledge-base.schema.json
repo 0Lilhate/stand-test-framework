@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://stand-test.alfa.ru/schema/stand-test-knowledge-base.schema.json",
   "title": "stand-test knowledge base",
-  "description": "Single contract for every stand-test knowledge-base file. A KB file is a YAML document with exactly ONE collection key (services / endpoints / kafkaTopics / datasources / dbProbes / grpcTargets / environments / testCaseMappings). The KB stores aliases, contracts and env-var REFERENCES only - never secret values, never URLs/hosts/ports/JDBC strings, never production configuration. Field names are camelCase; ids and aliases are kebab-case; SQL is canonical lowercase. On any conflict with the runtime, the SDK (EnvironmentRegistry, ForbiddenOperation, DefaultScenarioValidator) wins.",
+  "description": "Single contract for every stand-test knowledge-base file. A KB file is a YAML document with exactly ONE collection key (services / endpoints / kafkaTopics / datasources / dbProbes / grpcTargets / environments / testCaseMappings). The KB stores aliases, contracts and env-var REFERENCES only - never secret values, never URLs/hosts/ports/JDBC strings, never production configuration. Field names are camelCase; ids are kebab-case; an 'alias' is a foreign key into the environment registry and follows the REGISTRY's grammar (kebab-case plus '_', because a datasource alias often mirrors a database name); SQL is canonical lowercase. On any conflict with the runtime, the SDK (EnvironmentRegistry, ForbiddenOperation, DefaultScenarioValidator) wins.",
   "oneOf": [
     { "$ref": "#/$defs/servicesFile" },
     { "$ref": "#/$defs/endpointsFile" },
@@ -18,6 +18,13 @@
     "kebabId": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "minLength": 2,
+      "maxLength": 64
+    },
+    "registryAlias": {
+      "description": "An alias as the ENVIRONMENT REGISTRY spells it. This is a foreign key, not an identifier of the knowledge base: the registry owns the grammar, and a KB that cannot spell a legal registry alias breaks the very join it exists to make (the alias is what binds a KB entry, the registry and a generated test). Hence '_' is legal here and nowhere else - a datasource alias routinely mirrors the database name, which underscores. The entry's own 'id' stays kebab-case.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*([-_][a-z0-9]+)*$",
       "minLength": 2,
       "maxLength": 64
     },
@@ -81,6 +88,12 @@
       "maxLength": 500,
       "not": { "pattern": "(://|[jJ][dD][bB][cC]:)" }
     },
+    "longText": {
+      "description": "Traceability prose, where the CONTENT is the deliverable rather than a label: a recorded assumption and the reason a lookup could not resolve something are read by a human deciding whether to trust a generated test, and a cap that truncates the evidence defeats the field. Same anti-URL guard as freeText - the guard is what protects the contract; the length is only about readability, and 500 was measured to cut real entries in half.",
+      "type": "string",
+      "maxLength": 2000,
+      "not": { "pattern": "(://|[jJ][dD][bB][cC]:)" }
+    },
     "noUrl": {
       "description": "Reusable guard for identity/label fields: no URLs, no JDBC strings.",
       "not": { "pattern": "(://|[jJ][dD][bB][cC]:)" }
@@ -96,11 +109,11 @@
       "type": ["string", "number", "boolean"]
     },
     "valueHints": {
-      "description": "Per-field value semantics for generated test data. run-unique: derive from ${testRunId} or a capture, never a literal; current-date/future-date/past-date: compute in plain Java before the builder (Java track only - the AI format cannot express computed values); constant: a fixed business value from the case/KB verbatim; captured: comes from an earlier step's capture.",
+      "description": "Per-field value semantics for generated test data. run-unique: derive from ${testRunId} or a capture, never a literal; current-date/future-date/past-date: compute in plain Java before the builder (Java track only - the AI format cannot express computed values); constant: a fixed business value from the case/KB verbatim (reference/dictionary CODES, amounts, enum values); entity-handle: the value identifies a business ENTITY that must EXIST on the stand (client id, pin, account id/number, deal id) - it is provisioned via a create-API step and captured, or seeded on a write-allowed datasource, NEVER copied verbatim; if no provisioning path exists it is a blocking missing-info item, not a constant; captured: comes from an earlier step's capture.",
       "type": "object",
       "propertyNames": { "$ref": "#/$defs/fieldName" },
       "additionalProperties": {
-        "enum": ["constant", "run-unique", "current-date", "future-date", "past-date", "captured"]
+        "enum": ["constant", "entity-handle", "run-unique", "current-date", "future-date", "past-date", "captured"]
       },
       "maxProperties": 50
     },
@@ -224,7 +237,7 @@
       "required": ["id", "serviceId", "method", "path", "response", "allowedEnvironments"],
       "properties": {
         "id": { "$ref": "#/$defs/kebabId" },
-        "alias": { "$ref": "#/$defs/kebabId" },
+        "alias": { "$ref": "#/$defs/registryAlias" },
         "serviceId": { "$ref": "#/$defs/kebabId" },
         "method": { "enum": ["GET", "POST", "PUT", "DELETE"] },
         "path": { "$ref": "#/$defs/httpPath" },
@@ -304,10 +317,10 @@
     "kafkaTopic": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "alias", "direction", "correlation", "timeout", "allowedEnvironments"],
+      "required": ["id", "alias", "direction", "timeout", "allowedEnvironments"],
       "properties": {
         "id": { "$ref": "#/$defs/kebabId" },
-        "alias": { "$ref": "#/$defs/kebabId" },
+        "alias": { "$ref": "#/$defs/registryAlias" },
         "direction": {
           "description": "'produced' = the system under test publishes here (tests use kafka.expect); 'consumed' = the system under test consumes from here (tests may kafka.send).",
           "enum": ["produced", "consumed"]
@@ -315,7 +328,7 @@
         "description": { "$ref": "#/$defs/freeText" },
         "cluster": { "$ref": "#/$defs/kebabId" },
         "correlation": {
-          "description": "Kafka correlation is HEADER-only in the SDK (KEY/PAYLOAD_FIELD carriers throw at run time).",
+          "description": "Kafka correlation is HEADER-only in the SDK (KEY/PAYLOAD_FIELD carriers throw at run time). OPTIONAL, and its ABSENCE is a fact worth recording rather than an unfinished entry: TopicDefinition.correlation is nullable, so a registry may legally declare a topic whose producer sets no correlation header, and the KB must be able to describe that registry. What absence COSTS belongs in 'description': without a header carrier, kafka.expect can only select by a per-run-derived key, and a topic with neither carrier nor keys cannot be awaited at all on this SDK (KafkaStep.validateExpect demands one of the two). Say which of those it is - an agent that reads only 'no correlation' will otherwise assume the second.",
           "type": "object",
           "additionalProperties": false,
           "required": ["source", "headerName"],
@@ -375,7 +388,7 @@
       "required": ["id", "alias", "access", "allowedSchemas", "allowedEnvironments"],
       "properties": {
         "id": { "$ref": "#/$defs/kebabId" },
-        "alias": { "$ref": "#/$defs/kebabId" },
+        "alias": { "$ref": "#/$defs/registryAlias" },
         "description": { "$ref": "#/$defs/freeText" },
         "access": {
           "type": "object",
@@ -437,7 +450,7 @@
       "required": ["id", "alias", "serviceName", "correlation", "methods", "allowedEnvironments"],
       "properties": {
         "id": { "$ref": "#/$defs/kebabId" },
-        "alias": { "$ref": "#/$defs/kebabId" },
+        "alias": { "$ref": "#/$defs/registryAlias" },
         "description": { "$ref": "#/$defs/freeText" },
         "serviceName": {
           "type": "string",
@@ -643,14 +656,19 @@
             "additionalProperties": false,
             "required": ["field", "reason"],
             "properties": {
-              "field": { "type": "string", "maxLength": 120 },
-              "reason": { "$ref": "#/$defs/freeText" }
+              "field": {
+                "description": "WHAT is unresolved, in the lookup template's own words ('endpoint for cancel request'), not a field name - so it is a label and stays bounded, but 120 was measured to cut real ones off mid-sentence.",
+                "type": "string",
+                "maxLength": 300
+              },
+              "reason": { "$ref": "#/$defs/longText" }
             }
           }
         },
         "assumptions": {
+          "description": "Every default taken instead of asking, in a form a reviewer can check: the evidence is the point, so these are longText. A recorded assumption that had to be truncated to fit is no longer reviewable, which is the one job it has.",
           "type": "array",
-          "items": { "$ref": "#/$defs/freeText" }
+          "items": { "$ref": "#/$defs/longText" }
         },
         "generatedTest": {
           "type": "object",
@@ -667,7 +685,10 @@
             }
           }
         },
-        "status": { "enum": ["draft", "generated", "validated", "approved"] },
+        "status": {
+          "description": "Where the case stands. draft -> generated -> validated -> approved is progress TOWARD a test, and only a human sets approved. 'blocked' is not a stage of that line but its interruption: the case was analysed, the reason it cannot be automated is recorded in missing[], and nobody is working on it until an external precondition is met. Spelling that as 'draft' would claim work in progress where there is none, and the analysis - which is the expensive part and stops the next person repeating it - would read as unfinished rather than as a conclusion. An entry in this state carries no generatedTest, because there is no test.",
+          "enum": ["draft", "generated", "validated", "approved", "blocked"]
+        },
         "updated": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
       }
     },

@@ -15,11 +15,14 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  * <p>Time is read and advanced exclusively through an injected {@link TimeSource}, so timeout
  * behaviour is fully deterministic under test (a fake source advances on {@code sleep} instead of
  * blocking). The probe and predicate are evaluated on the calling thread. The deadline is computed
- * once from a monotonic reading; once past the optional initial {@code pollDelay}, each poll waits
- * the lesser of the poll interval and the remaining time, so the poll loop never overshoots the
- * timeout by more than one scheduling quantum. The initial {@code pollDelay} is honoured in full and
- * is therefore additive to the timeout budget. Deadline checks use overflow-safe difference
- * arithmetic, per the {@link System#nanoTime()} contract.
+ * once from a monotonic reading; each poll then waits the lesser of the poll interval and the
+ * remaining time, so the loop never overshoots the timeout by more than one scheduling quantum.
+ * Deadline checks use overflow-safe difference arithmetic, per the {@link System#nanoTime()} contract.
+ *
+ * <p><strong>The {@code pollDelay} is spent out of the timeout, not added to it.</strong> The deadline
+ * is fixed before the initial delay is slept, so a policy of 10 s with a 2 s delay waits 10 s in total
+ * and polls for 8 of them — not 12. The delay itself is always honoured in full, so one exceeding the
+ * timeout yields exactly one probe, performed after the deadline has already passed.
  */
 public final class DefaultAwaiter implements Awaiter {
 

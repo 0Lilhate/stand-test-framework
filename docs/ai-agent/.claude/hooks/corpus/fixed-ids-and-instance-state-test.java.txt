@@ -1,0 +1,65 @@
+// SAFETY FIXTURE — the java half of two findings that used to read documents only.
+// Stored as .java.txt so nothing compiles it. Handed to the scan as "OrderHandleTest.java".
+//
+// Planted violations:
+//   10. three ids pointing at one specific pre-provisioned row              (HIGH x3)
+//   10. ONE KNOWN COST: an amount passed as a keyed value reads as an id    (HIGH x1)
+//   17. two INSTANCE mutable fields carrying values between steps           (HIGH x2)
+//
+// The clean half matters as much and is why the forms are anchored on POSITION rather than on the
+// number: an id and a sum are both long runs of digits, and nothing in the text tells them apart.
+// An earlier draft reported three of the values below the divider — two of them in the kit's own
+// worked examples, which is the state where a detector gets switched off.
+//
+// The known cost is recorded rather than tuned away. `query("amount", "100000")` puts a sum in the
+// same position an id occupies, so finding 10 reports it; the finding is HEURISTIC and says
+// "confirm", and the checklist already tells the reviewer that monetary amounts are exempt. A
+// keyword list of "amount-like" parameter names would be the alternative, and it would go stale in
+// the first project whose domain spells it differently.
+package ru.alfa.qa.test;
+
+import java.util.ArrayList;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+
+class OrderHandleTest {
+
+    // 17 — a captured value accumulated in a field instead of flowing through the VariableStore.
+    private final List<String> captured = new ArrayList<>();
+
+    // 17 — a reused builder: the same object mutated by every step of every method.
+    private StringBuilder trace = new StringBuilder();
+
+    // ---- clean: not a finding, and each one used to be ----------------------------------------
+    // a plain business constant of the test class, not a captured value
+    private int expectedStatus = 200;
+    // injected, assigned by the constructor: nothing accumulates here
+    private final StandClient stand;
+
+    OrderHandleTest(StandClient stand) {
+        this.stand = stand;
+    }
+
+    @Test
+    void readsAnExistingOrder() {
+        Scenario scenario = Scenario.builder("order-handle")
+                .environment("ift")
+                // 10 — a client id copied from the case, sitting in a path segment
+                .step(RestStep.get("order-service").path("/v1/clients/1234567/orders").build())
+                // 10 — an account number in a value position
+                .step(RestStep.get("order-service").query("accountNumber", "40817810099910004312").build())
+                // 10 — a six-character handle with a digit in it: a pinEQ, not a dictionary code
+                .step(RestStep.get("order-service").query("pinEq", "A1B2C3").build())
+
+                // ---- clean: a money amount written as a JSON number is a business constant ----
+                .step(RestStep.post("order-service").path("/v1/orders").body("{\"amount\":5100000,\"currency\":\"RUR\"}").build())
+                // ---- the known cost: the same sum in a VALUE position is indistinguishable from an id ----
+                .step(RestStep.post("order-service").query("amount", "100000").build())
+                // ---- clean: run-unique, derived rather than written ----
+                .step(RestStep.get("order-service").path("/v1/orders/${testRunId}").build())
+                .build();
+
+        captured.add(stand.run(scenario).capture("orderId"));
+        trace.append("done");
+    }
+}

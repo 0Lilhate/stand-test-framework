@@ -1,7 +1,0 @@
-# INVALID by design: unknown fields are rejected; a bootstrap-servers value has no place here.
-services:
-  - id: client-service
-    name: Client Service
-    environments:
-      - ift
-    bootstrapServers: "localhost:9092"

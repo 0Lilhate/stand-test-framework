@@ -1,14 +1,18 @@
 package ru.alfa.stand.test.db;
 
-import java.math.BigDecimal;
-import java.util.Objects;
+import ru.alfa.stand.test.core.assertion.AssertionMatchers;
 
 /**
- * Type-aware comparison of an expected DSL value against a value read from a JDBC {@code ResultSet}, with
- * the same semantics as the REST and Kafka adapters: numbers compare by numeric value (so an expected
- * {@code int 100} matches a {@code BIGINT} {@code 100L} or a {@code NUMERIC} {@code 100.0}) but any other
- * type change is a genuine mismatch rather than being string-coerced, so a column changing type is caught
- * (plan §8.8).
+ * Type-aware comparison of an expected DSL value against a value read from a JDBC {@code ResultSet}.
+ * Delegates to {@link AssertionMatchers#equalsMatch(Object, Object)} — the one evaluator REST, Kafka and
+ * gRPC also use — so numbers compare by numeric value (an expected {@code int 100} matches a
+ * {@code BIGINT} {@code 100L} or a {@code NUMERIC} {@code 100.0}) while any other type change stays a
+ * genuine mismatch rather than being string-coerced, and a column changing type is caught (plan §8.8).
+ *
+ * <p>Non-finite values (NaN / Infinity) have no {@code BigDecimal} form: two identical {@code Double.NaN}
+ * match on the {@code Objects.equals} fast path ({@code Double.equals} canonicalises NaN), and a
+ * comparison against a different value is a mismatch rather than a raw {@code NumberFormatException}
+ * (plan §8.3).
  */
 final class DbValues {
 
@@ -16,21 +20,7 @@ final class DbValues {
     }
 
     static boolean valuesMatch(Object expected, Object actual) {
-        if (Objects.equals(expected, actual)) {
-            return true;
-        }
-        if (expected instanceof Number expectedNumber && actual instanceof Number actualNumber) {
-            try {
-                return new BigDecimal(expectedNumber.toString()).compareTo(new BigDecimal(actualNumber.toString())) == 0;
-            } catch (NumberFormatException notComparable) {
-                // A non-finite value (NaN / Infinity) has no BigDecimal form, so when compared against a
-                // *different* value it reaches here and is a mismatch, rather than letting a raw
-                // NumberFormatException escape (plan §8.3). Two identical Double.NaN already matched via the
-                // Objects.equals fast path above (Double.equals canonicalises NaN), so they never reach here.
-                return false;
-            }
-        }
-        return false;
+        return AssertionMatchers.equalsMatch(expected, actual);
     }
 
     static String render(Object value) {

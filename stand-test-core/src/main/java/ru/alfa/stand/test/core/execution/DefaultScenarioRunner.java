@@ -4,7 +4,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -19,6 +19,7 @@ import ru.alfa.stand.test.core.context.ScenarioContext;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
 import ru.alfa.stand.test.core.event.Attachment;
+import ru.alfa.stand.test.core.event.FailureAttachments;
 import ru.alfa.stand.test.core.event.NoOpReportingEventPublisher;
 import ru.alfa.stand.test.core.event.ReportingEventPublisher;
 import ru.alfa.stand.test.core.event.ScenarioEvent;
@@ -157,12 +158,7 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
         int total = steps.size();
         Instant startedAt = clock.instant();
         List<StepResult> stepResults = new ArrayList<>();
-        // primary is a LOCAL — never an instance field: this runner is a shared singleton invoked
-        // concurrently, so per-run failure state must stay thread-confined (parallel isolation, plan §8.2).
         Throwable primary = null;
-        // The whole run is wrapped in an MDC scope so every log line — the SDK's, the adapters', and the
-        // system-under-test client's on this thread — carries scenarioId/testRunId/correlationId (plan §17).
-        // MdcScope restores the prior MDC on close, keeping concurrent runs isolated.
         try (MdcScope scenarioScope = MdcScope.of(scenarioMdc(context))) {
             publishScenario(context, ScenarioPhase.STARTED);
             LOG.info("Scenario '{}' started: {} step(s), env={}", context.scenarioId(), total, context.environment());
@@ -179,16 +175,9 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
                     }
                 }
             } catch (RuntimeException | Error failure) {
-                // Capture the in-flight failure (the step loop throws StandTestException (RuntimeException) or
-                // StandTestAssertionError (extends Error)) so the finally can gate ON_FAILURE compensation and
-                // attach any cleanup failure as suppressed instead of masking it. Rethrown unchanged.
                 primary = failure;
                 throw failure;
             } finally {
-                // Order is load-bearing: drain compensations while the run-scoped connection is still open,
-                // THEN close resources and publish FINISHED, and only as the final act decide whether a
-                // compensation failure fails a green run or is suppressed onto the in-flight failure. Never
-                // throw before closeQuietly/publish — that would leak the connection and break the report.
                 CompensationReport report = drainCompensations(undoLog, scenario.cleanupPolicy(), primary != null, context);
                 closeQuietly(resourceScope);
                 publishScenario(context, ScenarioPhase.FINISHED);
@@ -227,10 +216,6 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
                     outcome = CompensationOutcome.failed(compensator.actionId(), compensator.target(), "compensator returned a null outcome", null, Map.of());
                 }
             } catch (Throwable unexpected) {
-                // A Compensator must not throw (it folds errors into a FAILED outcome), but this defensive
-                // net catches Throwable — including Error — so a contract-violating compensator or a JVM
-                // Error can never escape the drain, skip the closeQuietly/publish(FINISHED) tail, or mask the
-                // in-flight failure. The escape is recorded as a FAILED outcome and the drain continues.
                 outcome = CompensationOutcome.failed(compensator.actionId(), compensator.target(), unexpected.getMessage(), unexpected, Map.of());
             }
             outcomes.add(outcome);
@@ -279,7 +264,7 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
         if (outcome == null) {
             diagnostics = Map.of();
         } else {
-            diagnostics = new HashMap<>(outcome.diagnostics());
+            diagnostics = new LinkedHashMap<>(outcome.diagnostics());
             diagnostics.put("compensation.status", outcome.status().name());
             diagnostics.put("compensation.target", outcome.target());
             if (outcome.affectedRows() >= 0) {
@@ -344,8 +329,6 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
                     executor.prepare(step, executionContext);
                 } catch (StandTestException alreadyClassified) {
                     recordPrepareFailure(step, start, context, stepResults, alreadyClassified);
-                    // Already classified by the adapter — propagated unwrapped so its precise diagnosis
-                    // survives; the step context still reaches the operator through this log line.
                     LOG.error("{} failed to prepare: {}", stepLabel(index + 1, total, step), safeMessage(alreadyClassified), alreadyClassified);
                     throw alreadyClassified;
                 } catch (RuntimeException unexpected) {
@@ -372,10 +355,6 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
         try {
             resourceScope.closeAll();
         } catch (Throwable closeFailure) {
-            // Closing run-scoped resources is best-effort in the finally block: a faulty close must never
-            // mask the real test outcome (a thrown step failure), fail an otherwise-passing run, or skip the
-            // FINISHED publish that follows. Throwable (not just RuntimeException) is swallowed so an Error
-            // from a resource's close() cannot alter the outcome either — but it is logged at WARN (plan §17).
             LOG.warn("Failed to close run-scoped resources (best-effort, ignored)", closeFailure);
         }
     }
@@ -412,9 +391,6 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
                 LOG.error("{}", message, unexpected);
                 throw new StandTestException(message, unexpected);
             }
-            // The executor returned normally. Recording and the FINISHED event happen OUTSIDE the try above
-            // so that a failure of the (best-effort) reporting publisher can never reclassify a passing step
-            // as failed or add a duplicate StepResult (plan §17: reporting is a side-channel).
             stepResults.add(result);
             publishStep(context, step, StepPhase.FINISHED, result.status(), result.errorMessage(), result.diagnostics(), result.attachments());
             logStepOutcome(index, total, step, result);
@@ -437,10 +413,58 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
             StepStatus status,
             Throwable cause) {
         String message = safeMessage(cause);
-        Map<String, Object> diagnostics = Map.of("exception.class", cause.getClass().getName());
-        StepResult failed = new StepResult(step.id(), step.type(), status, start, clock.instant(), message, diagnostics);
+        Map<String, Object> diagnostics = new LinkedHashMap<>();
+        diagnostics.put("exception.class", cause.getClass().getName());
+        if (cause instanceof FailureAttachments withEvidence) {
+            Map<String, Object> supplied = withEvidence.failureDiagnostics();
+            if (supplied == null) {
+                warnNullEvidence(cause, "failureDiagnostics()");
+            } else {
+                diagnostics.putAll(supplied);
+            }
+        }
+        List<Attachment> attachments = failureAttachments(cause);
+        StepResult failed = new StepResult(step.id(), step.type(), status, start, clock.instant(), message, diagnostics, attachments);
         stepResults.add(failed);
         publishStep(context, step, StepPhase.FINISHED, failed.status(), failed.errorMessage(), failed.diagnostics(), failed.attachments());
+    }
+
+    /**
+     * Reads the evidence a failing step opted to carry ({@link FailureAttachments}): a screenshot and
+     * console log on a broken UI step must reach the report rather than die with the thrown failure.
+     * A failure that does not implement the marker carries nothing — the pre-existing behaviour.
+     *
+     * @param cause the thrown failure of the step
+     * @return the attachments the failure opted in to carry, or an empty list
+     */
+    private static List<Attachment> failureAttachments(Throwable cause) {
+        if (cause instanceof FailureAttachments withEvidence) {
+            List<Attachment> supplied = withEvidence.failureAttachments();
+            if (supplied == null) {
+                warnNullEvidence(cause, "failureAttachments()");
+                return List.of();
+            }
+            return supplied;
+        }
+        return List.of();
+    }
+
+    /**
+     * Reports an implementation of {@link FailureAttachments} that broke the marker's "empty, never null"
+     * contract, and keeps going.
+     *
+     * <p>This is deliberately not an exception. The marker is read while the runner is recording a step
+     * that ALREADY failed, so throwing here would replace the run's real reason for failing — the assertion
+     * the test was about — with a failure of the reporting branch. The same rule the artefact lane follows
+     * everywhere (UITG-S013: a screenshot that cannot be taken is a WARN, never a substituted failure): a
+     * misbehaving adopter loses its evidence, never the run its diagnosis.
+     *
+     * @param cause the failure that implements the marker
+     * @param method the marker method that returned null
+     */
+    private static void warnNullEvidence(Throwable cause, String method) {
+        LOG.warn("{} returned null from {}: the contract of FailureAttachments is 'empty, never null'. "
+                + "The evidence is dropped and the step's own failure is kept.", cause.getClass().getName(), method);
     }
 
     private StepExecutor resolveExecutor(ScenarioStep step) {
@@ -498,11 +522,6 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
         try {
             reportingEventPublisher.publish(event);
         } catch (Throwable reportingFailure) {
-            // Reporting is a best-effort side-channel (plan §17): a publisher failure must never change
-            // the test outcome. Throwable (not just RuntimeException) is swallowed — exactly as
-            // closeQuietly does — so an Error from a version-skewed reporting sink (e.g. a LinkageError /
-            // NoClassDefFoundError from a mismatched allure-model on the consumer classpath) cannot escape
-            // and replace the primary test failure the runner is about to throw. Logged at WARN.
             LOG.warn("Reporting publisher failed for a scenario event (best-effort, ignored)", reportingFailure);
         }
     }
@@ -511,11 +530,6 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
         try {
             reportingEventPublisher.publish(event);
         } catch (Throwable reportingFailure) {
-            // Reporting is a best-effort side-channel (plan §17): a publisher failure must never change
-            // the test outcome. Throwable (not just RuntimeException) is swallowed — exactly as
-            // closeQuietly does — so an Error from a version-skewed reporting sink (e.g. a LinkageError /
-            // NoClassDefFoundError from a mismatched allure-model on the consumer classpath) cannot escape
-            // and replace the primary test failure the runner is about to throw. Logged at WARN.
             LOG.warn("Reporting publisher failed for a step event (best-effort, ignored)", reportingFailure);
         }
     }

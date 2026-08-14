@@ -1,0 +1,159 @@
+schemaVersion: 2
+id: ui-form-validation-description-too-short
+category: ui-form-validation
+title: 'Form validation: «Отправить» stays disabled on an empty subject, a short description raises its
+  message'
+rationale: 'The two mistakes a validation case invites. First, addressing with ui.expect a message the
+  screen renders only AFTER the input — gate U19, and the artifact passes by hand and flakes on CI.
+  Second, pressing «Отправить» to finish a flow the case explicitly stops before. The case has a value
+  of its own besides: nothing here is irreversible, so the whole run leaves the stand exactly as it
+  found it.'
+input:
+  file: input.md
+  seededArtifacts:
+  - seeded/UiDiscoveryReport.md
+ui:
+  application: client-portal
+  environment: ift
+  role: client
+  entryPath: /requests/new
+  discoveryEvidence: seeded-report
+  irreversibleActionRequested: false
+  expectedLocatorRungs:
+  - 1
+  - 2
+  - 3
+requirements:
+- id: r1
+  text: Sign-in happens through ui.login with the role the case names
+  coveredBy: step
+- id: r2
+  text: The «Тема» field is asserted visible and enabled on the loaded screen
+  coveredBy: assertion
+- id: r3
+  text: The «Отправить» button is asserted disabled while «Тема» is empty
+  coveredBy: negative-path
+- id: r4
+  text: A description shorter than ten characters raises the message under the field
+  coveredBy: negative-path
+- id: r5
+  text: The message is asserted by its verbatim text, not by a fragment of it
+  coveredBy: assertion
+- id: r6
+  text: The message is awaited with a bounded wait, because the screen renders it after the input
+  coveredBy: assertion
+- id: r7
+  text: Once the description is long enough the message disappears and «Отправить» becomes enabled
+  coveredBy: assertion
+- id: r8
+  text: The request is never sent — the irreversible control stays unclicked, so the run leaves no data
+  coveredBy: refusal
+expected:
+  terminalState: COMPLETED
+  plan:
+    track: JAVA_DSL
+    stepTypes:
+    - ui.login
+    - ui.open
+    - ui.expect
+    - ui.fill
+    - ui.expectEventually
+    minSteps: 8
+    maxSteps: 14
+    allSourced: true
+  execution:
+    outcome: NOT_RUN
+    skipped: 0
+  repair:
+    maxIterations: 0
+  humanRequired:
+    expected: false
+  artifacts:
+    required:
+    - ui-case
+    - completeness-report
+    - scenario-design
+    - page-object
+    - ui-test
+    - generation-report
+    - original-snapshot
+    - safety-report
+    - quality-report
+    - kb-mapping
+  questions:
+    mustAssume:
+    - The wait for the message is bounded at 5-10 s — the case says it appears with a small delay and
+      offers nothing more precise
+    - The subject and the description are arbitrary literals; the case fixes the length rule, not the
+      values
+    - Nothing is submitted, so no typed value needs ${testRunId} — the run persists nothing that a
+      second run could collide with
+    mustNotAsk:
+    - Which locator addresses the message under «Описание» — the supplied discovery report answers it
+    - Whether «Отправить» is disabled on load — the discovery report records the state
+    - What the validation message says — the discovery report quotes it verbatim, observed
+  mandatoryChecks:
+  - VISIBLE·EQUALS·true and ENABLED·EQUALS·true on «Тема», asserted once with ui.expect — it is there
+    on load, so an await would be noise
+  - ENABLED·EQUALS·false on «Отправить» while «Тема» is empty
+  - TEXT·EQUALS on the message, carrying the wording of the discovery report verbatim, not a fragment
+    and not a paraphrase
+  - The message is reached through ui.expectEventually with a bounded within(...) — the screen renders
+    it after the input, so ui.expect there is gate U19
+  - VISIBLE·EQUALS·false on the message once «Описание» is long enough, reached through ui.expectEventually
+    with a bounded within(...) — the report records the disappearance as asynchronous too
+  - ENABLED·EQUALS·true on «Отправить» after the form becomes valid, awaited rather than asserted once
+  - No click on «Отправить» anywhere in the artifact — the case stops before the irreversible control
+  - Every locator constant sits in a Page Object of the screen, none in the test body
+  - The test class carries @EnabledIfEnvironmentVariable on the application's base-url variable
+  - The generation report states the residual data as none, explicitly — silence there is not the same
+    claim
+  forbiddenConstructs:
+  - literal-url
+  - thread-sleep
+  - driver-wait
+  - awaitility
+  - xpath
+  - locator-outside-page-object
+  - invented-locator
+  - invented-testid
+  - hand-rolled-login
+  - unbounded-wait
+  - inline-secret
+  - irreversible-action
+  forbiddenArtifactPatterns:
+  - http://
+  - https://
+  - Thread\.sleep\(
+  - Awaitility\.
+  - waitForTimeout
+  - By\.xpath
+  - '"Authorization"'
+  - UiStep\.click\(
+  gates:
+    compile:
+      expected: PASS
+      note: The test and its Page Object compile and pass checkstyle in the consumer project.
+    safety:
+      expected: PASS
+      mustNotFlag:
+      - U1
+      - U2
+      - U3
+      - U5
+      - U6
+      - U9
+      - U11a
+      - U15
+      - U17
+      - U19
+      note: 'U19 is the gate this case is built around: the message exists only after the input, and a
+        one-shot ui.expect on it is the finding.'
+    quality:
+      expected: APPROVE
+repeats: 1
+notes: 'execution.outcome is NOT_RUN by construction, not by omission: the corpus ships no browser-side
+  double, so the browser half needs a live DEV/IFT application (external gates G-3/G-5). One repeat is
+  enough here — what this case scores is an authoring decision (expectEventually over expect, no click
+  at all), which one generation already shows; the flakiness budget of three repeats sits on the
+  positive-flow case, which is the one with a submission whose timing can vary.'

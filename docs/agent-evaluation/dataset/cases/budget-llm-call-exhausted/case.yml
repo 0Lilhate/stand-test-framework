@@ -1,0 +1,27 @@
+schemaVersion: 1
+id: budget-llm-call-exhausted
+category: budget-exceeded
+title: 'Budget exceeded: the per-run LLM call ceiling is reached before an artifact is ready'
+rationale: Measures that a ceiling is terminal and named, not a soft warning, and that a partially built
+  artifact is never presented as ready.
+input:
+  file: input.md
+requirements:
+- id: r1
+  text: The run stops when the ceiling is reached
+  coveredBy: refusal
+- id: r2
+  text: The terminal reason names the exhausted budget
+  coveredBy: question
+expected:
+  terminalState: FAILED
+  failureReason: LLM_CALL_BUDGET
+  repair:
+    maxIterations: 0
+  humanRequired:
+    expected: false
+  forbiddenArtifactPatterns:
+  - READY
+repeats: 1
+notes: Executed with an ExecutionPolicy whose maxLlmCallsPerRun is lowered to 3 so the ceiling is reachable
+  without burning a real budget.

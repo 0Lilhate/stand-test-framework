@@ -1,0 +1,152 @@
+schemaVersion: 2
+id: ui-fragile-locators-no-testid
+category: ui-fragile-locators
+title: 'Fragile locators: a legacy screen where rung 1 does not exist at all'
+rationale: 'Measures the rung discipline where it actually costs something. Every element of this screen
+  is addressable only below `data-testid`, so an invented test id would look more natural here than
+  anywhere else in the corpus — and the fragile list, which feeds the D-5 escalation, is only worth
+  reading if it is complete.'
+input:
+  file: input.md
+  seededArtifacts:
+  - seeded/UiDiscoveryReport.md
+ui:
+  application: client-portal
+  environment: ift
+  role: client
+  entryPath: /requests
+  discoveryEvidence: seeded-report
+  irreversibleActionRequested: false
+  expectedLocatorRungs:
+  - 2
+  - 3
+  - 6
+requirements:
+- id: r1
+  text: Every locator sits at the highest rung the screen actually supports, and none is a test id
+  coveredBy: step
+- id: r2
+  text: The filter is set and applied, and the table is asserted present afterwards
+  coveredBy: assertion
+- id: r3
+  text: The request number is asserted by shape, never by a value belonging to somebody else's request
+  coveredBy: assertion
+- id: r4
+  text: The table is re-rendered asynchronously, so the assertion after «Показать» waits
+  coveredBy: assertion
+- id: r5
+  text: Every locator of the Page Object is listed in the generation report with its rung and why no higher
+    one was available
+  coveredBy: assertion
+- id: r6
+  text: The brittle CSS selector is flagged separately from the merely fragile ones
+  coveredBy: assertion
+- id: r7
+  text: A data-testid request is raised with the product team, with the count of locators it would move to
+    rung 1
+  coveredBy: question
+expected:
+  terminalState: COMPLETED
+  plan:
+    track: JAVA_DSL
+    stepTypes:
+    - ui.login
+    - ui.open
+    - ui.fill
+    - ui.click
+    - ui.expectEventually
+    - ui.expect
+    minSteps: 6
+    maxSteps: 12
+    allSourced: true
+  execution:
+    outcome: NOT_RUN
+    skipped: 0
+  repair:
+    maxIterations: 0
+  humanRequired:
+    expected: false
+  artifacts:
+    required:
+    - ui-case
+    - completeness-report
+    - scenario-design
+    - page-object
+    - ui-test
+    - generation-report
+    - original-snapshot
+    - safety-report
+    - quality-report
+    - kb-mapping
+  questions:
+    mustAsk:
+    - 'Can the product team add `data-testid` to this screen — asked as the D-5 escalation with the
+      count of locators it would move to rung 1, and not as a blocker: the test ships either way'
+    mustAssume:
+    - The filter is filled as text, not selected from a list — the discovery report records it as a plain
+      input, and the SDK has no select step in this version
+    - The wait after «Показать» is bounded at 10-20 s; the report observed about a second and nothing in
+      the case gives an SLA
+    mustNotAsk:
+    - Whether the screen has data-testid attributes — the report answers it for all five elements
+    - How to address the table — the CSS fallback is recorded, with its limit
+  mandatoryChecks:
+  - Not one UiLocator.testId anywhere — rung 1 does not exist on this screen, so a test id could only be invented
+  - The number cell locator is the narrowed one from the report, because the bare class matches twelve elements
+    and a step addressing several is a run-time failure
+  - The assertion after «Показать» is ui.expectEventually with a bounded within(...), since the table is
+    re-requested
+  - TEXT·MATCHES on the request number written as a full-string match, and no exact value from a foreign row
+  - The report's fragile section lists ALL locator constants, not only the fragile ones, so the tally can be
+    checked against the Page Object
+  - The brittle selector (three-step chain plus :first-child) is marked brittle, distinctly from fragile
+  - The report carries the request to the product team with the number of locators a `data-testid`
+    would lift to rung 1 — the D-5 escalation is raised, not merely made possible
+  forbiddenConstructs:
+  - invented-testid
+  - xpath
+  - literal-url
+  - locator-outside-page-object
+  - thread-sleep
+  - driver-wait
+  - unbounded-wait
+  - irreversible-action
+  forbiddenArtifactPatterns:
+  - http://
+  - https://
+  - Thread\.sleep\(
+  - waitForTimeout
+  - UiLocator\.testId\("
+  - By\.xpath
+  - //\*\[@
+  gates:
+    compile:
+      expected: PASS
+    safety:
+      expected: PASS-WITH-NOTES
+      mustFlag:
+      - U18
+      mustNotFlag:
+      - U1
+      - U2
+      - U3
+      - U6
+      - U11a
+      - U17
+      note: U18 is a HIGH, not a BLOCK — a brittle selector on a screen with no better rung is a fact to
+        record, not a reason to refuse. What would be a BLOCK is a test id that does not exist (U1).
+    quality:
+      expected: APPROVE-WITH-NOTES
+      mustFlag:
+      - The test reads the first row of a list the run did not create, so its ordering is the server's to
+        change — a limit that belongs in the report
+      - Four of four locators are fragile, which is the D-5 escalation evidence rather than a defect of this
+        test
+repeats: 1
+notes: 'One known way to trip `UiLocator\.testId\("` here is template residue: the scenario-design
+  template is a worked example of ANOTHER screen and its provenance table carries two rung-1 rows. A
+  design that keeps them is not a false positive — it is a design describing the wrong screen, and the
+  finding names the exact string. Rung 1 being absent is the whole case: the fragile share here is 100%, far above the KPI-9
+  escalation threshold, and that is the correct outcome rather than a failure — the metric exists to
+  trigger the `data-testid` conversation with the product team, which the report must ask for. KPI-9
+  itself is counted statically over merged Page Objects, never from this report.'

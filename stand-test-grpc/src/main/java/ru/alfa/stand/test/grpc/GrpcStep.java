@@ -329,24 +329,19 @@ public final class GrpcStep {
         return parameters;
     }
 
+    /** An EQUALS assertion omits the matcher key entirely — an absent wire matcher IS equals (core contract). */
     private List<Map<String, Object>> assertionMaps() {
-        List<Map<String, Object>> list = new ArrayList<>();
-        for (GrpcAssertion assertion : this.assertions) {
-            if (assertion.matcher() == AssertionMatcher.EQUALS) {
-                list.add(Map.of(GrpcStepParameters.JSON_PATH, assertion.jsonPath(), GrpcStepParameters.EXPECTED_VALUE, assertion.expectedValue()));
-            } else {
-                list.add(Map.of(GrpcStepParameters.JSON_PATH, assertion.jsonPath(), GrpcStepParameters.EXPECTED_VALUE, assertion.expectedValue(), GrpcStepParameters.MATCHER, assertion.matcher().name()));
-            }
-        }
-        return List.copyOf(list);
+        return this.assertions.stream()
+                .map(assertion -> assertion.matcher() == AssertionMatcher.EQUALS
+                        ? Map.of(GrpcStepParameters.JSON_PATH, assertion.jsonPath(), GrpcStepParameters.EXPECTED_VALUE, assertion.expectedValue())
+                        : Map.of(GrpcStepParameters.JSON_PATH, assertion.jsonPath(), GrpcStepParameters.EXPECTED_VALUE, assertion.expectedValue(), GrpcStepParameters.MATCHER, assertion.matcher().name()))
+                .toList();
     }
 
     private List<Map<String, Object>> captureMaps() {
-        List<Map<String, Object>> list = new ArrayList<>();
-        for (GrpcCapture capture : this.captures) {
-            list.add(Map.of(GrpcStepParameters.VARIABLE_NAME, capture.variableName(), GrpcStepParameters.JSON_PATH, capture.jsonPath()));
-        }
-        return List.copyOf(list);
+        return this.captures.stream()
+                .map(capture -> Map.<String, Object>of(GrpcStepParameters.VARIABLE_NAME, capture.variableName(), GrpcStepParameters.JSON_PATH, capture.jsonPath()))
+                .toList();
     }
 
     private static String requireNonBlank(String value, String what) {

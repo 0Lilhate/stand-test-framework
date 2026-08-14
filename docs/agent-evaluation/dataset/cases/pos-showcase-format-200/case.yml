@@ -1,0 +1,44 @@
+schemaVersion: 1
+id: pos-showcase-format-200
+category: positive-simple
+title: 'Happy path: fetch one showcase format and expect HTTP 200'
+rationale: The floor of the corpus. If this case does not pass, no other number is worth reading.
+input:
+  file: input.md
+requirements:
+- id: r1
+  text: A GET request is issued against the showcase format operation
+  coveredBy: step
+- id: r2
+  text: HTTP status 200 is asserted
+  coveredBy: assertion
+expected:
+  terminalState: COMPLETED
+  retrieval:
+    matched:
+    - showcase-mock
+    - get-showcases-formats-code
+    mustNotMatch:
+    - post-decoder
+  plan:
+    track: AI_SCENARIO
+    stepTypes:
+    - rest.get
+    minSteps: 1
+    maxSteps: 2
+    allSourced: true
+  execution:
+    outcome: PASSED
+    skipped: 0
+  repair:
+    maxIterations: 0
+  humanRequired:
+    expected: false
+repeats: 1
+sut:
+  mode: static
+  responses:
+  - method: GET
+    path: /showcases/formats/DEMO-001
+    status: 200
+    body: '{"code":"DEMO-001"}'

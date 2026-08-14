@@ -9,10 +9,12 @@ import java.sql.SQLException;
 import java.time.Duration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import ru.alfa.stand.test.await.DefaultAwaiter;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
+import ru.alfa.stand.test.core.exception.DiagnosticAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.execution.StepExecutionContext;
@@ -109,6 +111,20 @@ class DbStepExecutorExpectTest {
                 .isInstanceOf(StandTestAssertionError.class)
                 .hasMessageContaining("did not observe the expected value")
                 .hasMessageContaining("lastObserved=<no rows>");
+    }
+
+    @Test
+    @DisplayName("a timed-out expect carries the await's structured diagnostics into the report, alongside the datasource and the query")
+    void timeout_carriesReportableDiagnostics() {
+        DbStepExecutor executor = DbTestSupport.executor(new DefaultAwaiter(new FakeTimeSource()));
+
+        assertThatThrownBy(() -> executor.execute(expectStatus("missing", "DONE"), this.context))
+                .isInstanceOf(DiagnosticAssertionError.class)
+                .asInstanceOf(InstanceOfAssertFactories.type(DiagnosticAssertionError.class))
+                .extracting(DiagnosticAssertionError::failureDiagnostics)
+                .satisfies(diagnostics -> assertThat(diagnostics)
+                        .containsEntry("db.expected", "DONE")
+                        .containsKeys("await", "attempts", "elapsed", "timeout", "db.datasource", "db.sql"));
     }
 
     @Test

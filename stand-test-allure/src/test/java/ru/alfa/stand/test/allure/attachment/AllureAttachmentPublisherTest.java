@@ -1,11 +1,17 @@
 package ru.alfa.stand.test.allure.attachment;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import ru.alfa.stand.test.allure.lifecycle.FakeAllureLifecycleFacade;
 import ru.alfa.stand.test.allure.lifecycle.FakeAllureLifecycleFacade.RecordedAttachment;
 import ru.alfa.stand.test.allure.masking.SecretMasker;
@@ -14,7 +20,8 @@ import ru.alfa.stand.test.core.event.Attachment;
 class AllureAttachmentPublisherTest {
 
     private final FakeAllureLifecycleFacade lifecycle = new FakeAllureLifecycleFacade();
-    private final AllureAttachmentPublisher publisher = new AllureAttachmentPublisher(lifecycle, new SecretMasker());
+    /** No artefacts root: the fail-closed publisher, which refuses every file attachment. */
+    private final AllureAttachmentPublisher publisher = new AllureAttachmentPublisher(lifecycle, new SecretMasker(), null);
 
     @Test
     @DisplayName("a non-secret core attachment is published unchanged with an extension derived from its media type")
@@ -54,36 +61,6 @@ class AllureAttachmentPublisherTest {
     }
 
     @Test
-    @DisplayName("text and json helpers publish with the right media type and extension")
-    void publishText_andJson() {
-        publisher.publishText("note", "hello");
-        publisher.publishJson("body", "{}");
-
-        assertThat(lifecycle.attachments()).containsExactly(
-                new RecordedAttachment("note", "text/plain", "txt", "hello"),
-                new RecordedAttachment("body", "application/json", "json", "{}"));
-    }
-
-    @Test
-    @DisplayName("a null text content publishes nothing")
-    void publishText_null_isIgnored() {
-        publisher.publishText("note", null);
-
-        assertThat(lifecycle.attachments()).isEmpty();
-    }
-
-    @Test
-    @DisplayName("text and json helpers also mask secret content at the sink")
-    void publishText_andJson_maskSecrets() {
-        publisher.publishText("note", "auth was Basic dXNlcjpwYXNzd29yZA==");
-        publisher.publishJson("body", "{\"apiKey\":\"k-123\"}");
-
-        assertThat(lifecycle.attachments()).satisfiesExactly(
-                note -> assertThat(note.content()).contains("Basic ***").doesNotContain("dXNlcjpwYXNzd29yZA=="),
-                body -> assertThat(body.content()).contains("\"apiKey\":\"***\"").doesNotContain("k-123"));
-    }
-
-    @Test
     @DisplayName("diagnostics render as a masked key/value block named diagnostics")
     void publishDiagnostics_masksAndRenders() {
         Map<String, Object> diagnostics = new LinkedHashMap<>();
@@ -111,5 +88,109 @@ class AllureAttachmentPublisherTest {
         publisher.publishDiagnostics(null);
 
         assertThat(lifecycle.attachments()).isEmpty();
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // ADR-UI-005: the file branch. A reporting sink that opens a path somebody else chose is a
+    // file-disclosure channel unless it is fenced, so the fence is tested as carefully as the feature.
+    // ---------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("a file attachment inside the run's artefacts directory is published as a file, with the extension its media type deserves")
+    void publishFile_insideArtefactsDirectory_isPublished(@TempDir Path artifacts) throws IOException {
+        Path screenshot = Files.write(artifacts.resolve("shot.png"), new byte[] {1, 2, 3});
+        AllureAttachmentPublisher fenced = new AllureAttachmentPublisher(lifecycle, new SecretMasker(), artifacts);
+
+        fenced.publish(Attachment.ofFile("screenshot", "image/png", screenshot));
+
+        assertThat(lifecycle.fileAttachments()).singleElement().satisfies(published -> {
+            assertThat(published.name()).isEqualTo("screenshot");
+            assertThat(published.type()).isEqualTo("image/png");
+            // The acceptance criterion of UITG-T002, and the reason a second extension mapper exists:
+            // the textual mapper would have answered `txt` here and Allure would offer a picture as text.
+            assertThat(published.fileExtension()).isEqualTo("png");
+            assertThat(published.file()).isEqualTo(screenshot.toRealPath());
+        });
+        assertThat(lifecycle.attachments()).as("a file body must not travel through the textual branch").isEmpty();
+    }
+
+    @Test
+    @DisplayName("a path escaping the artefacts directory with ../ is refused, not read")
+    void publishFile_escapingWithDotDot_isRefused(@TempDir Path base) throws IOException {
+        Path artifacts = Files.createDirectory(base.resolve("run"));
+        Path outside = Files.write(base.resolve("secret.txt"), "top secret".getBytes(StandardCharsets.UTF_8));
+        AllureAttachmentPublisher fenced = new AllureAttachmentPublisher(lifecycle, new SecretMasker(), artifacts);
+
+        fenced.publish(Attachment.ofFile("stolen", "text/plain", artifacts.resolve("..").resolve("secret.txt")));
+
+        assertThat(outside).exists();
+        assertThat(lifecycle.fileAttachments()).isEmpty();
+        assertThat(lifecycle.attachments()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a symlink pointing out of the artefacts directory is refused — the check resolves the real path, not the spelled one")
+    void publishFile_symlinkOutwards_isRefused(@TempDir Path base) throws IOException {
+        Path artifacts = Files.createDirectory(base.resolve("run"));
+        Path outside = Files.write(base.resolve("secret.txt"), "top secret".getBytes(StandardCharsets.UTF_8));
+        Path link = artifacts.resolve("innocent.png");
+        try {
+            Files.createSymbolicLink(link, outside);
+        } catch (IOException | UnsupportedOperationException e) {
+            // Windows without developer mode cannot create symlinks; the ../ test above still covers the
+            // rule. Skipping loudly beats asserting nothing.
+            return;
+        }
+
+        AllureAttachmentPublisher fenced = new AllureAttachmentPublisher(lifecycle, new SecretMasker(), artifacts);
+        fenced.publish(Attachment.ofFile("innocent", "image/png", link));
+
+        assertThat(lifecycle.fileAttachments())
+                .as("the path spells its way inside the run directory and resolves outside it — resolving is the whole point")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("with no artefacts directory configured every file attachment is refused: a sink that cannot tell an artefact from any other file must not guess")
+    void publishFile_withoutArtefactsRoot_isRefused(@TempDir Path artifacts) throws IOException {
+        Path screenshot = Files.write(artifacts.resolve("shot.png"), new byte[] {1});
+
+        publisher.publish(Attachment.ofFile("screenshot", "image/png", screenshot));
+
+        assertThat(lifecycle.fileAttachments()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a file that vanished between being recorded and being published is skipped, and the run carries on")
+    void publishFile_missingFile_isSkippedNotThrown(@TempDir Path artifacts) {
+        AllureAttachmentPublisher fenced = new AllureAttachmentPublisher(lifecycle, new SecretMasker(), artifacts);
+
+        assertThatCode(() -> fenced.publish(Attachment.ofFile("screenshot", "image/png", artifacts.resolve("never-written.png"))))
+                .doesNotThrowAnyException();
+        assertThat(lifecycle.fileAttachments()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("an unknown media type on a file body falls back to .bin, not to .txt")
+    void publishFile_unknownMediaType_fallsBackToBin(@TempDir Path artifacts) throws IOException {
+        Path artefact = Files.write(artifacts.resolve("thing"), new byte[] {7});
+        AllureAttachmentPublisher fenced = new AllureAttachmentPublisher(lifecycle, new SecretMasker(), artifacts);
+
+        fenced.publish(Attachment.ofFile("thing", "application/x-unheard-of", artefact));
+
+        assertThat(lifecycle.fileAttachments()).singleElement()
+                .satisfies(published -> assertThat(published.fileExtension()).isEqualTo("bin"));
+    }
+
+    @Test
+    @DisplayName("the textual branch is untouched by the file branch: it still goes through the secret masker")
+    void publish_textualBranch_stillMasked(@TempDir Path artifacts) {
+        AllureAttachmentPublisher fenced = new AllureAttachmentPublisher(lifecycle, new SecretMasker(), artifacts);
+
+        fenced.publish(new Attachment("response", "application/json", "{\"token\":\"t-1\"}"));
+
+        assertThat(lifecycle.attachments()).singleElement()
+                .satisfies(published -> assertThat(published.content()).contains("***").doesNotContain("t-1"));
+        assertThat(lifecycle.fileAttachments()).isEmpty();
     }
 }

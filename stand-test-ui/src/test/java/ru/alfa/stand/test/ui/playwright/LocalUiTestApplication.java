@@ -1,0 +1,544 @@
+package ru.alfa.stand.test.ui.playwright;
+
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * A small web application served from the JDK's own HTTP server — the browser-side analogue of the mock
+ * broker the Kafka adapter tests against and of the recording HTTP server the REST adapter uses. It adds
+ * no dependency, starts in milliseconds and gives the browser tests a real DOM to work on: a form, a
+ * button that changes the page asynchronously, a disabled control, and a cookie the page reports back so
+ * isolation between runs can be observed rather than assumed.
+ *
+ * <p>It also signs users in for real, in the only way that makes a session test meaningful: {@code /login}
+ * accepts a login and a password, issues a session cookie, and the home page shows the signed-in marker
+ * only to a request that carries one. A saved browser session is exactly that cookie, so reusing one, and
+ * finding an expired one, are both observable here rather than simulated.
+ */
+final class LocalUiTestApplication implements AutoCloseable {
+
+    /**
+     * The credentials the login form accepts, keyed by login. Two accounts, because the point of the
+     * sign-in tests is that two runs hold two different ones.
+     */
+    private static final Map<String, String> ACCOUNTS = Map.of(
+            "portal.client.one", "s3cret-one-!",
+            "portal.client.two", "s3cret-two-!");
+
+    /** The session cookie the application issues — what a saved browser session actually carries. */
+    private static final String SESSION_COOKIE = "portal_session";
+
+    private static final String PAGE = """
+            <!doctype html>
+            <html lang="en">
+            <head><meta charset="utf-8"><title>New application</title></head>
+            <body>
+              <h1 data-testid="title">New application</h1>
+
+              <label for="amount">Amount</label>
+              <input id="amount" data-testid="amount" value="">
+
+              <button id="submit" data-testid="submit">Confirm</button>
+              <button id="cancel" data-testid="cancel" disabled>Cancel</button>
+
+              <div data-testid="status">Pending</div>
+              <div data-testid="number" hidden>AP-42</div>
+              <div data-testid="cookie">none</div>
+
+              <script>
+                document.querySelector('[data-testid=cookie]').textContent = document.cookie ? document.cookie : 'none';
+                document.getElementById('submit').addEventListener('click', function () {
+                  document.cookie = 'visited=yes; path=/';
+                  fetch('/api/submit', { method: 'POST' }).then(function () {
+                    setTimeout(function () {
+                      document.querySelector('[data-testid=status]').textContent = 'Accepted';
+                      document.querySelector('[data-testid=number]').removeAttribute('hidden');
+                    }, 250);
+                  });
+                });
+              </script>
+            </body>
+            </html>
+            """;
+
+    private static final String LOGIN_PAGE = """
+            <!doctype html>
+            <html lang="en">
+            <head><meta charset="utf-8"><title>Sign in</title></head>
+            <body>
+              <h1 data-testid="login-title">Sign in</h1>
+              <form method="post" action="/login">
+                <label for="username">Login</label>
+                <input id="username" name="username" data-testid="login-username" value="">
+                <label for="password">Password</label>
+                <input id="password" name="password" type="password" data-testid="login-password" value="">
+                <button id="sign-in" type="submit" data-testid="login-submit">Sign in</button>
+              </form>
+              <div data-testid="login-error">%s</div>
+            </body>
+            </html>
+            """;
+
+    private static final String HOME_PAGE = """
+            <!doctype html>
+            <html lang="en">
+            <head><meta charset="utf-8"><title>Portal</title></head>
+            <body>
+              <h1 data-testid="title">Portal</h1>
+              <div data-testid="user-menu">Signed in as %s</div>
+            </body>
+            </html>
+            """;
+
+    /**
+     * A page whose script logs to the browser console on load — the UITG-S014 fixture that proves the
+     * driver surfaces console messages as a textual failure artefact. The page itself is blank but makes
+     * a deliberate {@code console.error} and {@code console.warn}, the two levels a frontend bug usually
+     * announces itself with.
+     */
+    private static final String CONSOLE_PAGE = """
+            <!doctype html>
+            <html lang="en">
+            <head><meta charset="utf-8"><title>Console noise</title></head>
+            <body>
+              <h1 data-testid="console-title">Console noise</h1>
+              <script>
+                console.error('the widget could not resolve its address: CLIENT_PORTAL_BASE_URL');
+                console.warn('assets served with a fallback');
+              </script>
+            </body>
+            </html>
+            """;
+
+    /**
+     * Screen «Обращение в поддержку» at {@code /requests/new} — one of the two DOM the evaluation corpus
+     * declares (ADR-UI-011 option A, UITG-S023). The layout deliberately mirrors the six seeded discovery
+     * reports: {@code Тема}/{@code Описание}/{@code Отправить} carry NO {@code data-testid} (rung 3 and 2),
+     * while {@code request-status}/{@code request-number}/{@code description-error} are the only rung-1
+     * elements. «Отправить» starts disabled while Тема is empty; the description is validated at a length of
+     * ten with a deliberately late appearance/disappearance so a once-only assertion would catch the screen
+     * mid-change; the send is asynchronous and refused for a topic already submitted this session — the only
+     * spot in the corpus that forces {@code ${testRunId}} into the test data.
+     */
+    private static final String REQUESTS_NEW_PAGE = """
+            <!doctype html>
+            <html lang="en">
+            <head><meta charset="utf-8"><title>Обращение в поддержку</title></head>
+            <body>
+              <h1>Новое обращение</h1>
+              <form class="request-form" id="request-form">
+                <label for="subject">Тема</label>
+                <input id="subject" name="subject" autocomplete="off">
+
+                <label for="description">Описание</label>
+                <textarea id="description" name="description" rows="4"></textarea>
+                <div data-testid="description-error" id="description-error" hidden>Описание должно содержать не менее 10 символов</div>
+
+                <button id="send" class="request-form__send" type="button" disabled>Отправить</button>
+              </form>
+
+              <dl>
+                <dt>Статус обращения</dt>
+                <dd data-testid="request-status" id="request-status">Черновик</dd>
+                <dt>Номер обращения</dt>
+                <dd data-testid="request-number" id="request-number"></dd>
+              </dl>
+
+              <script>
+                var subject = document.getElementById('subject');
+                var description = document.getElementById('description');
+                var send = document.getElementById('send');
+                var status = document.getElementById('request-status');
+                var number = document.getElementById('request-number');
+                var errorTimer = null;
+                var ERROR_TEXT = 'Описание должно содержать не менее 10 символов';
+
+                function refreshSend() {
+                  var valid = subject.value.trim().length > 0;
+                  send.disabled = !valid;
+                }
+                // The seeded report observes the error node's PRESENCE: it is absent from the DOM while the
+                // description is valid, appears (after a delay) for a too-short one, and disappears once fixed.
+                // So we really remove / re-insert the node, not just toggle a hidden attribute.
+                function refreshError() {
+                  var len = description.value.length;
+                  var present = document.getElementById('description-error') !== null;
+                  if (len > 0 && len < 10) {
+                    if (errorTimer === null) {
+                      errorTimer = window.setTimeout(function () {
+                        errorTimer = null;
+                        if (document.getElementById('description-error') === null) {
+                          var node = document.createElement('div');
+                          node.setAttribute('data-testid', 'description-error');
+                          node.id = 'description-error';
+                          node.textContent = ERROR_TEXT;
+                          // Mount immediately after the description field, as the report observes it there.
+                          description.parentNode.insertBefore(node, description.nextSibling);
+                        }
+                      }, 300);
+                    }
+                  } else {
+                    if (errorTimer !== null) {
+                      window.clearTimeout(errorTimer);
+                      errorTimer = null;
+                    }
+                    var existing = document.getElementById('description-error');
+                    if (existing !== null) {
+                      existing.remove();
+                    }
+                  }
+                }
+
+                subject.addEventListener('input', refreshSend);
+                description.addEventListener('input', refreshError);
+
+                send.addEventListener('click', function () {
+                  // No disabled-guard here: the `disabled` attribute is the screen's declared enablement, and
+                  // Playwright's click already action-waits on it. Guarding again inside the handler would let a
+                  // stale DOM value swallow a click that the driver believes is legitimate. The server still
+                  // refuses an empty or duplicate subject.
+                  var body = new URLSearchParams();
+                  body.set('subject', subject.value.trim());
+                  body.set('description', description.value);
+                  fetch('/api/requests', { method: 'POST', body: body }).then(function (r) {
+                    if (!r.ok) {
+                      status.textContent = 'Черновик';
+                      return;
+                    }
+                    return r.json();
+                  }).then(function (data) {
+                    if (data) {
+                      status.textContent = 'Зарегистрировано';
+                      number.textContent = data.number;
+                      subject.disabled = true;
+                      description.disabled = true;
+                      send.disabled = true;
+                    }
+                  });
+                });
+
+                refreshSend();
+                // The seeded report observes the error ABSENT from the DOM while the description is valid; the
+                // initial state (empty description) is valid, so the served node is removed on load.
+                refreshError();
+              </script>
+            </body>
+            </html>
+            """;
+
+    /**
+     * Screen «Мои обращения»/`{@code /requests}` — the second screen the corpus declares. A legacy list where
+     * rung 1 does not exist anywhere: every element of the filter and of the table is addressable only below
+     * {@code data-testid} ({@code label}/{@code role}/{@code css}). The table holds exactly TWELVE rows (the
+     * count the seeded reports record for the bare {@code .requests-table__number} and
+     * {@code .requests-table__delete}), has no caption or aria-label, and carries a hidden confirmation dialog
+     * whose text is readable from the DOM without interaction. «Показать» re-requests the list with a visible
+     * delay (the report observes about a second), so the assertion that follows it must wait.
+     */
+    private static final String REQUESTS_LIST_PAGE = """
+            <!doctype html>
+            <html lang="en">
+            <head><meta charset="utf-8"><title>Мои обращения</title></head>
+            <body>
+              <h1>Мои обращения</h1>
+
+              <div class="requests-filter">
+                <label for="requests-filter__status">Статус</label>
+                <input class="requests-filter__status" id="requests-filter__status" autocomplete="off">
+                <button class="requests-filter__apply" type="button">Показать</button>
+              </div>
+
+              <table class="requests-table">
+                <tbody>
+                  %s
+                </tbody>
+              </table>
+
+              <div class="requests-confirm" hidden>
+                Обращение будет удалено безвозвратно. Удалить?
+              </div>
+
+              <script>
+                var filter = document.getElementById('requests-filter__status');
+                var tbody = document.querySelector('.requests-table tbody');
+                var apply = document.querySelector('.requests-filter__apply');
+                var rowsJson = %s;
+                // Class names held in variables so the served HTML does not repeat the literals that the parity
+                // gate counts: the twelve real rows are the ONLY place {@code class="requests-table__number"}/…
+                // appears, which is what makes the anti-drift count exact.
+                var clsNumber = 'requests-table__number';
+                var clsDelete = 'requests-table__delete';
+
+                function render(rows) {
+                  tbody.innerHTML = rows.map(function (r) {
+                    return '<tr>' +
+                      '<td class="' + clsNumber + '">' + r.number + '</td>' +
+                      '<td class="requests-table__status">' + r.status + '</td>' +
+                      '<td><button class="' + clsDelete + '" type="button">Удалить</button></td>' +
+                      '</tr>';
+                  }).join('');
+                }
+
+                apply.addEventListener('click', function () {
+                  // The report observed a marked pause between clicking «Показать» and the re-render: the list
+                  // is re-requested. A once-only assertion right after the click would catch the old table.
+                  window.setTimeout(function () {
+                    var value = filter.value.trim();
+                    var rows = value === '' ? rowsJson : rowsJson.filter(function (r) { return r.status === value; });
+                    render(rows);
+                  }, 1000);
+                });
+
+                render(rowsJson);
+              </script>
+            </body>
+            </html>
+            """;
+
+    /** The resident rows of «Мои обращения», keyed by number. Exactly twelve (see below). */
+    private static final String[] RESIDENT_REQUEST_NUMBERS = {
+            "RQ-1001", "RQ-1002", "RQ-1003", "RQ-1004", "RQ-1005", "RQ-1006",
+            "RQ-1007", "RQ-1008", "RQ-1009", "RQ-1010", "RQ-1011", "RQ-1012"
+    };
+
+    /** Status of the twelve resident rows, in number order — three drafts, nine registered. */
+    private static final String[] RESIDENT_REQUEST_STATUSES = {
+            "Черновик", "Зарегистрировано", "Черновик", "Зарегистрировано", "Черновик", "Зарегистрировано",
+            "Зарегистрировано", "Зарегистрировано", "Зарегистрировано", "Зарегистрировано", "Зарегистрировано", "Зарегистрировано"
+    };
+
+    private final HttpServer server;
+
+    private final List<Map<String, String>> submissions = new CopyOnWriteArrayList<>();
+
+    private final List<String> signIns = new CopyOnWriteArrayList<>();
+
+    private final AtomicInteger loginPageViews = new AtomicInteger();
+
+    /** Topics already submitted through /requests/new this session — the duplicate-refusal store. */
+    private final List<String> submittedTopics = new CopyOnWriteArrayList<>();
+
+    private final AtomicInteger receiptSequence = new AtomicInteger(1013);
+
+    LocalUiTestApplication() {
+        try {
+            this.server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        } catch (IOException failure) {
+            throw new IllegalStateException("Could not start the local UI test application", failure);
+        }
+        this.server.createContext("/applications/new", this::servePage);
+        this.server.createContext("/api/submit", this::recordSubmission);
+        this.server.createContext("/console-error", this::serveConsolePage);
+        this.server.createContext("/login", this::serveLogin);
+        this.server.createContext("/requests/new", this::serveRequestsNew);
+        this.server.createContext("/requests", this::serveRequests);
+        this.server.createContext("/api/requests", this::handleRequestsApi);
+        this.server.createContext("/", this::serveHome);
+        this.server.setExecutor(null);
+        this.server.start();
+    }
+
+    String baseUrl() {
+        return "http://127.0.0.1:" + this.server.getAddress().getPort();
+    }
+
+    List<Map<String, String>> submissions() {
+        return List.copyOf(this.submissions);
+    }
+
+    /** The logins that actually passed the form, in order — how a test proves a session was reused. */
+    List<String> signIns() {
+        return List.copyOf(this.signIns);
+    }
+
+    int loginPageViews() {
+        return this.loginPageViews.get();
+    }
+
+    @Override
+    public void close() {
+        this.server.stop(0);
+    }
+
+    private void servePage(HttpExchange exchange) throws IOException {
+        respond(exchange, 200, PAGE);
+    }
+
+    private void serveConsolePage(HttpExchange exchange) throws IOException {
+        respond(exchange, 200, CONSOLE_PAGE);
+    }
+
+    private void serveRequestsNew(HttpExchange exchange) throws IOException {
+        respond(exchange, 200, REQUESTS_NEW_PAGE);
+    }
+
+    /**
+     * «Мои обращения». The rows are baked into the page as a JSON array so the browser re-renders without a
+     * round-trip on every filter; the twelve resident numbers are a constant of the screen (see the report's
+     * "12 matches" on the bare class).
+     */
+    private void serveRequests(HttpExchange exchange) throws IOException {
+        respond(exchange, 200, REQUESTS_LIST_PAGE.formatted(residentRowsHtml(), residentRowsJson()));
+    }
+
+    /**
+     * POST /api/requests — the only request that is NOT a rejection. POSTs a new support request and mints its
+     * number; a topic already submitted this session is refused as a duplicate (409), which is what forces the
+     * test data to carry {@code ${testRunId}}. GET /api/requests — the resident list, for parity checks.
+     */
+    private void handleRequestsApi(HttpExchange exchange) throws IOException {
+        if ("GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            respondJson(exchange, 200, residentRowsJson());
+            return;
+        }
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+            respondText(exchange, 405, "method not allowed");
+            return;
+        }
+        Map<String, String> form = formFields(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+        String subject = form.getOrDefault("subject", "").trim();
+        if (subject.isEmpty() || this.submittedTopics.contains(subject)) {
+            respondText(exchange, 409, "duplicate topic");
+            return;
+        }
+        this.submittedTopics.add(subject);
+        String number = "RQ-" + this.receiptSequence.getAndIncrement();
+        respondJson(exchange, 200, "{\"number\":\"" + number + "\"}");
+    }
+
+    private static String residentRowsHtml() {
+        StringBuilder rows = new StringBuilder();
+        for (int i = 0; i < RESIDENT_REQUEST_NUMBERS.length; i++) {
+            rows.append("<tr>")
+                    .append("<td class=\"requests-table__number\">").append(RESIDENT_REQUEST_NUMBERS[i]).append("</td>")
+                    .append("<td class=\"requests-table__status\">").append(RESIDENT_REQUEST_STATUSES[i]).append("</td>")
+                    .append("<td><button class=\"requests-table__delete\" type=\"button\">Удалить</button></td>")
+                    .append("</tr>");
+        }
+        return rows.toString();
+    }
+
+    /** The resident rows exported to the page script and to GET /api/requests, as a JSON array. */
+    private static String residentRowsJson() {
+        StringBuilder json = new StringBuilder("[");
+        for (int i = 0; i < RESIDENT_REQUEST_NUMBERS.length; i++) {
+            if (i > 0) {
+                json.append(',');
+            }
+            json.append('{')
+                    .append("\"number\":\"").append(RESIDENT_REQUEST_NUMBERS[i]).append("\",")
+                    .append("\"status\":\"").append(jsonEscape(RESIDENT_REQUEST_STATUSES[i])).append('"')
+                    .append('}');
+        }
+        return json.append(']').toString();
+    }
+
+    private static String jsonEscape(String value) {
+        return value.replace("\"", "\\\"");
+    }
+
+    private static void respondJson(HttpExchange exchange, int status, String json) throws IOException {
+        respondBytes(exchange, status, json.getBytes(StandardCharsets.UTF_8), "application/json; charset=utf-8");
+    }
+
+    private static void respondText(HttpExchange exchange, int status, String text) throws IOException {
+        respondBytes(exchange, status, text.getBytes(StandardCharsets.UTF_8), "text/plain; charset=utf-8");
+    }
+
+    private void recordSubmission(HttpExchange exchange) throws IOException {
+        Map<String, String> headers = new LinkedHashMap<>();
+        exchange.getRequestHeaders().forEach((name, values) -> headers.put(name.toLowerCase(Locale.ROOT), String.join(",", new ArrayList<>(values))));
+        this.submissions.add(headers);
+        exchange.sendResponseHeaders(204, -1);
+        exchange.close();
+    }
+
+    /**
+     * The login form on GET; on POST, either a session cookie and a redirect home, or the form again with
+     * an error — which is what makes "these credentials were rejected" an assertion about the screen.
+     */
+    private void serveLogin(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+            this.loginPageViews.incrementAndGet();
+            respond(exchange, 200, LOGIN_PAGE.formatted(""));
+            return;
+        }
+        Map<String, String> form = formFields(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+        String username = form.getOrDefault("username", "");
+        if (!ACCOUNTS.getOrDefault(username, " ").equals(form.getOrDefault("password", ""))) {
+            respond(exchange, 200, LOGIN_PAGE.formatted("Wrong login or password"));
+            return;
+        }
+        this.signIns.add(username);
+        exchange.getResponseHeaders().add("Set-Cookie", SESSION_COOKIE + "=" + username + "; Path=/");
+        exchange.getResponseHeaders().add("Location", "/");
+        exchange.sendResponseHeaders(302, -1);
+        exchange.close();
+    }
+
+    /**
+     * The home page. The signed-in marker exists only for a request carrying a valid session cookie —
+     * anything else is redirected to the login form, exactly as an application with an expired session does.
+     */
+    private void serveHome(HttpExchange exchange) throws IOException {
+        String session = sessionCookie(exchange);
+        if (session == null || !ACCOUNTS.containsKey(session)) {
+            exchange.getResponseHeaders().add("Location", "/login");
+            exchange.sendResponseHeaders(302, -1);
+            exchange.close();
+            return;
+        }
+        respond(exchange, 200, HOME_PAGE.formatted(session));
+    }
+
+    private static String sessionCookie(HttpExchange exchange) {
+        List<String> headers = exchange.getRequestHeaders().get("Cookie");
+        if (headers == null) {
+            return null;
+        }
+        for (String header : headers) {
+            for (String pair : header.split(";")) {
+                String[] parts = pair.trim().split("=", 2);
+                if (parts.length == 2 && SESSION_COOKIE.equals(parts[0])) {
+                    return parts[1];
+                }
+            }
+        }
+        return null;
+    }
+
+    private static Map<String, String> formFields(String body) {
+        Map<String, String> fields = new LinkedHashMap<>();
+        for (String pair : body.split("&")) {
+            String[] parts = pair.split("=", 2);
+            if (parts.length == 2) {
+                fields.put(URLDecoder.decode(parts[0], StandardCharsets.UTF_8), URLDecoder.decode(parts[1], StandardCharsets.UTF_8));
+            }
+        }
+        return fields;
+    }
+
+    private static void respond(HttpExchange exchange, int status, String html) throws IOException {
+        respondBytes(exchange, status, html.getBytes(StandardCharsets.UTF_8), "text/html; charset=utf-8");
+    }
+
+    private static void respondBytes(HttpExchange exchange, int status, byte[] body, String contentType) throws IOException {
+        exchange.getResponseHeaders().add("Content-Type", contentType);
+        exchange.sendResponseHeaders(status, body.length);
+        try (OutputStream out = exchange.getResponseBody()) {
+            out.write(body);
+        }
+    }
+}

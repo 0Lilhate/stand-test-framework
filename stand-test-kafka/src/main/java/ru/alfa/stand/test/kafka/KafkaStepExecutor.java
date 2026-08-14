@@ -35,6 +35,7 @@ import ru.alfa.stand.test.core.environment.CorrelationSource;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.KafkaClusterDefinition;
 import ru.alfa.stand.test.core.environment.TopicDefinition;
+import ru.alfa.stand.test.core.exception.DiagnosticAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestAssertionError;
 import ru.alfa.stand.test.core.exception.StandTestException;
 import ru.alfa.stand.test.core.execution.ResourceScope;
@@ -74,9 +75,6 @@ public final class KafkaStepExecutor implements StepExecutor {
 
     private static final Logger LOG = LoggerFactory.getLogger(KafkaStepExecutor.class);
 
-    // Mode (a) of plan §4: the blocking consumer.poll(pollTimeout) carries the pause, so the await
-    // poll interval is kept near-zero (AwaitPolicy forbids exactly zero) rather than adding a second,
-    // independent wait between probes.
     /**
      * Namespace prefix for this adapter's {@link ResourceScope} keys, so a topic alias can never collide
      * with another adapter's resource registered under the same logical alias in one run (mirrors the DB
@@ -147,9 +145,6 @@ public final class KafkaStepExecutor implements StepExecutor {
         }
         Map<String, Object> parameters = parameters(step);
         String topicAlias = KafkaStepParameters.requireString(parameters, KafkaStepParameters.TOPIC);
-        // Fail-closed BEFORE any broker IO (plan §15): reject an undiscriminated or constant-key expect here,
-        // in prepare(), rather than after armConsumer() has opened a real consumer — mirroring the DB path,
-        // which enforces the write-guard before opening a connection.
         requirePerRunDiscriminator(parameters, topicAlias);
         armConsumer(topicAlias, context);
     }
@@ -426,10 +421,19 @@ public final class KafkaStepExecutor implements StepExecutor {
 
     private static StandTestAssertionError timeout(TimeoutDiagnostics diagnostics, String topicAlias, ArmedConsumer armed, String correlationHeaderName, String correlationId, String key) {
         LOG.debug("Kafka expect on topic '{}': no message matched, messagesSeen={}", topicAlias, armed.messagesSeen());
-        return new StandTestAssertionError("kafka.expect '" + topicAlias + "' did not receive a matching message: " + diagnostics.summary()
+        // messagesSeen is the number a reader reaches for first — zero means nothing arrived at all, non-zero
+        // means the selection did not match — so it becomes a row of its own rather than a fragment of the
+        // sentence. lastMessages stays out of the map: it is a sample of bodies, and the map is rendered
+        // verbatim into the report.
+        Map<String, Object> reportable = diagnostics
+                .withAttribute("kafka.topic", topicAlias)
+                .withAttribute("kafka.realTopic", armed.realTopic())
+                .withAttribute("kafka.messagesSeen", armed.messagesSeen())
+                .toMap();
+        return new DiagnosticAssertionError("kafka.expect '" + topicAlias + "' did not receive a matching message: " + diagnostics.summary()
                 + " (realTopic=" + armed.realTopic() + ", partitions=" + armed.partitions() + ", messagesSeen=" + armed.messagesSeen()
                 + ", selection=[correlationId=" + correlationId + ", key=" + key + "]"
-                + ", lastMessages=" + sample(armed, correlationHeaderName) + ")");
+                + ", lastMessages=" + sample(armed, correlationHeaderName) + ")", reportable);
     }
 
     private static List<String> sample(ArmedConsumer armed, String correlationHeaderName) {
