@@ -17,6 +17,7 @@ snakeYaml = "2.6"
 grpc = "1.68.1"
 protobuf = "3.25.5"
 playwright = "1.61.0"
+springBoot = "4.1.0"
 springDependencyManagement = "1.1.7"
 
 [libraries]
