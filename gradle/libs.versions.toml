@@ -1,5 +1,4 @@
 [versions]
-java = "21"
 javaRelease = "17"
 checkstyle = "10.18.2"
 junit = "6.0.3"

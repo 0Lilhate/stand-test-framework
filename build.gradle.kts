@@ -21,9 +21,6 @@ subprojects {
     catalog.findVersion(alias).orElseThrow { error("Missing version: $alias") }.requiredVersion
 
   extensions.configure<JavaPluginExtension> {
-    toolchain {
-      languageVersion.set(JavaLanguageVersion.of(ver("java").toInt()))
-    }
     withSourcesJar()
     if (project.name != "stand-test-example") {
       withJavadocJar()

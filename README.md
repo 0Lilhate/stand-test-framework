@@ -975,7 +975,7 @@ Guardrails выводятся из `ForbiddenOperation` и enforce'ятся ра
 ./gradlew publish -PstandTestPublishUrl=<repo>
 ```
 
-Toolchain — Java 21, байткод таргетит **Java 17** (`--release 17`), артефакты грузятся на JDK 17/21/24.
+Toolchain не задан — сборка идёт на JDK, которым запущен Gradle (у разработчиков 21, на CI-агенте 25); байткод таргетит **Java 17** (`--release 17`), артефакты грузятся на JDK 17/21/24.
 Gradle 9.3.0; configuration cache, parallel и build cache включены.
 
 Разрешение зависимостей идёт через внутренний Artifactory-зеркало без публичного fallback'а — нужны
