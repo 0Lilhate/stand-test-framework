@@ -37,7 +37,7 @@ dependencies {
 
 val publishedModules: List<String> = rootProject.subprojects
   .map { it.name }
-  .filter { it != project.name && it != "stand-test-example" }
+  .filter { it != project.name }
   .sorted()
 
 val constrainedModules: List<String> = configurations.getByName("api").dependencyConstraints

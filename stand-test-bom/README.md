@@ -26,8 +26,6 @@ catalog the modules compile against, so the BOM cannot claim a version the SDK w
 | JUnit, AssertJ | the consumer owns its test stack — and `stand-test-junit` already exports `junit-bom` as a platform, so JUnit is aligned there rather than twice |
 | H2, ArchUnit, Logback | test-only in this build; they reach no consumer |
 
-`stand-test-example` is test-only and not published, so it is not listed either.
-
 ## The guard, and the half it does not cover
 
 `verifyBomCoversEveryPublishedModule` (wired into `check`) fails the build if the module constraints and

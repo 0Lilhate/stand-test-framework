@@ -123,9 +123,9 @@ flowchart RL
 | [stand-test-spring-boot-starter](stand-test-spring-boot-starter/README.md) | Boot-3 auto-configuration: `@Autowired StandClient`, окружения из `application.yml` | spring-boot-autoconfigure 3.5.x |
 | [stand-test-scenario-yaml](stand-test-scenario-yaml/README.md) | YAML DSL (поверхности given/then и AI steps/type) | snakeyaml |
 | [stand-test-bom](stand-test-bom/README.md) | `java-platform` — выравнивание версий у потребителя | — |
-| [stand-test-example](stand-test-example/README.md) | Test-only витрина на offline-двойниках, **не публикуется** | test-only |
 
-Правила графа, зафиксированные ArchUnit-тестом (`ModuleDependencyArchTest`), а не соглашением:
+Правила графа (после удаления модуля `stand-test-example` ArchUnit-теста, который их закреплял,
+больше нет — они соблюдаются соглашением):
 `core` не видит ни один соседний модуль и ни одну IO-библиотеку; типизированные шаги (`RestStep`,
 `KafkaStep`, `DbStep`, `GrpcStep`, `UiStep`) живут в адаптерах, core знает только `GenericStep`
 (строка `type` + map параметров); адаптеры не зависят друг от друга; на starter не зависит никто.
@@ -735,8 +735,6 @@ ReportingEventPublisher reportingEventPublisher() {
 | Вход в UI отвергается, «неверный пароль» | `${...}` внутри `*-ref` — ловушка двойного резолва (§3.5) |
 
 Полный справочник по стартеру — [stand-test-spring-boot-starter/README.md](stand-test-spring-boot-starter/README.md).
-Живой offline-пример проводки через `ApplicationContextRunner` —
-`stand-test-example/src/test/java/ru/alfa/stand/test/example/StandTestSpringBootStarterExampleTest.java`.
 
 ---
 
@@ -945,9 +943,6 @@ SDK логирует через **SLF4J** и поставляет только �
 DEBUG-трейсы адаптеров содержат **только метаданные** — никогда тела запросов/ответов, заголовки,
 `Authorization`, ключи и значения сообщений, текст SQL или связанные значения, ссылки на секреты.
 
-Готовая конфигурация для копирования:
-[`stand-test-example/src/test/resources/logback-test.xml`](stand-test-example/src/test/resources/logback-test.xml).
-
 ---
 
 ## 9. Декларативный формат и AI-генерация
@@ -1009,8 +1004,6 @@ Gradle 9.3.0; configuration cache, parallel и build cache включены.
 - gRPC — **только unary**-вызовы (server reflection + `DynamicMessage`, генерируемые стабы не нужны).
 - Ассерты Kafka — **только `equals`**; у db типа ассерта нет вовсе (`expectValue` сравнивает на равенство).
   REST и gRPC несут полный набор из пяти матчеров.
-- Kafka-пример в `stand-test-example` требует реального брокера (тег `requires-broker`, исключён из прогона
-  по умолчанию); все unit-тесты модулей гоняются офлайн.
 - `stand-test-db` не тянет JDBC-драйвер — его поставляет потребитель.
 - Предварительной проверки декларативного документа JSON Schema нет (см. §9).
 - Первой публикации во внутренний Nexus/Artifactory ещё не было — URL репозитория в ожидании.
@@ -1020,9 +1013,6 @@ Gradle 9.3.0; configuration cache, parallel и build cache включены.
 
 ## 12. Куда смотреть дальше
 
-- [`stand-test-example`](stand-test-example/README.md) — живая компилирующаяся витрина на offline-двойниках:
-  композиция REST → DB → gRPC, проброс корреляции, per-run изоляция переменных, ожидание на фейковом
-  источнике времени, вывод в Allure, семантика сбоев.
 - [`docs/arch/architecture-overview.md`](docs/arch/architecture-overview.md) — устройство библиотеки изнутри
   (для тех, кто дорабатывает сам SDK).
 - [`docs/arch/stand-test-sdk-implementation-plan.md`](docs/arch/stand-test-sdk-implementation-plan.md) —

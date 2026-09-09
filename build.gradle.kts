@@ -22,9 +22,7 @@ subprojects {
 
   extensions.configure<JavaPluginExtension> {
     withSourcesJar()
-    if (project.name != "stand-test-example") {
-      withJavadocJar()
-    }
+    withJavadocJar()
   }
 
   tasks.withType<Javadoc>().configureEach {
@@ -125,14 +123,12 @@ subprojects {
     }
 
     extensions.configure<PublishingExtension> {
-      if (project.name != "stand-test-example") {
-        publications {
-          create<MavenPublication>("maven") {
-            from(components["java"])
-            pom {
-              name.set(project.name)
-              description.set(project.description ?: "stand-test SDK module '${project.name}'")
-            }
+      publications {
+        create<MavenPublication>("maven") {
+          from(components["java"])
+          pom {
+            name.set(project.name)
+            description.set(project.description ?: "stand-test SDK module '${project.name}'")
           }
         }
       }

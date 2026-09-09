@@ -103,11 +103,13 @@ YAML DSL ────────────────┘                    
 - `spring-boot-starter` → the runtime modules it wires as `compileOnly` optionals (never the reverse); `bom` is the `java-platform` outside the compile graph — it constrains every published module plus the curated third-party versions (only external consumers import it)
 - **Adapter modules must not depend on each other.** Each module's `build.gradle.kts` keeps its
   `Planned internal dependencies` as commented stubs that must match this target graph.
-- `ModuleDependencyArchTest` (in `stand-test-example`, the only module with the whole graph on one
-  classpath) now also pins the **external** edges, which nothing checked before: `coreHasNoUiOrIoDependencies`
-  (core may see only the JDK + `slf4j-api` — an explicit allow-list), `scenarioHasNoUiFields` (the field
-  list of `Scenario` is fixed), `playwrightIsConfinedToDriverPackage` plus its non-vacuity guard, and
-  `nothingDependsOnUi`. Each was verified to fail on a deliberate violation before being committed.
+- **Nothing machine-checks this graph any more.** `ModuleDependencyArchTest` lived in
+  `stand-test-example` — the only module that had the whole graph on one classpath — and went with that
+  module when it was removed (2026-09-09, to get the Jenkins pipeline green: it carried a live-stand UI
+  test that cannot pass on a CI agent). With it went the **external**-edge rules nothing else covers:
+  core seeing only the JDK + `slf4j-api`, `Scenario` carrying no UI fields, Playwright confined to the
+  driver package, and nothing depending on `ui`. The rules above are now convention: a violation
+  compiles and the build stays green, so check the graph by reading the `build.gradle.kts` files.
 
 ### Core contracts to respect (plan §8)
 
@@ -215,8 +217,8 @@ YAML DSL ────────────────┘                    
   MFA/OTP/CAPTCHA bypass** — external gate G-1: an application declares `challenge`, and the SDK either
   finds a `UiLoginChallengeHandler` on the classpath or refuses with a message naming the gate and
   `STORAGE_STATE` as the alternative. `SSO` is a registry spelling with a speaking "not implemented".
-- **The UI suite runs classes concurrently** (`stand-test-ui/src/test/resources/junit-platform.properties`,
-  the same model `stand-test-example` uses), with `maxParallelForks = 1` on both `test` and `browserTest`
+- **The UI suite runs classes concurrently** (`stand-test-ui/src/test/resources/junit-platform.properties`),
+  with `maxParallelForks = 1` on both `test` and `browserTest`
   because the account pool is in-process — a second JVM would hand the same account to a second run.
   `browserTest` overrides the parallelism downwards (a thread costs a Chromium); raise it with
   `-Pstand.test.ui.browser.parallelism=N`. The ceiling of a UI suite's parallelism is the size of the
@@ -243,8 +245,11 @@ task — see `stand-test-ui/README.md` and `docs/ui-test-generation/`), **`stand
 bodies), **`stand-test-scenario-yaml`** (two surfaces: given/then YAML and the AI steps/type format),
 **`stand-test-spring-boot-starter`** (Boot-3 auto-configuration, adapters as
 `compileOnly` optionals) and **`stand-test-config`** (file-based `EnvironmentRegistry` SPI provider).
-**`stand-test-example`** is a test-only showcase (offline doubles, not published); **`stand-test-bom`**
-is the `java-platform` carrying constraints for every published module. Known asymmetry: **Kafka and DB** are
+**`stand-test-bom`**
+is the `java-platform` carrying constraints for every published module. **`stand-test-example` was
+removed on 2026-09-09** — a test-only showcase on offline doubles, it also hosted the ArchUnit graph
+rules, the two kit-vs-SDK API censuses (`AuthoringCribApiCoverageTest`, `UiAuthoringCribApiCoverageTest`)
+and the AI-document parity test; none of them has a home now, so do not cite them as live guarantees. Known asymmetry: **Kafka and DB** are
 the equals-only adapters — `KafkaAssertion` carries no matcher field and `KafkaStepParameters` has no
 `MATCHER` key, so `kafka.expect` runs EQUALS and `AiStepNormalizer` rejects any other matcher on it; `db`
 has no assertion type at all (`db.expectEventually` takes a single `expectValue`, and `DbValues` delegates

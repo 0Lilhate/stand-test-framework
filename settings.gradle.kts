@@ -31,5 +31,4 @@ include(
   "stand-test-scenario-yaml",
   "stand-test-config",
   "stand-test-spring-boot-starter",
-  "stand-test-example",
 )

@@ -16,11 +16,9 @@ written description. What the parser accepts IS the format.
 
 The JSON Schema and the generation-rules catalogue that used to state this surface shipped in
 `stand-test-ai-schema`, removed on 2026-08-12; the schema examples under its `src/test/resources`
-went with it. What survives, and is runnable:
-
-- `stand-test-example/src/test/resources/ai/canonical-flow.json` — the canonical REST→Kafka→DB flow;
-- `stand-test-example/src/test/resources/ai/grpc-flow.json` — the gRPC one;
-- `stand-test-example/src/test/resources/ai/invalid-flow.json` — a document the parser refuses.
+went with it. The runnable documents that survived it (`ai/canonical-flow.json`, `ai/grpc-flow.json`,
+`ai/invalid-flow.json`) lived in `stand-test-example`, removed on 2026-09-09. **No example document
+ships with this repository any more** — read `AiScenarioParser` itself, and the example below.
 
 **On any conflict between this file and the parser, the parser wins.** Do not restate the rules
 elsewhere — link here.
@@ -171,6 +169,6 @@ step type used, and `stand-test-config` (or the Spring starter equivalent).
 ## Example
 
 [`example-generated.yaml`](../stand-test-yaml-authoring/example-generated.yaml).
-A document the parser refuses, to check your own generator against:
-`stand-test-example/src/test/resources/ai/invalid-flow.json`. The larger negative corpus lived in
-`stand-test-ai-schema` and went with it — this one file is what remains.
+There is no negative corpus left to check a generator against: the larger one lived in
+`stand-test-ai-schema` (removed 2026-08-12) and the last refused document in `stand-test-example`
+(removed 2026-09-09). `AiScenarioParser` is fail-closed, so its own rejections are the reference.

@@ -1,7 +1,7 @@
 # Publishing the stand-test SDK
 
 The build publishes **13 artifacts** — the 12 SDK modules plus `stand-test-bom` (a `java-platform`
-carrying only a POM). `stand-test-example` is a test-only showcase and is never published. Every module
+carrying only a POM). Every module
 artifact ships `.jar` + `-sources.jar` + `-javadoc.jar` (javadoc is generated with doclint disabled).
 
 ## Repository configuration
@@ -94,7 +94,7 @@ testImplementation("ru.alfa.stand.test:stand-test-rest")
 
 ```bash
 ./gradlew publishToMavenLocal
-ls ~/.m2/repository/ru/alfa/stand/test/            # 13 directories, no stand-test-example
+ls ~/.m2/repository/ru/alfa/stand/test/            # 13 directories
 ls ~/.m2/repository/ru/alfa/stand/test/stand-test-core/<version>/   # jar + sources + javadoc + pom
 ```
 

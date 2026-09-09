@@ -22,11 +22,11 @@ import ru.alfa.stand.test.core.scenario.ScenarioStep;
  * {@code META-INF/services} file.
  *
  * <p>Registering a fake provider for real would have applied it to every other test in this module —
- * the rules are what need proving here, not the {@link java.util.ServiceLoader} call itself. That the
- * production path really loads the SPI, with the real UI adapter, is proven where the whole graph is on
- * one classpath: {@code StarterDiscoversUiExecutorTest} in {@code stand-test-example}. Splitting it this
- * way is deliberate — the repository has already been bitten by a chain whose every link was tested and
- * whose composition had never run.
+ * the rules are what need proving here, not the {@link java.util.ServiceLoader} call itself. The
+ * companion test that ran the production path with the real UI adapter on one classpath
+ * ({@code StarterDiscoversUiExecutorTest}) lived in {@code stand-test-example} and went with that
+ * module, so the composition itself is currently unproven — the repository has already been bitten by a
+ * chain whose every link was tested and whose composition had never run.
  */
 class StepExecutorDiscoveryTest {
 

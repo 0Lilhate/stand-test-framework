@@ -6,9 +6,9 @@ UI-адаптер SDK: браузерный шаг — это обычный ш�
 
 **Playwright живёт только здесь** — в подпакете `ru.alfa.stand.test.ui.playwright`. Ни `stand-test-core`,
 ни любой другой модуль его не видят: потребитель, подключивший только `stand-test-rest`, браузер не
-получает даже транзитивно. Изоляция проверяется правилами ArchUnit в `stand-test-example`
-(`coreHasNoUiOrIoDependencies`, `playwrightIsConfinedToDriverPackage`, `nothingDependsOnUi`), и каждое
-из них проверено падающим на искусственном нарушении.
+получает даже транзитивно. Изоляция держится на структуре модулей: правила ArchUnit, которые её
+проверяли (`coreHasNoUiOrIoDependencies`, `playwrightIsConfinedToDriverPackage`, `nothingDependsOnUi`),
+жили в удалённом модуле `stand-test-example`, поэтому сейчас нарушение сборка не поймает.
 
 Реализованный срез соответствует ADR-UI-001 (границы модуля), ADR-UI-002 (жизненный цикл, вариант А —
 браузер на прогон) и ADR-UI-003 (публичный API).

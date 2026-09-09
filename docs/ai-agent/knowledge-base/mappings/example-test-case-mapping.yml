@@ -7,7 +7,9 @@
 # line, not a stage of it: analysed, not automatable until an external precondition is met, reason in
 # missing[] and no generatedTest — see the second entry below.
 # This entry is the REAL projection of the chain-validation run performed in this repo
-# (kb-lookup → kb-update conflict resolution → Java draft in stand-test-example).
+# (kb-lookup → kb-update conflict resolution → Java draft in stand-test-example). It is kept as the
+# historical record it is: the module named in generatedTest was removed on 2026-09-09, so the path
+# below no longer resolves — in a consumer project generatedTest.module names that project's module.
 testCaseMappings:
   - caseId: client-request-accepted-e2e
     title: Created client request is accepted, published to Kafka, stored in the DB and confirmed over gRPC
