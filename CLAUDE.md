@@ -48,6 +48,10 @@ Use `--console=plain` for clean CI-style output. Configuration cache, parallel a
 
 - **The build runs on the corporate configurer plugins** (since 2026-09-09, to make the Jenkins job
   green: it calls `:sonar` and `dockerCreateDockerfile`, neither of which a hand-rolled build has).
+  The `dockerCreateDockerfile` stub is **not** a no-op: the pipeline's prepublish stage asserts
+  `find . -type f -path '*/build/docker/Dockerfile'` after calling it, so the task writes a placeholder
+  `FROM scratch` context. `artifact_target_type=BUILD` gates only `publish`, not `prepublish` — see the
+  CI section of the root `README.md` before touching either.
   Root declares `ru.alfalab.library-configurer:10.0.4` (`apply false` — that is what puts
   `ru.alfalab.gradle:base`, and with it `sonarqube-gradle-plugin`, on the script classpath) plus
   `ru.alfalab.semantic-version`, and applies `ru.alfalab.codestyle` and `org.sonarqube` to the root

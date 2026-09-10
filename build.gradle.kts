@@ -54,7 +54,18 @@ subprojects {
   }
 }
 
+
 tasks.register("dockerCreateDockerfile") {
+  val dockerfile = layout.buildDirectory.file("docker/Dockerfile")
+  val content = "Заглужка"
+
   group = "docker"
-  description = "No-op stub for the microservice CI pipeline: this repository publishes maven artifacts, not a docker image."
+  description = "Writes a placeholder build/docker/Dockerfile so the microservice CI pipeline finds a docker context."
+  outputs.file(dockerfile)
+  inputs.property("content", content)
+  doLast {
+    val target = dockerfile.get().asFile
+    target.parentFile.mkdirs()
+    target.writeText(content)
+  }
 }

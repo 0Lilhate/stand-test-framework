@@ -997,9 +997,21 @@ Gradle 9.6.1 (ниже корпоративный плагин не запуск
 
 Репозиторий собирает **Jenkins** — джоба `stand-test-framework` по пайплайну `ci/microservice/Jenkinsfile`
 из `taksa-core/jenkins`: `build -x test` → `test` → `jacocoTestReport :sonar` → `dockerCreateDockerfile`
-(prepublish) → publish. Пайплайн микросервисный, поэтому в корне сборки живёт no-op заглушка
-`dockerCreateDockerfile`, а джобу следует запускать с параметром `artifact_target_type=BUILD` — тогда
-docker-стадия publish пропускается: этот репозиторий поставляется jar-ами, а не образом.
+(prepublish) → publish. Пайплайн микросервисный, а этот репозиторий поставляется jar-ами и никакого
+образа не публикует, поэтому в корневой сборке живёт заглушка `dockerCreateDockerfile`.
+
+Заглушка **не пустая, и это существенно**: стадия prepublish не ограничивается вызовом задачи — после
+неё она проверяет `find . -type f -path '*/build/docker/Dockerfile'` и валит сборку, если контекста нет
+(сборки #11 и #12 падали именно так). Поэтому задача пишет `build/docker/Dockerfile` — валидный
+`FROM scratch` с label `ru.alfa.stand.test.placeholder`, чтобы случайно собранный из него образ был
+опознаваем в реестре.
+
+⚠️ Параметр `artifact_target_type=BUILD` закрывает только стадию **publish**, но не prepublish — это
+проверено по эталонному `jenkinsfile-ci-docker` из `card-info-service`, где docker вообще живёт внутри
+закрытой флагом стадии publish и отдельной prepublish нет. Если в `taksa-core/jenkins` стадия publish
+тоже закрыта флагом, заглушки достаточно и никакой образ не публикуется. Если нет — из этого контекста
+соберётся и уедет в реестр образ-заглушка; это ошибка конфигурации джобы, и правильное решение —
+перевести её на библиотечный пайплайн, а заглушку удалить.
 
 Браузерный набор (`:stand-test-ui:browserTest`) в CI не запускается — ему нужен образ с Chromium.
 
