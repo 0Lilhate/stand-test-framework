@@ -161,13 +161,17 @@ public final class DefaultScenarioValidator implements ScenarioValidator {
         if (type.startsWith(StepParameterKeys.DB_PREFIX)) {
             checkDbStep(step, environment, issues);
         } else if (type.startsWith(StepParameterKeys.REST_PREFIX)) {
-            checkAlias(step, StepParameterKeys.SERVICE, environment, ForbiddenOperation.NON_WHITELISTED_SERVICE, "Service", EnvironmentDefinition::service, issues);
+            checkAlias(step, StepParameterKeys.SERVICE, environment, ForbiddenOperation.NON_WHITELISTED_SERVICE, "Service",
+                    EnvironmentDefinition::service, issues);
         } else if (type.startsWith(StepParameterKeys.KAFKA_PREFIX)) {
-            checkAlias(step, StepParameterKeys.TOPIC, environment, ForbiddenOperation.NON_WHITELISTED_TOPIC, "Topic", EnvironmentDefinition::topic, issues);
+            checkAlias(step, StepParameterKeys.TOPIC, environment, ForbiddenOperation.NON_WHITELISTED_TOPIC, "Topic",
+                    EnvironmentDefinition::topic, issues);
         } else if (type.startsWith(StepParameterKeys.GRPC_PREFIX)) {
-            checkAlias(step, StepParameterKeys.TARGET, environment, ForbiddenOperation.NON_WHITELISTED_GRPC_TARGET, "gRPC target", EnvironmentDefinition::grpcTarget, issues);
+            checkAlias(step, StepParameterKeys.TARGET, environment, ForbiddenOperation.NON_WHITELISTED_GRPC_TARGET, "gRPC target",
+                    EnvironmentDefinition::grpcTarget, issues);
         } else if (type.startsWith(StepParameterKeys.UI_PREFIX)) {
-            checkAlias(step, StepParameterKeys.APPLICATION, environment, ForbiddenOperation.NON_WHITELISTED_UI_APPLICATION, "UI application", EnvironmentDefinition::uiApplication, issues);
+            checkAlias(step, StepParameterKeys.APPLICATION, environment, ForbiddenOperation.NON_WHITELISTED_UI_APPLICATION,
+                    "UI application", EnvironmentDefinition::uiApplication, issues);
             checkUiLoginRole(step, environment, issues);
         }
     }
@@ -272,7 +276,8 @@ public final class DefaultScenarioValidator implements ScenarioValidator {
             issues.add(ValidationIssue.error(
                     ForbiddenOperation.UNBOUNDED_TIMEOUT.code(),
                     "Step '" + step.id() + "' polls every " + interval.longValue() + " ms inside a wait of " + timeout.longValue()
-                            + " ms — the interval must not exceed the timeout, or the step waits for the interval and its declared bound describes nothing"));
+                            + " ms — the interval must not exceed the timeout, or the step waits for the interval and its "
+                            + "declared bound describes nothing"));
         }
     }
 
@@ -288,7 +293,8 @@ public final class DefaultScenarioValidator implements ScenarioValidator {
                 issues.add(ValidationIssue.error(
                         ForbiddenOperation.SECRET_IN_SOURCE.code(),
                         "Header '" + name + "' in step '" + step.id()
-                                + "' carries a Bearer/Basic credential value — secrets are supplied by the SDK from secret references, never inline"));
+                                + "' carries a Bearer/Basic credential value — secrets are supplied by the SDK from "
+                                + "secret references, never inline"));
             }
         }
     }

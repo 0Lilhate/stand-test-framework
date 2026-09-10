@@ -83,28 +83,33 @@ final class DbCompensator implements Compensator {
             }
             if (matching > 1) {
                 return CompensationOutcome.failed(actionId, datasourceAlias,
-                        "undo of " + qualifiedTable + " matched " + matching + " rows by " + pkColumns + " (expected 1): the identifiedBy column(s) are not unique — nothing was deleted",
+                        "undo of " + qualifiedTable + " matched " + matching + " rows by " + pkColumns
+                                + " (expected 1): the identifiedBy column(s) are not unique — nothing was deleted",
                         null, diagnostics);
             }
             NamedParameterStatement statement = NamedParameterStatement.parse(deleteSql);
             int rowsAffected;
-            try (PreparedStatement prepared = statement.create(connection.connection(), binds, NamedParameterStatement.DEFAULT_STATEMENT_TIMEOUT_SECONDS)) {
+            try (PreparedStatement prepared = statement.create(connection.connection(), binds,
+                    NamedParameterStatement.DEFAULT_STATEMENT_TIMEOUT_SECONDS)) {
                 rowsAffected = prepared.executeUpdate();
             }
             if (rowsAffected <= 0) {
-                return CompensationOutcome.skipped(actionId, datasourceAlias, "row vanished between count and delete (idempotent no-op)", diagnostics);
+                return CompensationOutcome.skipped(actionId, datasourceAlias, "row vanished between count and delete (idempotent no-op)",
+                        diagnostics);
             }
             return CompensationOutcome.applied(actionId, datasourceAlias, rowsAffected, diagnostics);
         } catch (Throwable failure) {
             // Honour the never-throw Compensator contract even against an Error: any failure is folded into
             // a FAILED outcome so the runner's drain can attempt the remaining actions and run its tail.
-            return CompensationOutcome.failed(actionId, datasourceAlias, "undo of " + qualifiedTable + " failed: " + failure.getMessage(), failure, diagnostics);
+            return CompensationOutcome.failed(actionId, datasourceAlias, "undo of " + qualifiedTable + " failed: " + failure.getMessage(),
+                    failure, diagnostics);
         }
     }
 
     private long countMatching(String countSql, Map<String, Object> binds) throws java.sql.SQLException {
         NamedParameterStatement statement = NamedParameterStatement.parse(countSql);
-        try (PreparedStatement prepared = statement.create(connection.connection(), binds, NamedParameterStatement.DEFAULT_STATEMENT_TIMEOUT_SECONDS);
+        try (PreparedStatement prepared = statement.create(connection.connection(), binds,
+                NamedParameterStatement.DEFAULT_STATEMENT_TIMEOUT_SECONDS);
                 java.sql.ResultSet rows = prepared.executeQuery()) {
             return rows.next() ? rows.getLong(1) : 0L;
         }

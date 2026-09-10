@@ -6,49 +6,54 @@ artifact ships `.jar` + `-sources.jar` + `-javadoc.jar` (javadoc is generated wi
 
 ## Repository configuration
 
-The internal Nexus/Artifactory endpoint is **not hardcoded** — it is supplied per invocation via Gradle
-properties, each with an environment-variable fallback (property wins):
+Publication is wired by the corporate `ru.alfalab.library-configurer`: it creates one publication per
+module (named `artifact`) and one repository (named `alfa`). The endpoint is not in this repository —
+it comes from the corporate properties, each of which is read as a Gradle property or an environment
+variable of the same name:
 
-| Gradle property | Env fallback | Meaning |
+| Property / env var | Default | Meaning |
 | --- | --- | --- |
-| `standTestPublishReleasesUrl` | `STAND_TEST_PUBLISH_RELEASES_URL` | release repository |
-| `standTestPublishSnapshotsUrl` | `STAND_TEST_PUBLISH_SNAPSHOTS_URL` | snapshot repository |
-| `standTestPublishUrl` | `STAND_TEST_PUBLISH_URL` | fallback for both of the above |
-| `standTestPublishUsername` | `STAND_TEST_PUBLISH_USERNAME` | credentials (omit for `file://` repos) |
-| `standTestPublishPassword` | `STAND_TEST_PUBLISH_PASSWORD` | credentials |
-| `standTestPublishAllowInsecure` | `STAND_TEST_PUBLISH_ALLOW_INSECURE` | `true` permits plain `http://` (in-perimeter Nexus) |
+| `ARTIFACTORY_HOST` | `https://binary.alfabank.ru` | Artifactory base URL |
+| `ARTIFACTORY_USER` | — | publish user |
+| `ARTIFACTORY_PASSWORD` | — | publish token |
+| `LIBRARY_SNAPSHOT_REPOSITORY` | `libs-snapshot-local` | repo key for `-SNAPSHOT` versions |
+| `LIBRARY_RELEASE_REPOSITORY` | `libs-release-local` | repo key for release versions |
 
-The snapshot/release repository is chosen by the version suffix in `gradle.properties`:
-`*-SNAPSHOT` → snapshots URL, otherwise → releases URL (each falling back to the common URL).
+Snapshot or release is chosen by the version in `gradle.properties`: `*-SNAPSHOT` → the snapshot repo,
+anything else → the release repo. `stand-test-bom` cannot use the configurer (it is a `java-platform`,
+and the configurer applies `java-library`), so its own build script mirrors the very same properties —
+keep the two in step if the corporate plugin ever changes them.
 
-Without any URL configured, `./gradlew publish` **fails with a clear message** (instead of silently
-publishing nothing — a CI footgun); `./gradlew build` and `./gradlew publishToMavenLocal` never need
-these properties.
+`./gradlew build` and `./gradlew publishToMavenLocal` need none of this.
 
 ```bash
 # Snapshot to the internal repo
-./gradlew publish \
-  -PstandTestPublishSnapshotsUrl=https://nexus.internal/repository/maven-snapshots \
-  -PstandTestPublishUsername=ci-user -PstandTestPublishPassword=***
+./gradlew publish -PARTIFACTORY_USER=ci-user -PARTIFACTORY_PASSWORD=***
 
 # Same via environment (e.g. CI secrets)
-STAND_TEST_PUBLISH_URL=https://nexus.internal/repository/maven-snapshots \
-STAND_TEST_PUBLISH_USERNAME=ci-user STAND_TEST_PUBLISH_PASSWORD=*** ./gradlew publish
-
-# Local smoke test against a file repository (no credentials needed)
-./gradlew publish -PstandTestPublishUrl=file:///tmp/m2repo
+ARTIFACTORY_USER=ci-user ARTIFACTORY_PASSWORD=*** ./gradlew publish
 ```
+
+Note what the POMs now carry: the configurer adds the Spring Boot and Spring Cloud BOMs as `api`
+platforms to **every** module, so each published POM imports them under `dependencyManagement` —
+`stand-test-core` included. No jars come with it (a platform contributes constraints only), but a
+consumer resolving our modules inherits those version constraints.
 
 ## Release process
 
 1. Set the release version in `gradle.properties` (`version=0.1.0`), commit.
-2. `./gradlew build` — full green build (compile + checkstyle + tests + coverage gate).
-3. `./gradlew publish -PstandTestPublishReleasesUrl=… -PstandTestPublishUsername=… -PstandTestPublishPassword=…`
+2. `./gradlew build` — full green build (compile + corporate analysis + tests; the analysis reports and
+   does not block, and there is no coverage gate).
+3. `./gradlew publish -PARTIFACTORY_USER=… -PARTIFACTORY_PASSWORD=…` — the release repo is chosen by the
+   version having no `-SNAPSHOT` suffix.
 4. Tag: `git tag v0.1.0 && git push --tags`.
 5. Bump to the next snapshot (`version=0.2.0-SNAPSHOT`), commit.
 
-Snapshots need no ceremony: leave the `-SNAPSHOT` version in place and run `publish` against the
-snapshot repository (step 3 with the snapshots URL).
+Snapshots need no ceremony: leave the `-SNAPSHOT` version in place and run `publish`.
+
+`gradle.properties` keeps the version static on purpose: `ru.alfalab.semantic-version` is applied, but it
+honours an explicitly declared `version` and only computes one from git tags when none is set. `./gradlew
+printVersion` prints exactly what the CI publish stage would read.
 
 ## Environment-registry format version (a second, slower version number)
 

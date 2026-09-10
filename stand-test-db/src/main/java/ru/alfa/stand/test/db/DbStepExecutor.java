@@ -70,7 +70,10 @@ public final class DbStepExecutor implements StepExecutor {
 
     private static final Logger LOG = LoggerFactory.getLogger(DbStepExecutor.class);
 
-    private static final String CONNECTION_KEY_PREFIX = "db.datasource:";
+    /** Diagnostics key naming the datasource alias a step ran against; also the prefix of its run-scoped connection key. */
+    private static final String DIAGNOSTIC_DATASOURCE = "db.datasource";
+
+    private static final String CONNECTION_KEY_PREFIX = DIAGNOSTIC_DATASOURCE + ":";
     private static final int TIMEOUT_RENDER_LIMIT = 200;
 
     private final ReferenceResolver referenceResolver;
@@ -78,7 +81,7 @@ public final class DbStepExecutor implements StepExecutor {
     private final Awaiter awaiter;
 
     /**
-     * Creates an executor with the default environment reference resolver, a {@link DriverManager}-backed
+     * Creates an executor with the default environment reference resolver, a {@link java.sql.DriverManager}-backed
      * connection factory and a system-backed awaiter.
      */
     public DbStepExecutor() {
@@ -120,7 +123,8 @@ public final class DbStepExecutor implements StepExecutor {
         if (operation == DbOperation.WRITE) {
             return executeBusinessWrite(step, parameters, datasource, datasourceAlias, context, finalSql);
         }
-        boolean testRunIdPredicateDeclared = DbStepParameters.optionalString(parameters, DbStepParameters.WHERE_TEST_RUN_ID_COLUMN).isPresent();
+        boolean testRunIdPredicateDeclared = DbStepParameters.optionalString(parameters, DbStepParameters.WHERE_TEST_RUN_ID_COLUMN)
+                .isPresent();
         String seedTestRunIdColumn = DbStepParameters.optionalString(parameters, DbStepParameters.SEED_TEST_RUN_ID_COLUMN).orElse(null);
         DbWriteGuard.classifyAndEnforce(finalSql, operation, datasource, testRunIdPredicateDeclared, seedTestRunIdColumn);
         Map<String, Object> binds = binds(parameters, context);
@@ -151,7 +155,8 @@ public final class DbStepExecutor implements StepExecutor {
         SqlClassification classification = DbWriteGuard.classifyAndEnforceBusinessWrite(finalSql, datasource);
         List<String> pkColumns = DbStepParameters.identifiedBy(parameters);
         if (pkColumns.isEmpty()) {
-            throw new StandTestException("db.write on '" + datasourceAlias + "' requires identifiedBy(...) so its INSERT can be undone by primary key");
+            throw new StandTestException("db.write on '" + datasourceAlias
+                    + "' requires identifiedBy(...) so its INSERT can be undone by primary key");
         }
         Set<String> insertColumns = SqlStatementClassifier.insertColumns(finalSql);
         Map<String, Object> binds = binds(parameters, context);
@@ -161,12 +166,16 @@ public final class DbStepExecutor implements StepExecutor {
             // value must be bound as :<column>, so the captured value is the one written into that column.
             // This is the MVP's positional-capture safeguard; full VALUES-tuple parsing is staged.
             if (!insertColumns.contains(column.toLowerCase(Locale.ROOT))) {
-                throw new StandTestException("db.write on '" + datasourceAlias + "' cannot capture its primary key: the identifiedBy column '" + column
-                        + "' is not in the INSERT column list " + insertColumns + " (it must be an explicitly inserted, :" + column + "-bound column)");
+                throw new StandTestException("db.write on '" + datasourceAlias
+                        + "' cannot capture its primary key: the identifiedBy column '" + column
+                        + "' is not in the INSERT column list " + insertColumns + " (it must be an explicitly inserted, :" + column
+                                + "-bound column)");
             }
             if (!binds.containsKey(column)) {
-                throw new StandTestException("db.write on '" + datasourceAlias + "' cannot capture its primary key: the identifiedBy column '" + column
-                        + "' must have its value bound as ':" + column + "' in the INSERT (for example VALUES(:" + column + ", ...)); DB-generated identity keys are not yet supported");
+                throw new StandTestException("db.write on '" + datasourceAlias
+                        + "' cannot capture its primary key: the identifiedBy column '" + column
+                        + "' must have its value bound as ':" + column + "' in the INSERT (for example VALUES(:" + column
+                                + ", ...)); DB-generated identity keys are not yet supported");
             }
             pkValues.put(column, binds.get(column));
         }
@@ -175,11 +184,13 @@ public final class DbStepExecutor implements StepExecutor {
         // table: a non-unique undo key could otherwise arm a DELETE that matches rows this test never wrote
         // (the compensator's pre-count net is the second line of defence). Verified via DatabaseMetaData on
         // the run-scoped connection — no rows read (plan §15; CONFIRMED-HIGH, 2026-07 review).
-        UndoKeyVerifier.verifyUniqueKey(connection.connection(), classification.writeSchema(), classification.writeTable(), pkColumns, datasourceAlias);
+        UndoKeyVerifier.verifyUniqueKey(connection.connection(), classification.writeSchema(), classification.writeTable(), pkColumns,
+                datasourceAlias);
         Instant startedAt = Instant.now();
         int rowsAffected;
         NamedParameterStatement statement = NamedParameterStatement.parse(finalSql);
-        try (PreparedStatement prepared = statement.create(connection.connection(), binds, NamedParameterStatement.DEFAULT_STATEMENT_TIMEOUT_SECONDS)) {
+        try (PreparedStatement prepared = statement.create(connection.connection(), binds,
+                NamedParameterStatement.DEFAULT_STATEMENT_TIMEOUT_SECONDS)) {
             rowsAffected = prepared.executeUpdate();
         } catch (SQLException failure) {
             throw new StandTestException("db.write failed on datasource '" + datasourceAlias + "': " + failure.getMessage(), failure);
@@ -189,7 +200,8 @@ public final class DbStepExecutor implements StepExecutor {
         // Register the undo only if the INSERT actually created a row: a 0-row write has nothing to
         // compensate, and arming a DELETE by the bound PK could otherwise remove a pre-existing row.
         if (rowsAffected > 0) {
-            context.undoLog().register(new DbCompensator(step.id(), datasourceAlias, connection, datasource, qualifiedTable, pkColumns, pkValues));
+            context.undoLog()
+                    .register(new DbCompensator(step.id(), datasourceAlias, connection, datasource, qualifiedTable, pkColumns, pkValues));
         }
         return businessWriteSuccess(step, startedAt, datasourceAlias, qualifiedTable, rowsAffected);
     }
@@ -205,7 +217,8 @@ public final class DbStepExecutor implements StepExecutor {
         Instant startedAt = Instant.now();
         List<DbCapture> captures = DbStepParameters.captures(parameters);
         NamedParameterStatement statement = NamedParameterStatement.parse(finalSql);
-        try (PreparedStatement prepared = statement.create(connection.connection(), binds, NamedParameterStatement.DEFAULT_STATEMENT_TIMEOUT_SECONDS); ResultSet rows = prepared.executeQuery()) {
+        try (PreparedStatement prepared = statement.create(connection.connection(), binds,
+                NamedParameterStatement.DEFAULT_STATEMENT_TIMEOUT_SECONDS); ResultSet rows = prepared.executeQuery()) {
             if (!captures.isEmpty()) {
                 if (!rows.next()) {
                     throw new StandTestException("db.query on '" + datasourceAlias + "' captured columns but the SELECT returned no rows");
@@ -228,8 +241,10 @@ public final class DbStepExecutor implements StepExecutor {
         Instant startedAt = Instant.now();
         Object expected = DbStepParameters.requireExpectedValue(parameters);
         NamedParameterStatement statement = NamedParameterStatement.parse(finalSql);
-        Duration timeout = Duration.ofMillis(DbStepParameters.positiveMillis(parameters, DbStepParameters.TIMEOUT_MILLIS, DbStepParameters.DEFAULT_TIMEOUT_MILLIS));
-        Duration pollInterval = Duration.ofMillis(DbStepParameters.positiveMillis(parameters, DbStepParameters.POLL_INTERVAL_MILLIS, DbStepParameters.DEFAULT_POLL_INTERVAL_MILLIS));
+        Duration timeout = Duration.ofMillis(DbStepParameters.positiveMillis(parameters, DbStepParameters.TIMEOUT_MILLIS,
+                DbStepParameters.DEFAULT_TIMEOUT_MILLIS));
+        Duration pollInterval = Duration.ofMillis(DbStepParameters.positiveMillis(parameters, DbStepParameters.POLL_INTERVAL_MILLIS,
+                DbStepParameters.DEFAULT_POLL_INTERVAL_MILLIS));
         // Cap each poll's statement at the poll timeout (never above the default bound), so a single blocking
         // probe cannot overshoot the await window and the whole expect stays bounded (plan §2.5).
         int probeTimeoutSeconds = boundedStatementTimeoutSeconds(timeout);
@@ -259,19 +274,24 @@ public final class DbStepExecutor implements StepExecutor {
         Instant startedAt = Instant.now();
         NamedParameterStatement statement = NamedParameterStatement.parse(finalSql);
         int rowsAffected;
-        try (PreparedStatement prepared = statement.create(connection.connection(), binds, NamedParameterStatement.DEFAULT_STATEMENT_TIMEOUT_SECONDS)) {
+        try (PreparedStatement prepared = statement.create(connection.connection(), binds,
+                NamedParameterStatement.DEFAULT_STATEMENT_TIMEOUT_SECONDS)) {
             rowsAffected = prepared.executeUpdate();
         } catch (SQLException failure) {
-            throw new StandTestException(operation.stepType() + " failed on datasource '" + datasourceAlias + "': " + failure.getMessage(), failure);
+            throw new StandTestException(operation.stepType() + " failed on datasource '" + datasourceAlias + "': " + failure.getMessage(),
+                    failure);
         }
         if (LOG.isDebugEnabled()) {
-            LOG.debug("DB {} on datasource '{}' -> {} row(s)", SqlStatementClassifier.classify(finalSql).leadingKeyword(), datasourceAlias, rowsAffected);
+            LOG.debug("DB {} on datasource '{}' -> {} row(s)", SqlStatementClassifier.classify(finalSql).leadingKeyword(), datasourceAlias,
+                    rowsAffected);
         }
         return writeSuccess(step, operation, startedAt, datasourceAlias, rowsAffected);
     }
 
-    private Optional<Object> probe(RunScopedConnection connection, NamedParameterStatement statement, Map<String, Object> binds, int queryTimeoutSeconds, Object[] lastObserved) {
-        try (PreparedStatement prepared = statement.create(connection.connection(), binds, queryTimeoutSeconds); ResultSet rows = prepared.executeQuery()) {
+    private Optional<Object> probe(RunScopedConnection connection, NamedParameterStatement statement, Map<String, Object> binds,
+            int queryTimeoutSeconds, Object[] lastObserved) {
+        try (PreparedStatement prepared = statement.create(connection.connection(), binds,
+                queryTimeoutSeconds); ResultSet rows = prepared.executeQuery()) {
             if (!rows.next()) {
                 lastObserved[0] = "<no rows>";
                 return Optional.empty();
@@ -287,11 +307,13 @@ public final class DbStepExecutor implements StepExecutor {
         }
     }
 
-    private void applyCaptures(List<DbCapture> captures, ResultSet rows, StepExecutionContext context, String datasourceAlias) throws SQLException {
+    private void applyCaptures(List<DbCapture> captures, ResultSet rows, StepExecutionContext context,
+            String datasourceAlias) throws SQLException {
         for (DbCapture capture : captures) {
             Object value = rows.getObject(capture.column());
             if (value == null) {
-                throw new StandTestException("db.query on '" + datasourceAlias + "' captured column '" + capture.column() + "' which is null; cannot store variable '" + capture.variableName() + "'");
+                throw new StandTestException("db.query on '" + datasourceAlias + "' captured column '" + capture.column()
+                        + "' which is null; cannot store variable '" + capture.variableName() + "'");
             }
             context.variableStore().put(capture.variableName(), value);
         }
@@ -311,14 +333,16 @@ public final class DbStepExecutor implements StepExecutor {
         try {
             raw = this.connectionFactory.open(resolved);
         } catch (SQLException failure) {
-            throw new StandTestException("Failed to open a JDBC connection for datasource '" + alias + "': " + failure.getMessage(), failure);
+            throw new StandTestException("Failed to open a JDBC connection for datasource '" + alias + "': " + failure.getMessage(),
+                    failure);
         }
         RunScopedConnection connection = new RunScopedConnection(raw, alias);
         scope.register(key, connection);
         try {
             raw.setAutoCommit(true);
         } catch (SQLException failure) {
-            throw new StandTestException("Failed to configure the JDBC connection for datasource '" + alias + "': " + failure.getMessage(), failure);
+            throw new StandTestException("Failed to configure the JDBC connection for datasource '" + alias + "': " + failure.getMessage(),
+                    failure);
         }
         return connection;
     }
@@ -361,7 +385,8 @@ public final class DbStepExecutor implements StepExecutor {
         }
         SqlClassification authorClassification = SqlStatementClassifier.classify(base);
         if (authorClassification.containsWhereClause()) {
-            throw new StandTestException("A step using whereTestRunId(...) must not carry its own WHERE clause — the testRunId predicate is the single source of the WHERE (plan §8.8)");
+            throw new StandTestException("A step using whereTestRunId(...) must not carry its own WHERE clause — the testRunId predicate "
+                    + "is the single source of the WHERE (plan §8.8)");
         }
         String trimmed = stripTrailingSemicolon(base.strip());
         return trimmed + "\nWHERE " + whereColumn + " = :testRunId";
@@ -371,7 +396,8 @@ public final class DbStepExecutor implements StepExecutor {
         Optional<String> inline = DbStepParameters.optionalString(parameters, DbStepParameters.SQL);
         Optional<String> resource = DbStepParameters.optionalString(parameters, DbStepParameters.SQL_RESOURCE);
         if (inline.isPresent() && resource.isPresent()) {
-            throw new StandTestException("A DB step must set either '" + DbStepParameters.SQL + "' or '" + DbStepParameters.SQL_RESOURCE + "', not both");
+            throw new StandTestException("A DB step must set either '" + DbStepParameters.SQL + "' or '" + DbStepParameters.SQL_RESOURCE
+                    + "', not both");
         }
         if (resource.isPresent()) {
             String content = readResource(resource.get());
@@ -380,7 +406,8 @@ public final class DbStepExecutor implements StepExecutor {
             }
             return content;
         }
-        return inline.orElseThrow(() -> new StandTestException("A DB step requires '" + DbStepParameters.SQL + "' or '" + DbStepParameters.SQL_RESOURCE + "'"));
+        return inline.orElseThrow(() -> new StandTestException("A DB step requires '" + DbStepParameters.SQL + "' or '"
+                + DbStepParameters.SQL_RESOURCE + "'"));
     }
 
     private static String stripTrailingSemicolon(String sql) {
@@ -426,15 +453,17 @@ public final class DbStepExecutor implements StepExecutor {
         throw new StandTestException("DbStepExecutor requires a GenericStep produced by DbStep, but got: " + step.getClass().getName());
     }
 
-    private static StandTestAssertionError expectTimeout(TimeoutDiagnostics diagnostics, String datasourceAlias, String sql, Object expected, Object lastObserved) {
+    private static StandTestAssertionError expectTimeout(TimeoutDiagnostics diagnostics, String datasourceAlias, String sql,
+            Object expected, Object lastObserved) {
         // The truncated SQL goes into the map too: "which query did not come true" is the first thing asked
         // of a red db step, and in the message it sits at the end of a long line.
         Map<String, Object> reportable = diagnostics
-                .withAttribute("db.datasource", datasourceAlias)
+                .withAttribute(DIAGNOSTIC_DATASOURCE, datasourceAlias)
                 .withAttribute("db.expected", DbValues.render(expected))
                 .withAttribute("db.sql", truncate(sql))
                 .toMap();
-        return new DiagnosticAssertionError("db.expectEventually '" + datasourceAlias + "' did not observe the expected value: " + diagnostics.summary()
+        return new DiagnosticAssertionError("db.expectEventually '" + datasourceAlias + "' did not observe the expected value: "
+                + diagnostics.summary()
                 + " (datasource=" + datasourceAlias + ", expected=" + DbValues.render(expected) + ", lastObserved=" + lastObserved
                 + ", sql=" + truncate(sql) + ")", reportable);
     }
@@ -459,7 +488,7 @@ public final class DbStepExecutor implements StepExecutor {
     private static StepResult querySuccess(ScenarioStep step, Instant startedAt, String datasourceAlias, List<DbCapture> captures) {
         Map<String, Object> diagnostics = new LinkedHashMap<>();
         diagnostics.put("db.operation", "query");
-        diagnostics.put("db.datasource", datasourceAlias);
+        diagnostics.put(DIAGNOSTIC_DATASOURCE, datasourceAlias);
         diagnostics.put("db.captured", captures.stream().map(DbCapture::variableName).toList());
         return new StepResult(step.id(), step.type(), StepStatus.SUCCESS, startedAt, Instant.now(), null, diagnostics);
     }
@@ -467,23 +496,25 @@ public final class DbStepExecutor implements StepExecutor {
     private static StepResult expectSuccess(ScenarioStep step, Instant startedAt, String datasourceAlias, Object value) {
         Map<String, Object> diagnostics = new LinkedHashMap<>();
         diagnostics.put("db.operation", "expectEventually");
-        diagnostics.put("db.datasource", datasourceAlias);
+        diagnostics.put(DIAGNOSTIC_DATASOURCE, datasourceAlias);
         diagnostics.put("db.value", DbValues.render(value));
         return new StepResult(step.id(), step.type(), StepStatus.SUCCESS, startedAt, Instant.now(), null, diagnostics);
     }
 
-    private static StepResult writeSuccess(ScenarioStep step, DbOperation operation, Instant startedAt, String datasourceAlias, int rowsAffected) {
+    private static StepResult writeSuccess(ScenarioStep step, DbOperation operation, Instant startedAt, String datasourceAlias,
+            int rowsAffected) {
         Map<String, Object> diagnostics = new LinkedHashMap<>();
         diagnostics.put("db.operation", operation == DbOperation.SEED ? "seed" : "cleanup");
-        diagnostics.put("db.datasource", datasourceAlias);
+        diagnostics.put(DIAGNOSTIC_DATASOURCE, datasourceAlias);
         diagnostics.put("db.rowsAffected", rowsAffected);
         return new StepResult(step.id(), step.type(), StepStatus.SUCCESS, startedAt, Instant.now(), null, diagnostics);
     }
 
-    private static StepResult businessWriteSuccess(ScenarioStep step, Instant startedAt, String datasourceAlias, String qualifiedTable, int rowsAffected) {
+    private static StepResult businessWriteSuccess(ScenarioStep step, Instant startedAt, String datasourceAlias, String qualifiedTable,
+            int rowsAffected) {
         Map<String, Object> diagnostics = new LinkedHashMap<>();
         diagnostics.put("db.operation", "write");
-        diagnostics.put("db.datasource", datasourceAlias);
+        diagnostics.put(DIAGNOSTIC_DATASOURCE, datasourceAlias);
         diagnostics.put("db.table", qualifiedTable);
         diagnostics.put("db.rowsAffected", rowsAffected);
         diagnostics.put("db.undoRegistered", true);

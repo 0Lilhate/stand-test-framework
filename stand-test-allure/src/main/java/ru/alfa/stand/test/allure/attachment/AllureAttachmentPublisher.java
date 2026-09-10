@@ -83,7 +83,9 @@ public final class AllureAttachmentPublisher {
     private void publishFile(Attachment attachment) {
         Path file = attachment.file();
         if (artifactsRoot == null) {
-            LOG.warn("Skipping file attachment '{}': this publisher has no artefacts directory configured, so no path can be proven to belong to the run", attachment.name());
+            LOG.warn("Skipping file attachment '{}': this publisher has no artefacts directory configured, so no path can "
+                    + "be proven to belong to the run",
+                    attachment.name());
             return;
         }
         Path resolvedFile;
@@ -105,7 +107,8 @@ public final class AllureAttachmentPublisher {
         }
         String extension = AttachmentType.extensionForBinaryMediaType(attachment.mediaType());
         if (AttachmentType.BINARY.fileExtension().equals(extension)) {
-            LOG.warn("File attachment '{}' has media type '{}', which maps to no known extension — publishing it as .bin", attachment.name(), attachment.mediaType());
+            LOG.warn("File attachment '{}' has media type '{}', which maps to no known extension — publishing it as .bin",
+                    attachment.name(), attachment.mediaType());
         }
         lifecycle.addAttachment(attachment.name(), attachment.mediaType(), extension, resolvedFile);
     }

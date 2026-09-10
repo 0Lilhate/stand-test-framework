@@ -49,8 +49,10 @@ public final class EnvironmentUiApplicationResolver implements UiApplicationReso
                 .environment(environment)
                 .orElseThrow(() -> new StandTestException("Environment '" + environment + "' is not whitelisted"));
         UiApplicationDefinition application = definition.uiApplication(applicationAlias)
-                .orElseThrow(() -> new StandTestException("UI application '" + applicationAlias + "' is not whitelisted in environment '" + environment + "'"));
-        return new ResolvedUiApplication(applicationAlias, resolveBaseUrl(application), viewport(application), application.auth(), application.trace());
+                .orElseThrow(() -> new StandTestException("UI application '" + applicationAlias + "' is not whitelisted in environment '"
+                        + environment + "'"));
+        return new ResolvedUiApplication(applicationAlias, resolveBaseUrl(application), viewport(application), application.auth(),
+                application.trace());
     }
 
     private String resolveBaseUrl(UiApplicationDefinition application) {
@@ -58,7 +60,8 @@ public final class EnvironmentUiApplicationResolver implements UiApplicationReso
         String resolved = SecretReferences.resolve(reference, this.lookup);
         if (resolved == null || resolved.isBlank()) {
             if (SecretReferences.isLiteral(reference)) {
-                throw new StandTestException("UI application '" + application.alias() + "' is configured with a literal base URL but it is empty");
+                throw new StandTestException("UI application '" + application.alias()
+                        + "' is configured with a literal base URL but it is empty");
             }
             throw new StandTestException("Base URL reference '" + reference + "' of UI application '" + application.alias()
                     + "' did not resolve (environment variable not set)");

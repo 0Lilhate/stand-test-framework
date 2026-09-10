@@ -318,13 +318,16 @@ public final class DbStep {
             throw new IllegalStateException("expectValue(...) applies to db.expectEventually, not " + this.operation.stepType());
         }
         if (this.operation != DbOperation.EXPECT_EVENTUALLY && (this.timeoutMillis != null || this.pollIntervalMillis != null)) {
-            throw new IllegalStateException("within(...) / pollInterval(...) apply to db.expectEventually, not " + this.operation.stepType());
+            throw new IllegalStateException("within(...) / pollInterval(...) apply to db.expectEventually, not "
+                    + this.operation.stepType());
         }
         if (this.operation == DbOperation.EXPECT_EVENTUALLY && !this.expectedValueSet) {
             throw new IllegalStateException("A db.expectEventually step requires expectValue(...)");
         }
         if (this.operation != DbOperation.SEED && this.operation != DbOperation.CLEANUP && this.whereTestRunIdColumn != null) {
-            throw new IllegalStateException("whereTestRunId(...) applies to db.seed/db.cleanup (db.write is undone by primary key, not a testRunId predicate), not " + this.operation.stepType());
+            throw new IllegalStateException("whereTestRunId(...) applies to db.seed/db.cleanup (db.write is undone by primary key, not "
+                    + "a testRunId predicate), not "
+                    + this.operation.stepType());
         }
         if (this.operation == DbOperation.CLEANUP && this.whereTestRunIdColumn == null) {
             throw new IllegalStateException("A db.cleanup step requires whereTestRunId(...) so it only deletes the run's own data");

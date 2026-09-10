@@ -26,15 +26,15 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  */
 final class SurfaceValues {
 
+    /** The keys an assertion item may carry: {@code path} plus exactly one matcher. */
+    static final Set<String> ASSERT_ITEM_KEYS;
+
     /**
      * Surface matcher name → the wire matcher constant the adapters read, in the order a message lists
      * them. Ordered on purpose: a {@code Map.of} here made the "but found [...]" of a multi-matcher
      * rejection come out in a different order on different JVMs.
      */
     private static final Map<String, String> ASSERT_MATCHERS;
-
-    /** The keys an assertion item may carry: {@code path} plus exactly one matcher. */
-    static final Set<String> ASSERT_ITEM_KEYS;
 
     /** The matcher names as a message renders them, e.g. {@code equals/contains/exists/notNull/matches}. */
     private static final String MATCHER_LIST;
@@ -160,7 +160,8 @@ final class SurfaceValues {
      * Reads a mapping whose values must all be present, applying {@code valueMapper} to each. Safe to
      * collect — unlike {@link #asMap}, a null value is refused here first, and refused by name.
      */
-    private static <V> Map<String, V> mapOfNonNullValues(Object value, String location, Function<Map.Entry<String, Object>, V> valueMapper) {
+    private static <V> Map<String, V> mapOfNonNullValues(Object value, String location,
+            Function<Map.Entry<String, Object>, V> valueMapper) {
         if (value == null) {
             return Map.of();
         }
@@ -180,7 +181,8 @@ final class SurfaceValues {
         long millis;
         if (value instanceof Number number) {
             if (!(number instanceof Integer) && !(number instanceof Long)) {
-                throw new StandTestException("Duration at " + location + " must be a whole number of milliseconds, not a floating-point value: " + value);
+                throw new StandTestException("Duration at " + location
+                        + " must be a whole number of milliseconds, not a floating-point value: " + value);
             }
             millis = number.longValue();
         } else if (value instanceof String text) {
@@ -207,7 +209,8 @@ final class SurfaceValues {
             }
             return Long.parseLong(text);
         } catch (NumberFormatException notANumber) {
-            throw new StandTestException("Invalid duration '" + text + "' at " + location + " (use '<n>ms', '<n>s', '<n>m' or a number of ms)");
+            throw new StandTestException("Invalid duration '" + text + "' at " + location
+                    + " (use '<n>ms', '<n>s', '<n>m' or a number of ms)");
         }
     }
 
@@ -216,7 +219,8 @@ final class SurfaceValues {
                 .entrySet().stream()
                 .map(entry -> {
                     if (entry.getValue() == null) {
-                        throw new StandTestException("Assertion for '" + entry.getKey() + "' at " + location + " must have a non-null expected value");
+                        throw new StandTestException("Assertion for '" + entry.getKey() + "' at " + location
+                                + " must have a non-null expected value");
                     }
                     return Map.of(YamlStepKeys.JSON_PATH, entry.getKey(), YamlStepKeys.EXPECTED_VALUE, entry.getValue());
                 })
@@ -235,7 +239,9 @@ final class SurfaceValues {
             return assertions(value, location);
         }
         if (!(value instanceof List<?> items)) {
-            throw new StandTestException("'assert' at " + location + " must be a {\"jsonPath\": expectedValue} mapping or a list of {path, <matcher>} items, but found " + describe(value));
+            throw new StandTestException("'assert' at " + location
+                    + " must be a {\"jsonPath\": expectedValue} mapping or a list of {path, <matcher>} items, but found "
+                    + describe(value));
         }
         return IntStream.range(0, items.size())
                 .mapToObj(index -> matcherAssertion(items.get(index), location + "[" + index + "]"))
@@ -250,7 +256,8 @@ final class SurfaceValues {
                 .filter(item::containsKey)
                 .toList();
         if (present.size() != 1) {
-            throw new StandTestException("Assertion at " + itemLoc + " must declare exactly one matcher besides 'path' (" + MATCHER_LIST + "), but found " + present);
+            throw new StandTestException("Assertion at " + itemLoc + " must declare exactly one matcher besides 'path' (" + MATCHER_LIST
+                    + "), but found " + present);
         }
         String surfaceMatcher = present.get(0);
         Object expected = item.get(surfaceMatcher);
@@ -259,7 +266,8 @@ final class SurfaceValues {
         }
         return EQUALS.equals(surfaceMatcher)
                 ? Map.of(YamlStepKeys.JSON_PATH, path, YamlStepKeys.EXPECTED_VALUE, expected)
-                : Map.of(YamlStepKeys.JSON_PATH, path, YamlStepKeys.EXPECTED_VALUE, expected, YamlStepKeys.MATCHER, ASSERT_MATCHERS.get(surfaceMatcher));
+                : Map.of(YamlStepKeys.JSON_PATH, path, YamlStepKeys.EXPECTED_VALUE, expected, YamlStepKeys.MATCHER,
+                        ASSERT_MATCHERS.get(surfaceMatcher));
     }
 
     /**
@@ -277,7 +285,8 @@ final class SurfaceValues {
                 .entrySet().stream()
                 .map(entry -> {
                     if (!(entry.getValue() instanceof String selector) || selector.isBlank()) {
-                        throw new StandTestException("Capture '" + entry.getKey() + "' at " + location + " must map to a non-blank " + valueKey);
+                        throw new StandTestException("Capture '" + entry.getKey() + "' at " + location + " must map to a non-blank "
+                                + valueKey);
                     }
                     return Map.<String, Object>of(YamlStepKeys.VARIABLE_NAME, entry.getKey(), valueKey, selector);
                 })
@@ -325,14 +334,16 @@ final class SurfaceValues {
      * {@code false} is an opt-out the author asked for. Writing a default here would erase that
      * difference for all three adapters at once.
      */
-    static void putOptionalFlag(Map<String, Object> params, Map<String, Object> fields, String surfaceField, String wireKey, String location) {
+    static void putOptionalFlag(Map<String, Object> params, Map<String, Object> fields, String surfaceField, String wireKey,
+            String location) {
         if (fields.containsKey(surfaceField)) {
             params.put(wireKey, boolFlag(fields, surfaceField, location));
         }
     }
 
     /** Writes a bounded duration wire key only when the surface declared it. */
-    static void putOptionalDuration(Map<String, Object> params, Map<String, Object> fields, String surfaceField, String wireKey, String location) {
+    static void putOptionalDuration(Map<String, Object> params, Map<String, Object> fields, String surfaceField, String wireKey,
+            String location) {
         if (fields.containsKey(surfaceField)) {
             params.put(wireKey, durationMillis(fields.get(surfaceField), location + "." + surfaceField));
         }

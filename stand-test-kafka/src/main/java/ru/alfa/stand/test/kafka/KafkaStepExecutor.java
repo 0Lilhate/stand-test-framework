@@ -173,7 +173,8 @@ public final class KafkaStepExecutor implements StepExecutor {
         VariableResolver resolver = context.resolver();
         String value = resolveBody(parameters, resolver);
         if (value == null) {
-            throw new StandTestException("A kafka.send step requires '" + KafkaStepParameters.BODY + "' or '" + KafkaStepParameters.BODY_RESOURCE + "'");
+            throw new StandTestException("A kafka.send step requires '" + KafkaStepParameters.BODY + "' or '"
+                    + KafkaStepParameters.BODY_RESOURCE + "'");
         }
         String key = KafkaStepParameters.optionalString(parameters, KafkaStepParameters.KEY).map(resolver::resolve).orElse(null);
         Map<String, String> headers = resolveValues(KafkaStepParameters.stringMap(parameters, KafkaStepParameters.HEADERS), resolver);
@@ -197,19 +198,24 @@ public final class KafkaStepExecutor implements StepExecutor {
         requirePerRunDiscriminator(parameters, topicAlias);
         String expectedCorrelationId = expectedCorrelationId(parameters, topic, topicAlias, context);
         String correlationHeaderName = (expectedCorrelationId == null) ? null : topic.correlation().name();
-        String keyDiscriminator = KafkaStepParameters.optionalString(parameters, KafkaStepParameters.KEY).map(resolver::resolve).orElse(null);
-        Predicate<ConsumerRecord<String, String>> selection = record -> matches(record, correlationHeaderName, expectedCorrelationId, keyDiscriminator);
+        String keyDiscriminator = KafkaStepParameters.optionalString(parameters, KafkaStepParameters.KEY).map(resolver::resolve)
+                .orElse(null);
+        Predicate<ConsumerRecord<String, String>> selection = record -> matches(record, correlationHeaderName, expectedCorrelationId,
+                keyDiscriminator);
 
-        Duration pollTimeout = Duration.ofMillis(KafkaStepParameters.positiveMillis(parameters, KafkaStepParameters.POLL_TIMEOUT_MILLIS, KafkaStepParameters.DEFAULT_POLL_TIMEOUT_MILLIS));
+        Duration pollTimeout = Duration.ofMillis(KafkaStepParameters.positiveMillis(parameters, KafkaStepParameters.POLL_TIMEOUT_MILLIS,
+                KafkaStepParameters.DEFAULT_POLL_TIMEOUT_MILLIS));
         AwaitPolicy policy = AwaitPolicy.builder("kafka.expect " + topicAlias)
-                .timeout(Duration.ofMillis(KafkaStepParameters.positiveMillis(parameters, KafkaStepParameters.TIMEOUT_MILLIS, KafkaStepParameters.DEFAULT_TIMEOUT_MILLIS)))
+                .timeout(Duration.ofMillis(KafkaStepParameters.positiveMillis(parameters, KafkaStepParameters.TIMEOUT_MILLIS,
+                        KafkaStepParameters.DEFAULT_TIMEOUT_MILLIS)))
                 .pollInterval(POLL_INTERVAL)
                 .ignoreExceptions(false)
                 .build();
         AwaitResult<Optional<ConsumerRecord<String, String>>> result = this.awaiter.await(
                 policy, () -> armed.pollAndSelect(pollTimeout, selection), Optional::isPresent);
         ConsumerRecord<String, String> record = result
-                .orElseThrow(diagnostics -> timeout(diagnostics, topicAlias, armed, correlationHeaderName, expectedCorrelationId, keyDiscriminator))
+                .orElseThrow(diagnostics -> timeout(diagnostics, topicAlias, armed, correlationHeaderName, expectedCorrelationId,
+                        keyDiscriminator))
                 .orElseThrow();
 
         List<KafkaAssertion> assertions = KafkaStepParameters.assertions(parameters);
@@ -236,8 +242,10 @@ public final class KafkaStepExecutor implements StepExecutor {
         // The topic's HEADER correlation carrier (if any) lets the ArmedConsumer evict other runs' records
         // from a busy shared topic; a topic with no HEADER carrier gets no eviction (null header name).
         CorrelationConfig topicCorrelation = topic.correlation();
-        String correlationHeaderName = (topicCorrelation != null && topicCorrelation.source() == CorrelationSource.HEADER) ? topicCorrelation.name() : null;
-        ArmedConsumer armed = new ArmedConsumer(consumer, topicAlias, topic.name(), correlationHeaderName, context.scenarioContext().correlationId().value());
+        String correlationHeaderName = (topicCorrelation != null
+                && topicCorrelation.source() == CorrelationSource.HEADER) ? topicCorrelation.name() : null;
+        ArmedConsumer armed = new ArmedConsumer(consumer, topicAlias, topic.name(), correlationHeaderName,
+                context.scenarioContext().correlationId().value());
         // Register before arming, so a failure during positioning still hands the consumer to the
         // runner's ResourceScope.closeAll() and never leaks it.
         scope.register(CONSUMER_KEY_PREFIX + topicAlias, armed);
@@ -255,7 +263,8 @@ public final class KafkaStepExecutor implements StepExecutor {
         return context.resourceScope().get(CONSUMER_KEY_PREFIX + topicAlias)
                 .filter(ArmedConsumer.class::isInstance)
                 .map(ArmedConsumer.class::cast)
-                .orElseThrow(() -> new StandTestException("No armed Kafka consumer for topic '" + topicAlias + "'; the runner's prepare phase did not arm it (plan §8.7)"));
+                .orElseThrow(() -> new StandTestException("No armed Kafka consumer for topic '" + topicAlias
+                        + "'; the runner's prepare phase did not arm it (plan §8.7)"));
     }
 
     private static EnvironmentDefinition environment(StepExecutionContext context) {
@@ -266,7 +275,8 @@ public final class KafkaStepExecutor implements StepExecutor {
 
     private static TopicDefinition topic(EnvironmentDefinition environment, String topicAlias, StepExecutionContext context) {
         return environment.topic(topicAlias)
-                .orElseThrow(() -> new StandTestException("Topic '" + topicAlias + "' is not whitelisted in environment '" + context.scenarioContext().environment() + "'"));
+                .orElseThrow(() -> new StandTestException("Topic '" + topicAlias + "' is not whitelisted in environment '"
+                        + context.scenarioContext().environment() + "'"));
     }
 
     /**
@@ -284,7 +294,8 @@ public final class KafkaStepExecutor implements StepExecutor {
         }
         KafkaClusterDefinition cluster = environment.kafkaCluster();
         if (cluster == null) {
-            throw new StandTestException("Environment '" + context.scenarioContext().environment() + "' has no default Kafka cluster configured"
+            throw new StandTestException("Environment '" + context.scenarioContext().environment()
+                    + "' has no default Kafka cluster configured"
                     + " (topic '" + topic.alias() + "' names no cluster alias)");
         }
         return cluster;
@@ -297,7 +308,8 @@ public final class KafkaStepExecutor implements StepExecutor {
         return new ResolvedKafkaCluster(bootstrapServers, securityProtocol, saslJaasConfig);
     }
 
-    private static void injectCorrelationId(Map<String, Object> parameters, TopicDefinition topic, String topicAlias, Map<String, String> headers, StepExecutionContext context) {
+    private static void injectCorrelationId(Map<String, Object> parameters, TopicDefinition topic, String topicAlias,
+            Map<String, String> headers, StepExecutionContext context) {
         CorrelationConfig correlation = topic.correlation();
         boolean hasHeaderCarrier = correlation != null && correlation.source() == CorrelationSource.HEADER;
         // Default-on: inject when the topic declares a HEADER carrier, unless the step opted in/out
@@ -309,7 +321,8 @@ public final class KafkaStepExecutor implements StepExecutor {
         }
         if (!hasHeaderCarrier) {
             // Only reachable when the step forced injection on a topic that declares no HEADER carrier.
-            throw new StandTestException("Correlation id injection was requested for topic '" + topicAlias + "', but only the HEADER carrier is implemented (KEY/PAYLOAD_FIELD are a later sub-iteration)");
+            throw new StandTestException("Correlation id injection was requested for topic '" + topicAlias
+                    + "', but only the HEADER carrier is implemented (KEY/PAYLOAD_FIELD are a later sub-iteration)");
         }
         headers.put(correlation.name(), context.scenarioContext().correlationId().value());
     }
@@ -322,28 +335,34 @@ public final class KafkaStepExecutor implements StepExecutor {
         String rawKey = KafkaStepParameters.optionalString(parameters, KafkaStepParameters.KEY).orElse(null);
         if (rawKey == null) {
             throw new StandTestException("A kafka.expect on topic '" + topicAlias
-                    + "' has no per-run discriminator (correlationIdFromContext / key) and would match any message on a shared topic — refused as parallel-unsafe (plan §15)");
+                    + "' has no per-run discriminator (correlationIdFromContext / key) and would match any message on a shared topic — "
+                    + "refused as parallel-unsafe (plan §15)");
         }
         // The RAW (pre-resolution) key must carry a ${...} placeholder to be per-run-derived; a constant key
         // is not per-run-unique, so concurrent runs would match each other's messages.
         if (!rawKey.contains("${")) {
             throw new StandTestException("A kafka.expect on topic '" + topicAlias + "' uses a constant key '" + rawKey
-                    + "' as its sole discriminator, which is not per-run-unique — concurrent runs would match each other's messages. Use a ${testRunId}-derived key or correlationIdFromContext() (plan §15)");
+                    + "' as its sole discriminator, which is not per-run-unique — concurrent runs would match each other's messages. Use a "
+                    + "${testRunId}-derived key or correlationIdFromContext() (plan §15)");
         }
     }
 
-    private static String expectedCorrelationId(Map<String, Object> parameters, TopicDefinition topic, String topicAlias, StepExecutionContext context) {
+    private static String expectedCorrelationId(Map<String, Object> parameters, TopicDefinition topic, String topicAlias,
+            StepExecutionContext context) {
         if (!KafkaStepParameters.flag(parameters, KafkaStepParameters.CORRELATION_FROM_CONTEXT)) {
             return null;
         }
         CorrelationConfig correlation = topic.correlation();
         if (correlation == null || correlation.source() != CorrelationSource.HEADER) {
-            throw new StandTestException("kafka.expect '" + topicAlias + "' requested correlationIdFromContext, but only the HEADER carrier is implemented (KEY/PAYLOAD_FIELD are a later sub-iteration)");
+            throw new StandTestException("kafka.expect '" + topicAlias
+                    + "' requested correlationIdFromContext, but only the HEADER carrier is implemented "
+                    + "(KEY/PAYLOAD_FIELD are a later sub-iteration)");
         }
         return context.scenarioContext().correlationId().value();
     }
 
-    private static boolean matches(ConsumerRecord<String, String> record, String correlationHeaderName, String expectedCorrelationId, String keyDiscriminator) {
+    private static boolean matches(ConsumerRecord<String, String> record, String correlationHeaderName, String expectedCorrelationId,
+            String keyDiscriminator) {
         if (expectedCorrelationId != null && !expectedCorrelationId.equals(headerValue(record, correlationHeaderName))) {
             return false;
         }
@@ -355,7 +374,8 @@ public final class KafkaStepExecutor implements StepExecutor {
         return (header == null || header.value() == null) ? null : new String(header.value(), StandardCharsets.UTF_8);
     }
 
-    private RecordMetadata send(ResolvedKafkaCluster cluster, String topicAlias, String topic, String key, String value, Map<String, String> headers) {
+    private RecordMetadata send(ResolvedKafkaCluster cluster, String topicAlias, String topic, String key, String value,
+            Map<String, String> headers) {
         LOG.debug("Kafka produce to topic '{}'", topic);
         List<Header> recordHeaders = new ArrayList<>();
         headers.forEach((name, headerValue) -> recordHeaders.add(new RecordHeader(name, headerValue.getBytes(StandardCharsets.UTF_8))));
@@ -369,7 +389,8 @@ public final class KafkaStepExecutor implements StepExecutor {
             return future.get(SEND_BACKSTOP_MILLIS, TimeUnit.MILLISECONDS);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
-            throw new StandTestException("Interrupted while sending to Kafka topic '" + topic + "' (alias '" + topicAlias + "')", interrupted);
+            throw new StandTestException("Interrupted while sending to Kafka topic '" + topic + "' (alias '" + topicAlias + "')",
+                    interrupted);
         } catch (TimeoutException timedOut) {
             throw new StandTestException("Sending to Kafka topic '" + topic + "' (alias '" + topicAlias + "') did not complete within "
                     + SEND_BACKSTOP_MILLIS + " ms — the broker behind the cluster reference is unreachable or not acknowledging", timedOut);
@@ -389,7 +410,8 @@ public final class KafkaStepExecutor implements StepExecutor {
         Optional<String> resource = KafkaStepParameters.optionalString(parameters, KafkaStepParameters.BODY_RESOURCE);
         Optional<String> inline = KafkaStepParameters.optionalString(parameters, KafkaStepParameters.BODY);
         if (resource.isPresent() && inline.isPresent()) {
-            throw new StandTestException("A Kafka step must set either '" + KafkaStepParameters.BODY + "' or '" + KafkaStepParameters.BODY_RESOURCE + "', not both");
+            throw new StandTestException("A Kafka step must set either '" + KafkaStepParameters.BODY + "' or '"
+                    + KafkaStepParameters.BODY_RESOURCE + "', not both");
         }
         if (resource.isPresent()) {
             return resolver.resolve(readResource(resource.get()));
@@ -416,10 +438,12 @@ public final class KafkaStepExecutor implements StepExecutor {
         if (step instanceof GenericStep generic) {
             return generic.parameters();
         }
-        throw new StandTestException("KafkaStepExecutor requires a GenericStep produced by KafkaStep, but got: " + step.getClass().getName());
+        throw new StandTestException("KafkaStepExecutor requires a GenericStep produced by KafkaStep, but got: "
+                + step.getClass().getName());
     }
 
-    private static StandTestAssertionError timeout(TimeoutDiagnostics diagnostics, String topicAlias, ArmedConsumer armed, String correlationHeaderName, String correlationId, String key) {
+    private static StandTestAssertionError timeout(TimeoutDiagnostics diagnostics, String topicAlias, ArmedConsumer armed,
+            String correlationHeaderName, String correlationId, String key) {
         LOG.debug("Kafka expect on topic '{}': no message matched, messagesSeen={}", topicAlias, armed.messagesSeen());
         // messagesSeen is the number a reader reaches for first — zero means nothing arrived at all, non-zero
         // means the selection did not match — so it becomes a row of its own rather than a fragment of the
@@ -450,7 +474,8 @@ public final class KafkaStepExecutor implements StepExecutor {
         return lines;
     }
 
-    private static StepResult sendSuccess(ScenarioStep step, Instant startedAt, String topicAlias, String realTopic, String key, RecordMetadata metadata) {
+    private static StepResult sendSuccess(ScenarioStep step, Instant startedAt, String topicAlias, String realTopic, String key,
+            RecordMetadata metadata) {
         Map<String, Object> diagnostics = new LinkedHashMap<>();
         diagnostics.put("kafka.operation", "send");
         diagnostics.put("kafka.topic", topicAlias);
@@ -463,7 +488,8 @@ public final class KafkaStepExecutor implements StepExecutor {
         return new StepResult(step.id(), step.type(), StepStatus.SUCCESS, startedAt, Instant.now(), null, diagnostics);
     }
 
-    private static StepResult expectSuccess(ScenarioStep step, Instant startedAt, String topicAlias, ArmedConsumer armed, ConsumerRecord<String, String> record) {
+    private static StepResult expectSuccess(ScenarioStep step, Instant startedAt, String topicAlias, ArmedConsumer armed,
+            ConsumerRecord<String, String> record) {
         Map<String, Object> diagnostics = new LinkedHashMap<>();
         diagnostics.put("kafka.operation", "expect");
         diagnostics.put("kafka.topic", topicAlias);

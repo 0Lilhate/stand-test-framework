@@ -31,6 +31,12 @@ import ru.alfa.stand.test.core.scenario.ScenarioStep;
  */
 public final class UiStep {
 
+    /** Rejection shared by every factory that addresses an element. */
+    private static final String LOCATOR_REQUIRED = "locator must not be null";
+
+    /** Rejection shared by every assertion factory. */
+    private static final String EXPECTED_REQUIRED = "expected must not be null";
+
     private final String type;
 
     private final String application;
@@ -86,7 +92,8 @@ public final class UiStep {
      * @return the builder
      */
     public static UiStep click(String application, UiLocator locator) {
-        return new UiStep(UiStepParameters.CLICK_TYPE, application, Objects.requireNonNull(locator, "locator must not be null"), null, null);
+        return new UiStep(UiStepParameters.CLICK_TYPE, application, Objects.requireNonNull(locator, LOCATOR_REQUIRED), null,
+                null);
     }
 
     /**
@@ -102,7 +109,7 @@ public final class UiStep {
         return new UiStep(
                 UiStepParameters.FILL_TYPE,
                 application,
-                Objects.requireNonNull(locator, "locator must not be null"),
+                Objects.requireNonNull(locator, LOCATOR_REQUIRED),
                 null,
                 Objects.requireNonNull(value, "value must not be null"));
     }
@@ -115,7 +122,8 @@ public final class UiStep {
      * @return the builder
      */
     public static UiStep expect(String application, UiLocator locator) {
-        return new UiStep(UiStepParameters.EXPECT_TYPE, application, Objects.requireNonNull(locator, "locator must not be null"), null, null);
+        return new UiStep(UiStepParameters.EXPECT_TYPE, application, Objects.requireNonNull(locator, LOCATOR_REQUIRED), null,
+                null);
     }
 
     /**
@@ -128,7 +136,8 @@ public final class UiStep {
      * @return the builder
      */
     public static UiStep expectEventually(String application, UiLocator locator) {
-        return new UiStep(UiStepParameters.EXPECT_EVENTUALLY_TYPE, application, Objects.requireNonNull(locator, "locator must not be null"), null, null);
+        return new UiStep(UiStepParameters.EXPECT_EVENTUALLY_TYPE, application,
+                Objects.requireNonNull(locator, LOCATOR_REQUIRED), null, null);
     }
 
     /**
@@ -213,7 +222,8 @@ public final class UiStep {
      * @return this builder
      */
     public UiStep assertText(String expected) {
-        return addAssertion(new UiAssertion(UiProperty.TEXT, Objects.requireNonNull(expected, "expected must not be null"), AssertionMatcher.EQUALS));
+        return addAssertion(new UiAssertion(UiProperty.TEXT, Objects.requireNonNull(expected, EXPECTED_REQUIRED),
+                AssertionMatcher.EQUALS));
     }
 
     /**
@@ -223,7 +233,8 @@ public final class UiStep {
      * @return this builder
      */
     public UiStep assertTextContains(String expected) {
-        return addAssertion(new UiAssertion(UiProperty.TEXT, Objects.requireNonNull(expected, "expected must not be null"), AssertionMatcher.CONTAINS));
+        return addAssertion(new UiAssertion(UiProperty.TEXT, Objects.requireNonNull(expected, EXPECTED_REQUIRED),
+                AssertionMatcher.CONTAINS));
     }
 
     /**
@@ -233,7 +244,8 @@ public final class UiStep {
      * @return this builder
      */
     public UiStep assertTextMatches(String regex) {
-        return addAssertion(new UiAssertion(UiProperty.TEXT, Objects.requireNonNull(regex, "regex must not be null"), AssertionMatcher.MATCHES));
+        return addAssertion(new UiAssertion(UiProperty.TEXT, Objects.requireNonNull(regex, "regex must not be null"),
+                AssertionMatcher.MATCHES));
     }
 
     /**
@@ -243,7 +255,8 @@ public final class UiStep {
      * @return this builder
      */
     public UiStep assertValue(String expected) {
-        return addAssertion(new UiAssertion(UiProperty.VALUE, Objects.requireNonNull(expected, "expected must not be null"), AssertionMatcher.EQUALS));
+        return addAssertion(new UiAssertion(UiProperty.VALUE, Objects.requireNonNull(expected, EXPECTED_REQUIRED),
+                AssertionMatcher.EQUALS));
     }
 
     /**
@@ -257,7 +270,7 @@ public final class UiStep {
         return addAssertion(new UiAssertion(
                 UiProperty.ATTRIBUTE,
                 requireNonBlank(name, "attribute name"),
-                Objects.requireNonNull(expected, "expected must not be null"),
+                Objects.requireNonNull(expected, EXPECTED_REQUIRED),
                 AssertionMatcher.EQUALS));
     }
 
@@ -285,7 +298,8 @@ public final class UiStep {
      */
     public UiStep capture(String variableName) {
         if (this.locator == null) {
-            throw new IllegalStateException("capture(variableName) reads the step's own locator, which " + this.type + " does not have — use capture(variableName, from)");
+            throw new IllegalStateException("capture(variableName) reads the step's own locator, which " + this.type
+                    + " does not have — use capture(variableName, from)");
         }
         return capture(variableName, this.locator);
     }
@@ -437,12 +451,14 @@ public final class UiStep {
         boolean asserting = polling || UiStepParameters.EXPECT_TYPE.equals(this.type);
         boolean waiting = polling || UiStepParameters.LOGIN_TYPE.equals(this.type);
         if (asserting && this.assertions.isEmpty()) {
-            throw new IllegalStateException(this.type + " requires at least one assertion — a step that expects nothing cannot fail and is not a check");
+            throw new IllegalStateException(this.type
+                    + " requires at least one assertion — a step that expects nothing cannot fail and is not a check");
         }
         if (!asserting && !this.assertions.isEmpty()) {
             // An assertion needs an element to be about, and it needs its own step number in the report.
             // Both are reasons to keep checks in their own step type rather than as a rider on an action.
-            throw new IllegalStateException("assertions belong on " + UiStepParameters.EXPECT_TYPE + " / " + UiStepParameters.EXPECT_EVENTUALLY_TYPE
+            throw new IllegalStateException("assertions belong on " + UiStepParameters.EXPECT_TYPE + " / "
+                    + UiStepParameters.EXPECT_EVENTUALLY_TYPE
                     + ", not on " + this.type);
         }
         if (!waiting && this.timeoutMillis != null) {
@@ -450,14 +466,17 @@ public final class UiStep {
                     + UiStepParameters.LOGIN_TYPE + " wait; " + this.type + " does not accept it");
         }
         if (!polling && this.pollIntervalMillis != null) {
-            throw new IllegalStateException("pollInterval(...) polls, and only " + UiStepParameters.EXPECT_EVENTUALLY_TYPE + " polls; " + this.type + " does not accept it");
+            throw new IllegalStateException("pollInterval(...) polls, and only " + UiStepParameters.EXPECT_EVENTUALLY_TYPE + " polls; "
+                    + this.type + " does not accept it");
         }
         if (this.pollIntervalMillis != null && this.pollIntervalMillis > effectiveTimeoutMillis()) {
             throw new IllegalStateException("pollInterval(" + this.pollIntervalMillis + " ms) must not exceed the step's timeout ("
-                    + effectiveTimeoutMillis() + " ms) — a step that polls less often than it waits performs a single probe and then waits for the interval");
+                    + effectiveTimeoutMillis()
+                            + " ms) — a step that polls less often than it waits performs a single probe and then waits for the interval");
         }
         if (!this.captures.isEmpty() && !asserting) {
-            throw new IllegalStateException("captures read the page after a check, so they belong on " + UiStepParameters.EXPECT_TYPE + " / "
+            throw new IllegalStateException("captures read the page after a check, so they belong on " + UiStepParameters.EXPECT_TYPE
+                    + " / "
                     + UiStepParameters.EXPECT_EVENTUALLY_TYPE + ", not on " + this.type);
         }
         Map<String, Object> parameters = new LinkedHashMap<>();
@@ -506,7 +525,8 @@ public final class UiStep {
 
     private void requireLoginStep(String method) {
         if (!UiStepParameters.LOGIN_TYPE.equals(this.type)) {
-            throw new IllegalStateException(method + " configures a sign-in, and only " + UiStepParameters.LOGIN_TYPE + " signs in; " + this.type + " does not accept it");
+            throw new IllegalStateException(method + " configures a sign-in, and only " + UiStepParameters.LOGIN_TYPE + " signs in; "
+                    + this.type + " does not accept it");
         }
     }
 
@@ -537,7 +557,9 @@ public final class UiStep {
         String value = requireNonBlank(path, "path");
         String lower = value.toLowerCase(Locale.ROOT);
         if (lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("//")) {
-            throw new IllegalArgumentException("path must be relative to the application's registered base URL; an absolute address is not addressable by the SDK, but got: " + value);
+            throw new IllegalArgumentException("path must be relative to the application's registered base URL; an absolute address is not "
+                    + "addressable by the SDK, but got: "
+                    + value);
         }
         return value;
     }

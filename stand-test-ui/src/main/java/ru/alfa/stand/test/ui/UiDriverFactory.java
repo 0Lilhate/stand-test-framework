@@ -43,7 +43,8 @@ public interface UiDriverFactory {
     default UiDriver open(ResolvedUiApplication application, UiRunSettings settings, Path storageState) {
         if (storageState != null) {
             throw new StandTestException("The UI driver factory " + getClass().getName() + " cannot restore a browser storage state,"
-                    + " so the session of application '" + application.alias() + "' cannot be reused. Implement the three-argument open(...) on it,"
+                    + " so the session of application '" + application.alias()
+                            + "' cannot be reused. Implement the three-argument open(...) on it,"
                     + " or use auth.scheme FORM without session reuse.");
         }
         return open(application, settings);

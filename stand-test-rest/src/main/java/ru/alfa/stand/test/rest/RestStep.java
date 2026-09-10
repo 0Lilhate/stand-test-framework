@@ -356,7 +356,8 @@ public final class RestStep {
                 throw new IllegalStateException("expectEventually polls with GET and carries no request body");
             }
             if (this.expectedStatus == null && this.assertions.isEmpty()) {
-                throw new IllegalStateException("expectEventually requires at least one expectation: expectStatus(...) or an assertPath*(...)");
+                throw new IllegalStateException("expectEventually requires at least one expectation: "
+                        + "expectStatus(...) or an assertPath*(...)");
             }
         } else if (this.timeoutMillis != null || this.pollIntervalMillis != null) {
             throw new IllegalStateException("within(...)/withinSeconds(...)/pollInterval(...) are only valid on an expectEventually step");
@@ -412,14 +413,18 @@ public final class RestStep {
     private List<Map<String, Object>> assertionMaps() {
         return this.assertions.stream()
                 .map(assertion -> assertion.matcher() == AssertionMatcher.EQUALS
-                        ? Map.<String, Object>of(RestStepParameters.JSON_PATH, assertion.jsonPath(), RestStepParameters.EXPECTED_VALUE, assertion.expectedValue())
-                        : Map.<String, Object>of(RestStepParameters.JSON_PATH, assertion.jsonPath(), RestStepParameters.EXPECTED_VALUE, assertion.expectedValue(), RestStepParameters.MATCHER, assertion.matcher().name()))
+                        ? Map.<String, Object>of(RestStepParameters.JSON_PATH, assertion.jsonPath(), RestStepParameters.EXPECTED_VALUE,
+                                assertion.expectedValue())
+                        : Map.<String, Object>of(RestStepParameters.JSON_PATH, assertion.jsonPath(), RestStepParameters.EXPECTED_VALUE,
+                                assertion.expectedValue(), RestStepParameters.MATCHER, assertion.matcher().name()))
                 .toList();
     }
 
     private List<Map<String, Object>> captureMaps() {
         return this.captures.stream()
-                .map(capture -> Map.<String, Object>of(RestStepParameters.VARIABLE_NAME, capture.variableName(), RestStepParameters.JSON_PATH, capture.jsonPath()))
+                .map(capture -> Map.<String,
+                        Object>of(RestStepParameters.VARIABLE_NAME, capture.variableName(), RestStepParameters.JSON_PATH,
+                        capture.jsonPath()))
                 .toList();
     }
 

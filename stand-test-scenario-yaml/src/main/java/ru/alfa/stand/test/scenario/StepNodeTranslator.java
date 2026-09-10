@@ -20,7 +20,8 @@ final class StepNodeTranslator {
         String base = phase + "[" + index + "]";
         Map<String, Object> single = SurfaceValues.asMap(stepNode, base);
         if (single.size() != 1) {
-            throw new StandTestException("Each step at " + base + " must be a single-key mapping {stepType: {...}}, but had keys " + single.keySet());
+            throw new StandTestException("Each step at " + base + " must be a single-key mapping {stepType: {...}}, but had keys "
+                    + single.keySet());
         }
         Map.Entry<String, Object> entry = single.entrySet().iterator().next();
         String type = entry.getKey();
@@ -38,7 +39,8 @@ final class StepNodeTranslator {
         } else if (type.startsWith("db.")) {
             params = DbStepTranslator.params(type, fields, location);
         } else {
-            throw new StandTestException("Unknown step type '" + type + "' at " + location + " (expected rest.*/kafka.send/kafka.expect/db.*)");
+            throw new StandTestException("Unknown step type '" + type + "' at " + location
+                    + " (expected rest.*/kafka.send/kafka.expect/db.*)");
         }
         return new GenericStep(id, type, describe(type, params), params);
     }

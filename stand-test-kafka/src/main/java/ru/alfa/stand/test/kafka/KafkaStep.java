@@ -257,7 +257,8 @@ public final class KafkaStep {
             throw new IllegalStateException("A kafka.send step requires body(...) or bodyFromResource(...)");
         }
         if (this.correlationIdFromContext || !this.assertions.isEmpty() || !this.captures.isEmpty() || this.timeoutMillis != null) {
-            throw new IllegalStateException("correlationIdFromContext / assertPath / capture / withinSeconds apply to kafka.expect, not kafka.send");
+            throw new IllegalStateException("correlationIdFromContext / assertPath / capture / withinSeconds apply to "
+                    + "kafka.expect, not kafka.send");
         }
     }
 
@@ -267,12 +268,15 @@ public final class KafkaStep {
         }
         if (!this.correlationIdFromContext) {
             if (this.key == null) {
-                throw new IllegalStateException("A kafka.expect step must select messages by a per-run discriminator to stay parallel-safe (plan §15): "
-                        + "call correlationIdFromContext() (the sanctioned SDK-owned selector) or set a per-run-derived key(\"${testRunId}\")");
+                throw new IllegalStateException("A kafka.expect step must select messages by a per-run discriminator to stay parallel-safe "
+                        + "(plan §15): call correlationIdFromContext() (the sanctioned SDK-owned selector) or set a "
+                        + "per-run-derived key(\"${testRunId}\")");
             }
             if (!this.key.contains("${")) {
-                throw new IllegalStateException("A kafka.expect key used as the sole discriminator must be per-run-derived — it must contain a ${...} placeholder (for example key(\"${testRunId}\")): "
-                        + "a constant key is not parallel-safe because two concurrent runs would match each other's messages. Prefer correlationIdFromContext() for the SDK-owned unique id.");
+                throw new IllegalStateException("A kafka.expect key used as the sole discriminator must be per-run-derived — it must "
+                        + "contain a ${...} placeholder (for example key(\"${testRunId}\")): "
+                        + "a constant key is not parallel-safe because two concurrent runs would match each other's messages. Prefer "
+                        + "correlationIdFromContext() for the SDK-owned unique id.");
             }
         }
     }
@@ -320,13 +324,17 @@ public final class KafkaStep {
 
     private List<Map<String, Object>> assertionMaps() {
         return this.assertions.stream()
-                .map(assertion -> Map.<String, Object>of(KafkaStepParameters.JSON_PATH, assertion.jsonPath(), KafkaStepParameters.EXPECTED_VALUE, assertion.expectedValue()))
+                .map(assertion -> Map.<String,
+                        Object>of(KafkaStepParameters.JSON_PATH, assertion.jsonPath(), KafkaStepParameters.EXPECTED_VALUE,
+                        assertion.expectedValue()))
                 .toList();
     }
 
     private List<Map<String, Object>> captureMaps() {
         return this.captures.stream()
-                .map(capture -> Map.<String, Object>of(KafkaStepParameters.VARIABLE_NAME, capture.variableName(), KafkaStepParameters.JSON_PATH, capture.jsonPath()))
+                .map(capture -> Map.<String,
+                        Object>of(KafkaStepParameters.VARIABLE_NAME, capture.variableName(), KafkaStepParameters.JSON_PATH,
+                        capture.jsonPath()))
                 .toList();
     }
 

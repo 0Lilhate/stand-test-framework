@@ -49,10 +49,31 @@ final class DbWriteGuard {
      * so it is the surface for the classifier/write-guard unit tests; the executor uses the five-argument
      * overload, which additionally enforces seed tagging.
      */
-    static SqlClassification classifyAndEnforce(String sql, DbOperation operation, DatasourceDefinition datasource, boolean testRunIdPredicateDeclared) {
+    static SqlClassification classifyAndEnforce(String sql, DbOperation operation, DatasourceDefinition datasource,
+            boolean testRunIdPredicateDeclared) {
         rejectSideEffectingTimeFunction(sql);
         SqlClassification classification = SqlStatementClassifier.classify(sql);
         enforce(classification, operation, datasource, testRunIdPredicateDeclared);
+        return classification;
+    }
+
+    /**
+     * The full guard used by the executor: the base rules plus seed tag-column verification (plan §15). A
+     * seed that classifies as an {@code INSERT} must declare its testRunId tag column (via
+     * {@code DbStep.taggedByTestRunId(...)}) AND that column must appear in the INSERT column list. The base
+     * {@link #enforceWrite} rule only proves the statement references {@code :testRunId} <em>somewhere</em>,
+     * which is necessary but not sufficient: {@code INSERT INTO t(id) VALUES (:testRunId)} references the bind
+     * yet tags no reapable column, so the row would leak across parallel runs. Verifying the declared column —
+     * the same one the paired cleanup filters on — closes that gap. Seed {@code UPDATE}/{@code DELETE} use the
+     * {@code whereTestRunId} marker instead and are not tag-verified here.
+     */
+    static SqlClassification classifyAndEnforce(
+            String sql, DbOperation operation, DatasourceDefinition datasource, boolean testRunIdPredicateDeclared,
+                    String seedTestRunIdColumn) {
+        rejectSideEffectingTimeFunction(sql);
+        SqlClassification classification = SqlStatementClassifier.classify(sql);
+        enforce(classification, operation, datasource, testRunIdPredicateDeclared);
+        enforceSeedTagColumn(classification, sql, seedTestRunIdColumn);
         return classification;
     }
 
@@ -68,28 +89,9 @@ final class DbWriteGuard {
     private static void rejectSideEffectingTimeFunction(String sql) {
         if (SqlStatementClassifier.containsSideEffectingTimeFunction(sql)) {
             throw new StandTestException("SQL calls a blocking/side-effecting time function "
-                    + "(pg_sleep/sleep/waitfor/benchmark/dbms_lock), which is forbidden — the only sanctioned wait is the "
-                    + "declarative step timeout [" + ForbiddenOperation.THREAD_SLEEP.code() + "]");
+                    + "(pg_sleep/sleep/waitfor/benchmark/dbms_lock), which is forbidden — the only sanctioned wait is "
+                    + "the declarative step timeout [" + ForbiddenOperation.THREAD_SLEEP.code() + "]");
         }
-    }
-
-    /**
-     * The full guard used by the executor: the base rules plus seed tag-column verification (plan §15). A
-     * seed that classifies as an {@code INSERT} must declare its testRunId tag column (via
-     * {@code DbStep.taggedByTestRunId(...)}) AND that column must appear in the INSERT column list. The base
-     * {@link #enforceWrite} rule only proves the statement references {@code :testRunId} <em>somewhere</em>,
-     * which is necessary but not sufficient: {@code INSERT INTO t(id) VALUES (:testRunId)} references the bind
-     * yet tags no reapable column, so the row would leak across parallel runs. Verifying the declared column —
-     * the same one the paired cleanup filters on — closes that gap. Seed {@code UPDATE}/{@code DELETE} use the
-     * {@code whereTestRunId} marker instead and are not tag-verified here.
-     */
-    static SqlClassification classifyAndEnforce(
-            String sql, DbOperation operation, DatasourceDefinition datasource, boolean testRunIdPredicateDeclared, String seedTestRunIdColumn) {
-        rejectSideEffectingTimeFunction(sql);
-        SqlClassification classification = SqlStatementClassifier.classify(sql);
-        enforce(classification, operation, datasource, testRunIdPredicateDeclared);
-        enforceSeedTagColumn(classification, sql, seedTestRunIdColumn);
-        return classification;
     }
 
     private static void enforceSeedTagColumn(SqlClassification classification, String sql, String seedTestRunIdColumn) {
@@ -97,19 +99,24 @@ final class DbWriteGuard {
             return;
         }
         if (seedTestRunIdColumn == null) {
-            throw new StandTestException("A db.seed INSERT must declare its testRunId tag column via DbStep.taggedByTestRunId(...) — the same column its cleanup filters on — so the write-guard can verify the row is reapable across parallel runs (plan §15) ["
+            throw new StandTestException("A db.seed INSERT must declare its testRunId tag column via DbStep.taggedByTestRunId(...) — the "
+                    + "same column its cleanup filters on — so the write-guard can verify the row is reapable "
+                    + "across parallel runs (plan §15) ["
                     + ForbiddenOperation.DESTRUCTIVE_SQL_WITHOUT_ALLOW.code() + "]");
         }
         Set<String> columns = SqlStatementClassifier.insertColumns(sql);
         if (!columns.contains(seedTestRunIdColumn.toLowerCase(Locale.ROOT))) {
             throw new StandTestException("A db.seed INSERT must tag its rows in the declared testRunId column '" + seedTestRunIdColumn
-                    + "' bound to :testRunId (for example INSERT INTO test_data.orders(id, " + seedTestRunIdColumn + ") VALUES (:id, :testRunId)); "
-                    + "the column is absent from the INSERT column list " + columns + ", so the row would not be reaped by the run's own testRunId-scoped cleanup and would leak across concurrent runs ["
+                    + "' bound to :testRunId (for example INSERT INTO test_data.orders(id, " + seedTestRunIdColumn
+                            + ") VALUES (:id, :testRunId)); the column is absent from the INSERT column list " + columns
+                            + ", so the row would not be reaped by the run's own testRunId-scoped cleanup and would "
+                            + "leak across concurrent runs ["
                     + ForbiddenOperation.DESTRUCTIVE_SQL_WITHOUT_ALLOW.code() + "]");
         }
     }
 
-    static void enforce(SqlClassification classification, DbOperation operation, DatasourceDefinition datasource, boolean testRunIdPredicateDeclared) {
+    static void enforce(SqlClassification classification, DbOperation operation, DatasourceDefinition datasource,
+            boolean testRunIdPredicateDeclared) {
         if (classification.isRejected()) {
             throw new StandTestException("SQL rejected (fail-closed, plan §8.8): " + classification.detail());
         }
@@ -146,16 +153,19 @@ final class DbWriteGuard {
             throw new StandTestException("db.write requires an INSERT/UPDATE/DELETE statement, but got: " + classification.detail());
         }
         if (!"INSERT".equals(classification.leadingKeyword())) {
-            throw new StandTestException("db.write currently supports INSERT only (UPDATE/DELETE undo is staged); use the legacy db.cleanup for scoped deletes");
+            throw new StandTestException("db.write currently supports INSERT only (UPDATE/DELETE undo is staged); use the legacy "
+                    + "db.cleanup for scoped deletes");
         }
         // Only a single-row INSERT ... VALUES (...) is undoable: its one primary key can be captured and
         // deleted. A multi-row VALUES or an INSERT ... SELECT commits a row set the MVP cannot fully capture,
         // so the undo would delete at most one row and silently leak the rest — reject fail-closed.
         int arity = SqlStatementClassifier.insertValuesRowArity(sql);
         if (arity != 1) {
-            throw new StandTestException("db.write requires a single-row INSERT ... VALUES (...): a multi-row VALUES or an INSERT ... SELECT is not undoable in the MVP "
+            throw new StandTestException("db.write requires a single-row INSERT ... VALUES (...): a multi-row VALUES or an INSERT ... "
+                    + "SELECT is not undoable in the MVP "
                     + "(its full written row set cannot be captured for primary-key compensation, so extra rows would leak). Found "
-                    + (arity == 0 ? "no top-level VALUES tuple" : arity + " VALUES tuples") + " [" + ForbiddenOperation.DESTRUCTIVE_SQL_WITHOUT_ALLOW.code() + "]");
+                    + (arity == 0 ? "no top-level VALUES tuple" : arity + " VALUES tuples") + " ["
+                            + ForbiddenOperation.DESTRUCTIVE_SQL_WITHOUT_ALLOW.code() + "]");
         }
         enforceSchemaAndWriteAllowed(classification, datasource);
         return classification;
@@ -177,7 +187,8 @@ final class DbWriteGuard {
         if (classification.isRejected()) {
             throw new StandTestException("Compensation SQL rejected (fail-closed): " + classification.detail());
         }
-        if (classification.kind() == SqlStatementKind.DESTRUCTIVE || !classification.isWrite() || !"DELETE".equals(classification.leadingKeyword())) {
+        if (classification.kind() == SqlStatementKind.DESTRUCTIVE || !classification.isWrite()
+                || !"DELETE".equals(classification.leadingKeyword())) {
             throw new StandTestException("A compensation statement must be a single DELETE, but got: " + classification.detail());
         }
         enforceSchemaAndWriteAllowed(classification, datasource);
@@ -202,7 +213,8 @@ final class DbWriteGuard {
         }
     }
 
-    private static void enforceWrite(SqlClassification classification, DbOperation operation, DatasourceDefinition datasource, boolean testRunIdPredicateDeclared) {
+    private static void enforceWrite(SqlClassification classification, DbOperation operation, DatasourceDefinition datasource,
+            boolean testRunIdPredicateDeclared) {
         if (!operation.isWrite()) {
             throw new StandTestException("A " + classification.leadingKeyword() + " write is only allowed on db.seed/db.cleanup, not "
                     + operation.stepType());
@@ -211,18 +223,22 @@ final class DbWriteGuard {
         if (isUpdateOrDelete(classification)) {
             if (!testRunIdPredicateDeclared) {
                 throw new StandTestException("A " + classification.leadingKeyword()
-                        + " requires a declared testRunId predicate (DbStep.whereTestRunId(...)): the SDK-appended WHERE <column> = :testRunId is the single source of the predicate ["
+                        + " requires a declared testRunId predicate (DbStep.whereTestRunId(...)): the SDK-appended WHERE <column> = "
+                        + ":testRunId is the single source of the predicate ["
                         + ForbiddenOperation.DESTRUCTIVE_SQL_WITHOUT_ALLOW.code() + "]");
             }
             if (!classification.containsWhereClause() || !classification.referencesTestRunIdBind()) {
                 throw new StandTestException("A " + classification.leadingKeyword()
-                        + " whose testRunId predicate was neutralised (e.g. by a trailing comment or unterminated literal) is refused as an unscoped mutation ["
+                        + " whose testRunId predicate was neutralised (e.g. by a trailing comment or unterminated literal) is "
+                        + "refused as an unscoped mutation ["
                         + ForbiddenOperation.DESTRUCTIVE_SQL_WITHOUT_ALLOW.code() + "]");
             }
         } else {
             if (!classification.referencesTestRunIdBind()) {
                 throw new StandTestException("A " + classification.leadingKeyword()
-                        + " seed must tag its rows with the reserved :testRunId bind (for example INSERT INTO test_data.orders(id, test_run_id) VALUES (:id, :testRunId)), so the run's testRunId-scoped cleanup reaps them and concurrent runs stay isolated ["
+                        + " seed must tag its rows with the reserved :testRunId bind (for example INSERT INTO test_data.orders(id, "
+                        + "test_run_id) VALUES (:id, :testRunId)), so the run's testRunId-scoped cleanup reaps them and "
+                        + "concurrent runs stay isolated ["
                         + ForbiddenOperation.DESTRUCTIVE_SQL_WITHOUT_ALLOW.code() + "]");
             }
         }

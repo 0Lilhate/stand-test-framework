@@ -75,13 +75,16 @@ public final class RestStepParameters {
     /** Parameter key (expectEventually): the poll interval between probes, in milliseconds. */
     public static final String POLL_INTERVAL_MILLIS = StepParameterKeys.POLL_INTERVAL_MILLIS;
 
+    /** Message prefix shared by every parameter diagnostic of this adapter. */
+    private static final String PARAMETER_PREFIX = "REST step parameter '";
+
     private RestStepParameters() {
     }
 
     static String requireString(Map<String, Object> parameters, String key) {
         Object value = parameters.get(key);
         if (!(value instanceof String text) || text.isBlank()) {
-            throw new StandTestException("REST step parameter '" + key + "' must be a non-blank string");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a non-blank string");
         }
         return text;
     }
@@ -92,7 +95,7 @@ public final class RestStepParameters {
             return Optional.empty();
         }
         if (!(value instanceof String text)) {
-            throw new StandTestException("REST step parameter '" + key + "' must be a string");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a string");
         }
         return Optional.of(text);
     }
@@ -122,7 +125,7 @@ public final class RestStepParameters {
             return OptionalInt.empty();
         }
         if (!(value instanceof Integer status)) {
-            throw new StandTestException("REST step parameter '" + EXPECTED_STATUS + "' must be an integer");
+            throw new StandTestException(PARAMETER_PREFIX + EXPECTED_STATUS + "' must be an integer");
         }
         return OptionalInt.of(status);
     }
@@ -133,7 +136,7 @@ public final class RestStepParameters {
             return Map.of();
         }
         if (!(value instanceof Map<?, ?> raw)) {
-            throw new StandTestException("REST step parameter '" + key + "' must be a map");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a map");
         }
         return raw.entrySet().stream()
                 .collect(Collectors.toMap(entry -> String.valueOf(entry.getKey()), entry -> String.valueOf(entry.getValue()),
@@ -182,7 +185,8 @@ public final class RestStepParameters {
      */
     private static void validateMatcherOperand(AssertionMatcher matcher, Object expected, String jsonPath) {
         if ((matcher == AssertionMatcher.EXISTS || matcher == AssertionMatcher.NOT_NULL) && !(expected instanceof Boolean)) {
-            throw new StandTestException("REST assertion at '" + jsonPath + "': matcher " + matcher + " requires a boolean '" + EXPECTED_VALUE + "'");
+            throw new StandTestException("REST assertion at '" + jsonPath + "': matcher " + matcher + " requires a boolean '"
+                    + EXPECTED_VALUE + "'");
         }
         if (matcher == AssertionMatcher.MATCHES) {
             if (!(expected instanceof String regex)) {
@@ -191,7 +195,8 @@ public final class RestStepParameters {
             try {
                 Pattern.compile(regex);
             } catch (PatternSyntaxException invalid) {
-                throw new StandTestException("REST assertion at '" + jsonPath + "': invalid regular expression for matcher MATCHES", invalid);
+                throw new StandTestException("REST assertion at '" + jsonPath + "': invalid regular expression for matcher MATCHES",
+                        invalid);
             }
         }
     }
@@ -202,11 +207,11 @@ public final class RestStepParameters {
             return defaultMillis;
         }
         if (!(value instanceof Long) && !(value instanceof Integer)) {
-            throw new StandTestException("REST step parameter '" + key + "' must be an integer number of milliseconds");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be an integer number of milliseconds");
         }
         long millis = ((Number) value).longValue();
         if (millis <= 0) {
-            throw new StandTestException("REST step parameter '" + key + "' must be strictly positive");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be strictly positive");
         }
         return millis;
     }
@@ -231,12 +236,12 @@ public final class RestStepParameters {
             return List.of();
         }
         if (!(value instanceof List<?> list)) {
-            throw new StandTestException("REST step parameter '" + key + "' must be a list");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a list");
         }
         return list.stream()
                 .map(item -> {
                     if (!(item instanceof Map<?, ?>)) {
-                        throw new StandTestException("REST step parameter '" + key + "' entries must be maps");
+                        throw new StandTestException(PARAMETER_PREFIX + key + "' entries must be maps");
                     }
                     return (Map<String, Object>) item;
                 })

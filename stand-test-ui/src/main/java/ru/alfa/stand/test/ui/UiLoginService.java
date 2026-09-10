@@ -75,7 +75,8 @@ final class UiLoginService {
      * @param timeout the bound on the sign-in itself
      * @return what was done, for the step diagnostics
      */
-    UiLoginOutcome signIn(UiSession session, LeasedAccount account, UiRunSettings settings, Duration timeout, StorageStateStore store, Path stateFile) {
+    UiLoginOutcome signIn(UiSession session, LeasedAccount account, UiRunSettings settings, Duration timeout, StorageStateStore store,
+            Path stateFile) {
         UiAuthConfig auth = session.application().auth();
         String alias = session.application().alias();
         UiLoginFormConfig form = auth.login();
@@ -94,7 +95,8 @@ final class UiLoginService {
         if (restoredForThisAccount) {
             // A well-formed but dead session: the file is discarded rather than left to make every later run
             // pay for the same doomed attempt.
-            LOG.info("The saved browser session of account '{}' for application '{}' is no longer valid — discarding it and signing in again",
+            LOG.info("The saved browser session of account '{}' for application '{}' is no longer valid — "
+                    + "discarding it and signing in again",
                     account.accountId(), alias);
             store.delete(session.restoredFrom());
         }
@@ -104,7 +106,8 @@ final class UiLoginService {
             return new UiLoginOutcome(account.accountId(), account.role(), false, null);
         }
         store.prepareFor(stateFile);
-        UiDriverCalls.run(() -> session.driver().saveStorageState(stateFile), "save the browser session of account '" + account.accountId() + "'");
+        UiDriverCalls.run(() -> session.driver().saveStorageState(stateFile), "save the browser session of account '" + account.accountId()
+                + "'");
         LOG.debug("Saved the browser session of account '{}' for application '{}'", account.accountId(), alias);
         return new UiLoginOutcome(account.accountId(), account.role(), false, stateFile);
     }
@@ -118,7 +121,8 @@ final class UiLoginService {
      */
     private boolean restoredSessionIsAlive(UiSession session, UiLocator signedIn, UiRunSettings settings, Duration timeout) {
         Duration probeWindow = (timeout.compareTo(settings.actionTimeout()) < 0) ? timeout : settings.actionTimeout();
-        UiDriverCalls.run(() -> session.driver().navigate("/", settings.navigationTimeout()), "open the application root to check the restored session");
+        UiDriverCalls.run(() -> session.driver().navigate("/", settings.navigationTimeout()),
+                "open the application root to check the restored session");
         return awaitSignedIn(session, signedIn, probeWindow, "ui.login session check").satisfied();
     }
 
@@ -138,17 +142,20 @@ final class UiLoginService {
         UiLoginChallengeHandler handler = challengeHandler(auth.challenge(), alias);
         long startedAt = System.nanoTime();
         if (form.path() != null) {
-            UiDriverCalls.run(() -> session.driver().navigate(form.path(), settings.navigationTimeout()), "open the sign-in page of application '" + alias + "'");
+            UiDriverCalls.run(() -> session.driver().navigate(form.path(), settings.navigationTimeout()),
+                    "open the sign-in page of application '" + alias + "'");
         }
         fillCredentials(session, form, account, settings, alias);
         UiDriverCalls.run(
-                () -> session.driver().click(UiLocatorExpressions.parse(form.submitLocator(), "submit-locator", alias), settings.actionTimeout()),
+                () -> session.driver()
+                        .click(UiLocatorExpressions.parse(form.submitLocator(), "submit-locator", alias), settings.actionTimeout()),
                 "submit the sign-in form of application '" + alias + "'");
         if (handler != null) {
             // "What is LEFT of the budget", as the request's contract says — not the whole of it a second
             // time. A handler given the full timeout after the form has already been filled would let one
             // step run for twice what its author declared.
-            handler.resolve(new UiLoginChallengeRequest(auth.challenge(), alias, account.role(), account.accountId(), session.driver(), remaining(timeout, startedAt)));
+            handler.resolve(new UiLoginChallengeRequest(auth.challenge(), alias, account.role(), account.accountId(), session.driver(),
+                    remaining(timeout, startedAt)));
         }
         AwaitResult<Boolean> result = awaitSignedIn(session, signedIn, timeout, "ui.login " + alias);
         if (!result.satisfied()) {
@@ -157,7 +164,8 @@ final class UiLoginService {
             // message names the account and never the credentials.
             // The account id and role reach the report as rows; the credential variable NAMES stay in the
             // message only, where they already are. Neither is a value, and neither ever will be.
-            throw new DiagnosticAssertionError("Signing in to UI application '" + alias + "' as account '" + account.accountId() + "' (role '" + account.role()
+            throw new DiagnosticAssertionError("Signing in to UI application '" + alias + "' as account '" + account.accountId()
+                    + "' (role '" + account.role()
                     + "') did not complete within " + timeout + ": " + signedIn.describe()
                     + " never appeared. The credentials from " + account.usernameRef() + " / " + account.passwordRef()
                     + " were rejected, or the sign-in needs a step this configuration does not describe.",
@@ -190,11 +198,13 @@ final class UiLoginService {
         session.driver().suspendTracing();
         try {
             UiSecrets.guard(
-                    () -> UiDriverCalls.run(() -> session.driver().fill(username, credentials.username(), settings.actionTimeout()), "fill the login field of application '" + alias + "'"),
+                    () -> UiDriverCalls.run(() -> session.driver().fill(username, credentials.username(), settings.actionTimeout()),
+                            "fill the login field of application '" + alias + "'"),
                     secrets,
                     "fill the login field of application '" + alias + "'");
             UiSecrets.guard(
-                    () -> UiDriverCalls.run(() -> session.driver().fill(password, credentials.password(), settings.actionTimeout()), "fill the password field of application '" + alias + "'"),
+                    () -> UiDriverCalls.run(() -> session.driver().fill(password, credentials.password(), settings.actionTimeout()),
+                            "fill the password field of application '" + alias + "'"),
                     secrets,
                     "fill the password field of application '" + alias + "'");
         } finally {
@@ -223,7 +233,8 @@ final class UiLoginService {
         return this.awaiter.await(
                 policy,
                 () -> {
-                    ElementSnapshot snapshot = UiDriverCalls.call(() -> session.driver().snapshot(signedIn, Set.of(), pollInterval), "observe " + signedIn.describe());
+                    ElementSnapshot snapshot = UiDriverCalls.call(() -> session.driver().snapshot(signedIn, Set.of(), pollInterval),
+                            "observe " + signedIn.describe());
                     return snapshot != null && snapshot.present() && snapshot.visible();
                 },
                 Boolean.TRUE::equals);
@@ -244,7 +255,8 @@ final class UiLoginService {
         if (value == null || value.isEmpty()) {
             throw new StandTestException("The " + what + " of test account '" + account.accountId() + "' of UI application '" + alias
                     + "' did not resolve: variable '" + reference + "' is not set."
-                    + " Account credentials live in environment variables and never in configuration, so this variable must be present wherever the tests run.");
+                    + " Account credentials live in environment variables and never in configuration, so this variable must be "
+                    + "present wherever the tests run.");
         }
         return value;
     }
@@ -255,7 +267,8 @@ final class UiLoginService {
         }
         String alias = session.application().alias();
         throw new StandTestException("UI application '" + alias + "' signs in with scheme " + auth.scheme()
-                + " and has no usable saved session for account '" + account.accountId() + "', but it declares no login form to fall back to."
+                + " and has no usable saved session for account '" + account.accountId()
+                        + "', but it declares no login form to fall back to."
                 + " Prepare the session once outside the SDK and save it as " + stateFile
                 + ", or add login.username-locator / password-locator / submit-locator so the SDK can sign in itself.");
     }
@@ -282,7 +295,8 @@ final class UiLoginService {
         }
         throw new StandTestException("UI application '" + alias + "' declares the sign-in challenge " + challenge
                 + ", and no " + UiLoginChallengeHandler.class.getSimpleName() + " on the test classpath supports it."
-                + " The SDK deliberately ships no MFA/OTP/CAPTCHA bypass: whether and how a second factor may be relaxed for test accounts is decided outside it (gate G-1)."
+                + " The SDK deliberately ships no MFA/OTP/CAPTCHA bypass: whether and how a second factor may be relaxed for test accounts "
+                + "is decided outside it (gate G-1)."
                 + " Either register a handler in META-INF/services/" + UiLoginChallengeHandler.class.getName()
                 + ", or declare auth.scheme: storage-state for this application and prepare the session once outside the SDK.");
     }

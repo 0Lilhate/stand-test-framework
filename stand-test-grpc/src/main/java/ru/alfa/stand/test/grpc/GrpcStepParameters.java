@@ -57,13 +57,16 @@ public final class GrpcStepParameters {
     /** Nested key (capture): target variable name. */
     public static final String VARIABLE_NAME = StepParameterKeys.VARIABLE_NAME;
 
+    /** Message prefix shared by every parameter diagnostic of this adapter. */
+    private static final String PARAMETER_PREFIX = "gRPC step parameter '";
+
     private GrpcStepParameters() {
     }
 
     static String requireString(Map<String, Object> parameters, String key) {
         Object value = parameters.get(key);
         if (!(value instanceof String text) || text.isBlank()) {
-            throw new StandTestException("gRPC step parameter '" + key + "' must be a non-blank string");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a non-blank string");
         }
         return text;
     }
@@ -74,7 +77,7 @@ public final class GrpcStepParameters {
             return Optional.empty();
         }
         if (!(value instanceof String text)) {
-            throw new StandTestException("gRPC step parameter '" + key + "' must be a string");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a string");
         }
         return Optional.of(text);
     }
@@ -96,7 +99,7 @@ public final class GrpcStepParameters {
     static long requirePositiveMillis(Map<String, Object> parameters, String key) {
         Object value = parameters.get(key);
         if (value == null) {
-            throw new StandTestException("gRPC step parameter '" + key + "' is required (a positive number of milliseconds)");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' is required (a positive number of milliseconds)");
         }
         // Accept only whole-number types: a Double would be silently truncated (3.9 -> 3) or saturated
         // (1e30 -> Long.MAX_VALUE, an effectively unbounded call) by longValue(). The Java DSL always
@@ -107,13 +110,13 @@ public final class GrpcStepParameters {
         } else if (value instanceof Integer intMillis) {
             millis = intMillis;
         } else {
-            throw new StandTestException("gRPC step parameter '" + key + "' must be a whole number of milliseconds (Integer or Long)");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a whole number of milliseconds (Integer or Long)");
         }
         if (millis <= 0) {
-            throw new StandTestException("gRPC step parameter '" + key + "' must be a positive number of milliseconds");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a positive number of milliseconds");
         }
         if (millis > DefaultScenarioValidator.MAX_TIMEOUT_MILLIS) {
-            throw new StandTestException("gRPC step parameter '" + key + "' must be at most " + DefaultScenarioValidator.MAX_TIMEOUT_MILLIS
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be at most " + DefaultScenarioValidator.MAX_TIMEOUT_MILLIS
                     + " milliseconds (the SDK-wide timeout bound), but was " + millis);
         }
         return millis;
@@ -125,14 +128,14 @@ public final class GrpcStepParameters {
             return Map.of();
         }
         if (!(value instanceof Map<?, ?> raw)) {
-            throw new StandTestException("gRPC step parameter '" + key + "' must be a map");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a map");
         }
         Map<String, String> result = new LinkedHashMap<>();
         for (Map.Entry<?, ?> entry : raw.entrySet()) {
             if (entry.getKey() == null || entry.getValue() == null) {
                 // A null must never be coerced to the literal string "null" on the wire — reachable via
                 // a raw GenericStep parameter map (the typed builder already rejects nulls).
-                throw new StandTestException("gRPC step parameter '" + key + "' must not contain null keys or values");
+                throw new StandTestException(PARAMETER_PREFIX + key + "' must not contain null keys or values");
             }
             result.put(String.valueOf(entry.getKey()), String.valueOf(entry.getValue()));
         }
@@ -177,7 +180,8 @@ public final class GrpcStepParameters {
 
     private static void validateMatcherOperand(AssertionMatcher matcher, Object expected, String jsonPath) {
         if ((matcher == AssertionMatcher.EXISTS || matcher == AssertionMatcher.NOT_NULL) && !(expected instanceof Boolean)) {
-            throw new StandTestException("gRPC assertion at '" + jsonPath + "': matcher " + matcher + " requires a boolean '" + EXPECTED_VALUE + "'");
+            throw new StandTestException("gRPC assertion at '" + jsonPath + "': matcher " + matcher + " requires a boolean '"
+                    + EXPECTED_VALUE + "'");
         }
         if (matcher == AssertionMatcher.MATCHES) {
             if (!(expected instanceof String regex)) {
@@ -186,7 +190,8 @@ public final class GrpcStepParameters {
             try {
                 Pattern.compile(regex);
             } catch (PatternSyntaxException invalid) {
-                throw new StandTestException("gRPC assertion at '" + jsonPath + "': invalid regular expression for matcher MATCHES", invalid);
+                throw new StandTestException("gRPC assertion at '" + jsonPath + "': invalid regular expression for matcher MATCHES",
+                        invalid);
             }
         }
     }
@@ -211,12 +216,12 @@ public final class GrpcStepParameters {
             return List.of();
         }
         if (!(value instanceof List<?> list)) {
-            throw new StandTestException("gRPC step parameter '" + key + "' must be a list");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a list");
         }
         return list.stream()
                 .map(item -> {
                     if (!(item instanceof Map<?, ?>)) {
-                        throw new StandTestException("gRPC step parameter '" + key + "' entries must be maps");
+                        throw new StandTestException(PARAMETER_PREFIX + key + "' entries must be maps");
                     }
                     return (Map<String, Object>) item;
                 })

@@ -47,7 +47,8 @@ public final class SecretMasker {
             Pattern.compile("^\\s*(?i:bearer|basic)\\s+[A-Za-z0-9+/=_.\\-]{8,}\\s*$");
 
     private static final Pattern JSON_SCALAR_FIELD = Pattern.compile(
-            "\"([^\"\\\\]*+(?:\\\\.[^\"\\\\]*+)*+)\"(\\s*+:\\s*+)(\"[^\"\\\\]*+(?:\\\\.[^\"\\\\]*+)*+\"|-?+[0-9][0-9eE+.\\-]*+|true|false|null)");
+            "\"([^\"\\\\]*+(?:\\\\.[^\"\\\\]*+)*+)\"(\\s*+:\\s*+)"
+                    + "(\"[^\"\\\\]*+(?:\\\\.[^\"\\\\]*+)*+\"|-?+[0-9][0-9eE+.\\-]*+|true|false|null)");
 
     private static final Pattern EMBEDDED_CREDENTIAL = Pattern.compile(
             "(?i)\\b(bearer|basic)([ \\t]++)([A-Za-z0-9+/=_.\\-]{8,}+)");

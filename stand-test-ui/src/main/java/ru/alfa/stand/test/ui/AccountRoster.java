@@ -79,7 +79,8 @@ final class AccountRoster {
             }
         }
         if (accounts.isEmpty()) {
-            throw new StandTestException("The account roster of UI application '" + application + "' in variable '" + poolRef + "' contains no entries");
+            throw new StandTestException("The account roster of UI application '" + application + "' in variable '" + poolRef
+                    + "' contains no entries");
         }
         rejectDiscoveryAccount(accounts, application, discoveryAccountRef);
         return List.copyOf(accounts);
@@ -118,7 +119,8 @@ final class AccountRoster {
             if (discoveryAccountRef.equals(account.usernameRef()) || discoveryAccountRef.equals(account.accountId())) {
                 throw new StandTestException("The discovery account of UI application '" + application + "' ('" + discoveryAccountRef
                         + "') also appears in the working account pool, as account '" + account.accountId()
-                        + "'. Exploration runs under an account without the right to perform irreversible actions and must stay outside the pool (SEC-10);"
+                        + "'. Exploration runs under an account without the right to perform irreversible actions and must "
+                        + "stay outside the pool (SEC-10);"
                         + " give the pool its own accounts.");
             }
         }
@@ -132,7 +134,8 @@ final class AccountRoster {
         String trimmed = value.trim();
         if (!IDENTIFIER.matcher(trimmed).matches()) {
             throw new StandTestException(malformed(position, application, poolRef) + ": field '" + field
-                    + "' must be a name of letters, digits, '.', '_' or '-' (the offending value is not repeated here — it may be a mistyped credential)");
+                    + "' must be a name of letters, digits, '.', '_' or '-' (the offending value is not repeated here — it "
+                    + "may be a mistyped credential)");
         }
         return trimmed;
     }
@@ -149,6 +152,7 @@ final class AccountRoster {
     }
 
     private static String malformed(int position, String application, String poolRef) {
-        return "Entry #" + position + " of the account roster of UI application '" + application + "' (variable '" + poolRef + "') is malformed";
+        return "Entry #" + position + " of the account roster of UI application '" + application + "' (variable '" + poolRef
+                + "') is malformed";
     }
 }

@@ -243,7 +243,8 @@ public class StandTestAutoConfiguration implements BeanClassLoaderAware {
          * @return the Allure reporting event publisher
          */
         @Bean
-        @ConditionalOnProperty(prefix = "stand.test.reporting", name = {"enabled", "allure.enabled"}, havingValue = "true", matchIfMissing = true)
+        @ConditionalOnProperty(prefix = "stand.test.reporting", name = {"enabled", "allure.enabled"}, havingValue = "true",
+                matchIfMissing = true)
         @ConditionalOnMissingBean(ReportingEventPublisher.class)
         public ReportingEventPublisher standTestAllureReportingEventPublisher() {
             return new AllureReportingEventPublisher();

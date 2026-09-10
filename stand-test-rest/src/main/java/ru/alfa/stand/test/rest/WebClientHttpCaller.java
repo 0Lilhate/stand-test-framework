@@ -4,6 +4,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -75,7 +76,8 @@ public final class WebClientHttpCaller implements HttpCaller {
         } catch (StandTestException standTestFailure) {
             throw standTestFailure;
         } catch (RuntimeException transportFailure) {
-            throw new StandTestException("HTTP " + request.method() + " " + redactUserInfo(request.baseUrl()) + request.path() + " failed: " + transportFailure.getMessage(), transportFailure);
+            throw new StandTestException("HTTP " + request.method() + " " + redactUserInfo(request.baseUrl()) + request.path()
+                    + " failed: " + transportFailure.getMessage(), transportFailure);
         }
     }
 
@@ -115,7 +117,8 @@ public final class WebClientHttpCaller implements HttpCaller {
         if (entity == null) {
             throw new StandTestException("HTTP response for " + request.method() + " " + request.path() + " was empty");
         }
-        Map<String, List<String>> headers = Map.copyOf(entity.getHeaders().asMultiValueMap());
+        Map<String, List<String>> headers = new LinkedHashMap<>();
+        entity.getHeaders().forEach(headers::put);
         String body = (entity.getBody() == null) ? "" : entity.getBody();
         return new RestResponse(entity.getStatusCode().value(), headers, body);
     }

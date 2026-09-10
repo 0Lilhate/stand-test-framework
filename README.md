@@ -964,38 +964,41 @@ Guardrails выводятся из `ForbiddenOperation` и enforce'ятся ра
 ## 10. Сборка и публикация
 
 ```bash
-./gradlew build                       # компиляция + checkstyle (zero-tolerance) + тесты + JaCoCo-гейт 80%
+./gradlew build                       # компиляция + корпоративный анализ (отчётный) + тесты
 ./gradlew :stand-test-core:test       # тесты одного модуля
 ./gradlew publishToMavenLocal         # локальная публикация всех модулей + BOM
-./gradlew publish -PstandTestPublishUrl=<repo>
+./gradlew publish -PARTIFACTORY_USER=<user> -PARTIFACTORY_PASSWORD=<token>
 ```
 
-Toolchain не задан — сборка идёт на JDK, которым запущен Gradle (у разработчиков 21, на CI-агенте 25); байткод таргетит **Java 17** (`--release 17`), артефакты грузятся на JDK 17/21/24.
-Gradle 9.3.0; configuration cache, parallel и build cache включены.
+Сборка стоит на корпоративных плагинах `ru.alfalab.*` (`library-configurer` на модулях, `codestyle` и
+`org.sonarqube` на корне). Toolchain, который они задают (17), переопределён на JDK, которым запущен
+Gradle — на CI-агенте установлен только JDK 25 и скачать toolchain неоткуда; байткод при этом
+по-прежнему таргетит **Java 17** (`--release 17`), артефакты грузятся на JDK 17/21/24.
+Gradle 9.6.1 (ниже корпоративный плагин не запускается); configuration cache, parallel и build cache включены.
 
-Разрешение зависимостей идёт через внутренний Artifactory-зеркало без публичного fallback'а — нужны
-свойства `binaryPublicRepoUrl`, `artifactoryUrl`, `artifactorySnapshotRepo`, `artifactoryUser`,
-`artifactoryPassword` в `~/.gradle/gradle.properties`. Публикация параметризована свойствами
-`standTestPublish*` / переменными `STAND_TEST_PUBLISH_*` — см. [docs/publishing.md](docs/publishing.md).
+Зависимости разрешаются анонимно через зеркало `https://binary.alfabank.ru/artifactory/maven-secure`
+(прописано в `settings.gradle.kts`) — никаких персональных свойств для сборки не нужно. Публикация идёт
+в репозиторий `alfa`, который настраивает configurer: хост `ARTIFACTORY_HOST`, учётка `ARTIFACTORY_USER`
+/ `ARTIFACTORY_PASSWORD`, ключи репозиториев `LIBRARY_SNAPSHOT_REPOSITORY` / `LIBRARY_RELEASE_REPOSITORY`
+— см. [docs/publishing.md](docs/publishing.md).
+
+Статанализ (checkstyle + SpotBugs корпоративного codestyle) **отчётный**: находки лежат в
+`<модуль>/build/reports/{checkstyle,spotbugs}` и уезжают в Sonar, но сборку не валят. Гейта покрытия
+больше нет — корпоративная обвязка JaCoCo делает только отчёты.
 
 ### CI
 
-[`.gitlab-ci.yml`](.gitlab-ci.yml) прогоняет ту же команду, что и разработчик:
+Репозиторий собирает **Jenkins** — джоба `stand-test-framework` по пайплайну `ci/microservice/Jenkinsfile`
+из `taksa-core/jenkins`: `build -x test` → `test` → `jacocoTestReport :sonar` → `dockerCreateDockerfile`
+(prepublish) → publish. Пайплайн микросервисный, поэтому в корне сборки живёт no-op заглушка
+`dockerCreateDockerfile`, а джобу следует запускать с параметром `artifact_target_type=BUILD` — тогда
+docker-стадия publish пропускается: этот репозиторий поставляется jar-ами, а не образом.
 
-| Джоба | Когда | Команда |
-|---|---|---|
-| `verify` | merge request и push в ветку | `./gradlew build --console=plain` |
-| `nightly-verify` | расписание | `./gradlew build --console=plain --rerun-tasks --no-build-cache` |
+Браузерный набор (`:stand-test-ui:browserTest`) в CI не запускается — ему нужен образ с Chromium.
 
-Между прогонами переносится только кеш загруженных зависимостей — джоба не может отчитаться `UP-TO-DATE`
-за то, что изменено этим коммитом. Браузерный набор (`:stand-test-ui:browserTest`) намеренно не
-запускается: ему нужен образ с Chromium.
-
-Переменные проекта, которые нужно настроить один раз: `STAND_TEST_CI_IMAGE`, `STAND_TEST_CI_RUNNER_TAG`,
-`ORG_GRADLE_PROJECT_binaryPublicRepoUrl`, `ORG_GRADLE_PROJECT_artifactoryUrl`,
-`ORG_GRADLE_PROJECT_artifactorySnapshotRepo`, `ORG_GRADLE_PROJECT_artifactoryUser`,
-`ORG_GRADLE_PROJECT_artifactoryPassword`. `before_script` падает со списком недостающих **имён** — значения
-не печатаются никогда.
+Определения GitLab CI (`.gitlab-ci.yml`) в репозитории больше нет: сборкой занимается Jenkins,
+а файл описывал контракт (checkstyle `maxWarnings = 0`, гейт покрытия), которого после перехода
+на корпоративные плагины не существует.
 
 ---
 

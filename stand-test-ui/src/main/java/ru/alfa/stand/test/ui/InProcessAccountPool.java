@@ -57,7 +57,8 @@ public final class InProcessAccountPool implements AccountPool {
         for (UiAccount account : accounts) {
             if (!ids.add(account.accountId().toLowerCase(Locale.ROOT))) {
                 throw new IllegalArgumentException("account id '" + account.accountId()
-                        + "' appears more than once in the pool (ids are compared ignoring case) — ids key the browser session state, so they must be unique");
+                        + "' appears more than once in the pool (ids are compared ignoring case) — ids key the browser session "
+                        + "state, so they must be unique");
             }
         }
         this.roster = List.copyOf(accounts);
@@ -90,7 +91,8 @@ public final class InProcessAccountPool implements AccountPool {
                 UiAccount taken = takeFree(role);
                 if (taken != null) {
                     Duration waited = Duration.ofNanos(System.nanoTime() - startedAt);
-                    LOG.debug("Leased UI account '{}' (role '{}') of application '{}' after {}", taken.accountId(), taken.role(), application, waited);
+                    LOG.debug("Leased UI account '{}' (role '{}') of application '{}' after {}", taken.accountId(), taken.role(),
+                            application, waited);
                     return new Lease(taken, waited);
                 }
                 long remainingNanos = deadline - System.nanoTime();
@@ -118,9 +120,11 @@ public final class InProcessAccountPool implements AccountPool {
 
     private StandTestException exhausted(String application, String role, Duration timeout) {
         String what = (role == null) ? "any role" : "role '" + role + "'";
-        return new StandTestException("No test account of " + what + " became free for UI application '" + application + "' within " + timeout
+        return new StandTestException("No test account of " + what + " became free for UI application '" + application + "' within "
+                + timeout
                 + " — the pool holds " + size(role) + " account(s) of " + what + " and all of them are leased by other runs."
-                + " Either enlarge the roster the credentials-pool-ref points at, lower the parallelism of the suite, or raise the step's accountTimeout;"
+                + " Either enlarge the roster the credentials-pool-ref points at, lower the parallelism of the suite, or "
+                + "raise the step's accountTimeout;"
                 + " the wait is deliberately bounded, because a suite that hangs reports nothing.");
     }
 

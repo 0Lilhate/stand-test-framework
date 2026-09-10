@@ -1,0 +1,308 @@
+<!DOCTYPE module PUBLIC
+        "-//Puppy Crawl//DTD Check Configuration 1.2//EN"
+        "http://www.puppycrawl.com/dtds/configuration_1_2.dtd">
+<module name="Checker">
+    <!--
+      ОВЕРЛЕЙ КОРПОРАТИВНОГО КОНФИГА. `ru.alfalab.codestyle` (JavaCodeAnalysisPlugin) копирует файл из
+      `gradle/style/config/checkstyle/` в `.gradle/quality/config/checkstyle/` ВМЕСТО своего, если он тут есть.
+      Это копия корпоративного checkstyle.xml 1.2.1 с точечными отличиями — каждое помечено «[ОВЕРЛЕЙ]»
+      и объяснено на месте. Всё остальное менять не нужно: при обновлении плагина сверяйте только эти блоки.
+    -->
+    <!-- Properties (http://checkstyle.sourceforge.net/config.html#Properties#Checker) -->
+    <property name="fileExtensions" value="java, properties, xml"/>
+    <module name="SuppressionFilter">
+        <property name="file" value="${config_loc}/suppressions.xml"/>
+    </module>
+    <module name="LineLength">
+        <property name="max" value="140"/>
+    </module>
+
+    <!-- Filters (http://checkstyle.sourceforge.net/config_filters.html) -->
+    <module name="SuppressWarningsFilter"/>
+
+    <!--<module name="NewlineAtEndOfFile">-->
+        <!--<property name="lineSeparator" value="lf"/>-->
+    <!--</module>-->
+    <!-- disabled in favour of PMD ExcessiveClassLength check, which correctly checks class length not file length -->
+    <!--<module name="FileLength">-->
+        <!--<property name="max" value="500"/>-->
+    <!--</module>-->
+    <module name="FileTabCharacter"/>
+    <module name="Translation"/>
+    <module name="UniqueProperties"/>
+
+    <module name="TreeWalker">
+        <!-- http://checkstyle.sourceforge.net/config_filters.html#SuppressionCommentFilter -->
+        <module name="SuppressionCommentFilter"/>
+
+        <!-- Annotations (http://checkstyle.sourceforge.net/config_annotation.html) -->
+        <!--<module name="AnnotationLocation"/>-->
+        <!--<module name="AnnotationOnSameLine">-->
+        <!--<module name="AnnotationUseStyle"/>-->
+        <module name="MissingOverride"/>
+        <module name="PackageAnnotation"/>
+        <module name="SuppressWarningsHolder"/>
+        <module name="SuppressWarnings"/>
+
+
+        <!-- Block Checks (http://checkstyle.sourceforge.net/config_blocks.html) -->
+        <module name="AvoidNestedBlocks"/>
+        <module name="EmptyBlock">
+            <property name="option" value="text"/>
+            <property name="tokens" value="LITERAL_CATCH"/>
+        </module>
+        <module name="EmptyCatchBlock"/>
+        <module name="LeftCurly"/>
+        <!--<module name="NeedBraces">-->
+            <!--<property name="allowSingleLineStatement" value="true"/>-->
+        <!--</module>-->
+        <module name="RightCurly"/>
+
+
+        <!-- Class Design (http://checkstyle.sourceforge.net/config_design.html) -->
+        <!--<module name="DesignForExtension">-->
+        <module name="FinalClass"/>
+        <!--<module name="HideUtilityClassConstructor"/>-->
+        <module name="InnerTypeLast"/>
+        <module name="InterfaceIsType"/>
+        <!--<module name="MutableException"/>-->
+        <module name="OneTopLevelClass"/>
+        <module name="ThrowsCount"/>
+        <module name="VisibilityModifier">
+            <property name="protectedAllowed" value="true"/>
+        </module>
+
+
+        <!-- Coding (http://checkstyle.sourceforge.net/config_coding.html) -->
+        <module name="ArrayTrailingComma"/>
+        <!--<module name="AvoidInlineConditionals"/>-->
+        <module name="CovariantEquals"/>
+        <module name="DeclarationOrder"/>
+        <module name="DefaultComesLast"/>
+        <module name="EmptyStatement"/>
+        <module name="EqualsAvoidNull"/>
+        <module name="EqualsHashCode"/>
+        <module name="ExplicitInitialization"/>
+        <module name="FallThrough"/>
+        <!--<module name="FinalLocalVariable"/>-->
+        <!--<module name="HiddenField"/>-->
+        <!--<module name="IllegalCatch"/>-->
+        <module name="IllegalInstantiation"/>
+        <!--<module name="IllegalThrows"/>-->
+        <!--<module name="IllegalToken"/>-->
+        <module name="IllegalTokenText"/>
+        <!--<module name="IllegalType"/>-->
+        <module name="InnerAssignment"/>
+        <!--<module name="MagicNumber"/>-->
+        <!--<module name="MissingCtor"/>-->
+        <module name="MissingSwitchDefault"/>
+        <module name="ModifiedControlVariable"/>
+        <!--
+          [ОВЕРЛЕЙ] Дубли коротких литералов — это либо пунктуация сборки сообщений ("'", ": ", "' at "),
+          либо wire-ключи, намеренно записанные там, где читаются: мапперы адаптеров и fail-closed наборы
+          известных ключей зеркалят контракт по месту, и вынос их в константы разносит контракт по файлу.
+          Порог 12 символов отделяет такой литерал от осмысленного дублирующегося текста, а allowedDuplicates=3 —
+          от того, где константа действительно начинает окупаться (например "gRPC step parameter '" x10).
+        -->
+        <module name="MultipleStringLiterals">
+            <property name="allowedDuplicates" value="3"/>
+            <property name="ignoreStringsRegexp" value="^&quot;([^&quot;\\]|\\.){0,12}&quot;$"/>
+        </module>
+        <module name="MultipleVariableDeclarations"/>
+        <module name="NestedForDepth">
+            <property name="max" value="2"/>
+        </module>
+        <module name="NestedIfDepth">
+            <property name="max" value="3"/>
+        </module>
+        <module name="NestedTryDepth">
+            <property name="max" value="2"/>
+        </module>
+        <module name="NoClone"/>
+        <module name="NoFinalizer"/>
+        <module name="OneStatementPerLine"/>
+        <module name="OverloadMethodsDeclarationOrder"/>
+        <module name="PackageDeclaration"/>
+        <module name="ParameterAssignment"/>  <!-- more strict version is FinalParameters -->
+        <!--<module name="RequireThis"/>-->
+        <!--
+          [ОВЕРЛЕЙ] SDK построен на fail-closed guard-clause: валидаторы, классификаторы SQL и диспетчеры
+          media-type выходят ранним return на каждом отдельном условии. Это осознанный стиль (альтернатива —
+          вложенные if на 4+ уровня, которые запрещает NestedIfDepth), поэтому порог поднят до фактического
+          максимума в репозитории (AttachmentType.extensionForBinaryMediaType — 9).
+        -->
+        <module name="ReturnCount">
+            <property name="max" value="9"/>
+            <property name="maxForVoid" value="4"/>
+        </module>
+        <module name="SimplifyBooleanExpression"/>
+        <module name="SimplifyBooleanReturn"/>
+        <module name="StringLiteralEquality"/>
+        <!--<module name="SuperClone"/>-->
+        <!--<module name="SuperFinalize"/>-->
+        <module name="UnnecessaryParentheses"/>
+        <module name="VariableDeclarationUsageDistance">
+            <property name="allowedDistance" value="5"/>
+        </module>
+
+
+        <!-- Headers (http://checkstyle.sourceforge.net/config_header.html) -->
+        <!--<module name="Header"/>-->
+        <!--<module name="RegexpHeader"/>-->
+
+
+        <!-- Imports (http://checkstyle.sourceforge.net/config_imports.html) -->
+        <module name="AvoidStarImport">
+            <property name="excludes" value="java.util.*"/>
+        </module>
+        <!--<module name="AvoidStaticImport"/>-->
+        <!--<module name="CustomImportOrder"/>-->
+        <module name="IllegalImport"/>
+        <!--<module name="ImportControl"/>-->
+        <!--<module name="ImportOrder"/>-->
+        <module name="RedundantImport"/>
+        <module name="UnusedImports"/>
+
+
+        <!-- Javadoc Comments (http://checkstyle.sourceforge.net/config_javadoc.html) -->
+        <!--<module name="AtclauseOrder"/>-->
+        <!--<module name="JavadocMethod"/>-->
+        <!--<module name="JavadocPackage"/>-->
+        <!--<module name="JavadocParagraph"/>-->
+        <!--<module name="JavadocStyle"/>-->
+        <!--<module name="JavadocTagContinuationIndentation"/>-->
+        <!--<module name="JavadocType"/>-->
+        <!--<module name="JavadocVariable"/>-->
+        <!--<module name="NonEmptyAtclauseDescription"/>-->
+        <!--<module name="SingleLineJavadoc"/>-->
+        <!--<module name="SummaryJavadoc"/>-->
+        <!--<module name="WriteTag"/>-->
+
+
+        <!-- Metrics (http://checkstyle.sourceforge.net/config_metrics.html) -->
+        <!-- [ОВЕРЛЕЙ] Диапазонные проверки символов (isNameStart, SecretMetadata) — одно понятие, а не составное условие. -->
+        <module name="BooleanExpressionComplexity">
+            <property name="max" value="7"/>
+        </module>
+        <!--
+          [ОВЕРЛЕЙ] Executor-ы адаптеров и мапперы реестра по своей роли инстанцируют коллабораторов:
+          EnvironmentConfig/EnvironmentRegistryFactory собирают 13-14 value-типов реестра, UiStepExecutor — 15.
+          Дробить их означало бы размазать один контракт по нескольким файлам; порог поднят до фактического.
+        -->
+        <module name="ClassDataAbstractionCoupling">
+            <property name="max" value="15"/>
+        </module>
+        <!-- [ОВЕРЛЕЙ] KafkaStepExecutor (43) и UiStepExecutor (45) — фасады над внешним SDK, их fan-out и есть работа. -->
+        <module name="ClassFanOutComplexity">
+            <property name="max" value="45"/>
+        </module>
+        <!--
+          [ОВЕРЛЕЙ] Максимум в репозитории — UiStep.validate (25): плоская таблица взаимоисключающих проверок
+          «этот ключ допустим только на этом типе шага». Каждая ветка независима и покрыта своим тестом.
+        -->
+        <module name="CyclomaticComplexity">
+            <property name="max" value="25"/>
+        </module>
+        <module name="JavaNCSS"/>
+        <!--
+          [ОВЕРЛЕЙ] NPath выключен намеренно. Он мультипликативен: N независимых guard-clause вида
+          `if (bad) throw` дают 2^N путей, хотя каждая проверка ни от чего не зависит и читается линейно
+          (UiStep.validate — 746 496 при цикломатической 25). На fail-closed валидаторах эта метрика меряет
+          количество проверок, а не запутанность. Ветвление остаётся ограниченным CyclomaticComplexity выше.
+        -->
+
+
+        <!--  Miscellaneous (http://checkstyle.sourceforge.net/config_misc.html) -->
+        <module name="ArrayTypeStyle"/>
+        <!--<module name="AvoidEscapedUnicodeCharacters"/>-->
+        <module name="CommentsIndentation"/>
+        <module name="DescendantToken"/>
+        <!--<module name="FinalParameters"/>-->  <!-- DISABLED in favor of less restricted ParameterAssignment -->
+        <!--<module name="Indentation"/>-->
+        <module name="OuterTypeFilename"/>
+        <!--<module name="TodoComment"/>-->
+        <module name="TrailingComment"/>
+        <!--<module name="UncommentedMain"/>-->
+        <module name="UpperEll"/>
+
+
+        <!-- Modifiers (http://checkstyle.sourceforge.net/config_modifier.html) -->
+        <module name="ModifierOrder"/>
+        <module name="RedundantModifier"/>
+
+
+        <!-- Naming Conventions (http://checkstyle.sourceforge.net/config_naming.html) -->
+        <module name="AbbreviationAsWordInName"/>
+        <!--<module name="AbstractClassName"/>-->
+        <!--<module name="CatchParameterName"/>-->
+        <module name="ClassTypeParameterName">
+            <property name="format" value="^[A-Z]*$"/>
+        </module>
+        <module name="ConstantName"/>
+        <module name="InterfaceTypeParameterName">
+            <property name="format" value="^[A-Z]*$"/>
+        </module>
+        <!--<module name="LocalFinalVariableName"/>-->
+        <module name="LocalVariableName"/>
+        <module name="MemberName"/>
+        <module name="MethodName"/>
+        <module name="MethodTypeParameterName">
+            <property name="format" value="^[A-Z]*$"/>
+        </module>
+        <module name="PackageName"/>
+        <module name="ParameterName"/>
+        <module name="StaticVariableName"/>
+        <module name="TypeName"/>
+
+
+        <!-- Regexp (http://checkstyle.sourceforge.net/config_regexp.html) -->
+        <!--<module name="Regexp"/>-->
+        <!--<module name="RegexpMultiline"/>-->
+        <!--<module name="RegexpSingleline"/>-->
+        <!--<module name="RegexpSinglelineJava"/>-->
+
+
+        <!-- Size Violations (http://checkstyle.sourceforge.net/config_sizes.html) -->
+        <module name="AnonInnerLength"/>
+        <!-- [ОВЕРЛЕЙ] DefaultScenarioRunner.run (33) и UiStepExecutor.execute (34) — линейные try/finally-конвейеры шага. -->
+        <module name="ExecutableStatementCount">
+            <property name="max" value="40"/>
+        </module>
+        <module name="MethodCount"/>
+        <module name="MethodLength"/>
+        <module name="OuterTypeNumber"/>
+        <!-- [ОВЕРЛЕЙ] Канонический конструктор record-а StepEvent (10 компонентов) — это его контракт, а не список аргументов. -->
+        <module name="ParameterNumber">
+            <property name="max" value="10"/>
+        </module>
+
+
+        <!-- Whitespace (http://checkstyle.sourceforge.net/config_whitespace.html) -->
+        <module name="EmptyForInitializerPad"/>
+        <module name="EmptyForIteratorPad"/>
+        <!--<module name="EmptyLineSeparator"/>-->
+        <module name="GenericWhitespace"/>
+        <module name="MethodParamPad"/>
+        <module name="NoLineWrap"/>
+        <module name="NoWhitespaceAfter"/>
+        <module name="NoWhitespaceBefore"/>
+        <module name="OperatorWrap"/>
+        <module name="ParenPad"/>
+        <module name="SeparatorWrap">
+            <property name="tokens" value="COMMA"/>
+            <property name="option" value="eol"/>
+            </module>
+        <module name="SeparatorWrap">
+            <property name="tokens" value="DOT"/>
+            <property name="option" value="nl"/>
+        </module>
+        <module name="SingleSpaceSeparator"/>
+        <module name="TypecastParenPad"/>
+        <module name="WhitespaceAfter">
+            <property name="tokens" value="COMMA, SEMI"/>
+        </module>
+        <module name="WhitespaceAround">
+            <property name="allowEmptyTypes" value="true"/>
+        </module>
+    </module>
+</module>

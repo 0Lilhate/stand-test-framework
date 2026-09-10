@@ -15,7 +15,8 @@ import java.util.Set;
 final class KafkaStepTranslator {
 
     private static final Set<String> SEND_KNOWN = Set.of("id", "topic", "body", "bodyResource", "key", "headers", "injectCorrelationId");
-    private static final Set<String> EXPECT_KNOWN = Set.of("id", "topic", "key", "headers", "correlationIdFromContext", "timeout", "pollTimeout", "assert", "capture");
+    private static final Set<String> EXPECT_KNOWN = Set.of("id", "topic", "key", "headers", "correlationIdFromContext", "timeout",
+            "pollTimeout", "assert", "capture");
 
     private KafkaStepTranslator() {
     }

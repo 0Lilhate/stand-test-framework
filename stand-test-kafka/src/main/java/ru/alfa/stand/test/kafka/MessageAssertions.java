@@ -41,7 +41,8 @@ final class MessageAssertions {
         for (KafkaAssertion assertion : assertions) {
             Object actual = read(document, assertion.jsonPath());
             if (!AssertionMatchers.equalsMatch(assertion.expectedValue(), actual)) {
-                throw new StandTestAssertionError("JSONPath assertion failed at '" + assertion.jsonPath() + "': expected <" + assertion.expectedValue() + "> but got <" + actual + ">");
+                throw new StandTestAssertionError("JSONPath assertion failed at '" + assertion.jsonPath() + "': expected <"
+                        + assertion.expectedValue() + "> but got <" + actual + ">");
             }
         }
     }
@@ -50,7 +51,8 @@ final class MessageAssertions {
         for (KafkaCapture capture : captures) {
             Object value = read(document, capture.jsonPath());
             if (value == null) {
-                throw new StandTestAssertionError("Captured value at '" + capture.jsonPath() + "' is null; cannot store variable '" + capture.variableName() + "'");
+                throw new StandTestAssertionError("Captured value at '" + capture.jsonPath() + "' is null; cannot store variable '"
+                        + capture.variableName() + "'");
             }
             store.put(capture.variableName(), value);
         }

@@ -30,6 +30,8 @@ class UiStepParametersTest {
 
         List<Field> wireKeys = Arrays.stream(UiStepParameters.class.getDeclaredFields())
                 .filter(field -> field.getType() == String.class && Modifier.isStatic(field.getModifiers()))
+                // Only a PUBLISHED constant can be a wire key; a private one is this class's own message text.
+                .filter(field -> Modifier.isPublic(field.getModifiers()))
                 .filter(field -> !NOT_WIRE_KEYS.contains(field.getName()))
                 .toList();
 

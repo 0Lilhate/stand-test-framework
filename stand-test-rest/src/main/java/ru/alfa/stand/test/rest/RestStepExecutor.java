@@ -125,7 +125,8 @@ public final class RestStepExecutor implements StepExecutor {
         LOG.debug("REST {} {}", request.method(), request.path());
         final Instant sentAt = Instant.now();
         RestResponse response = this.httpCaller.execute(request);
-        LOG.debug("REST {} {} -> {} in {} ms", request.method(), request.path(), response.statusCode(), Duration.between(sentAt, Instant.now()).toMillis());
+        LOG.debug("REST {} {} -> {} in {} ms", request.method(), request.path(), response.statusCode(),
+                Duration.between(sentAt, Instant.now()).toMillis());
         String mismatch = firstMismatch(expectedStatus, assertions, response, request);
         if (mismatch != null) {
             throw new StandTestAssertionError(mismatch);
@@ -136,10 +137,13 @@ public final class RestStepExecutor implements StepExecutor {
         return success(step, startedAt, request, response);
     }
 
-    private StepResult executeExpectEventually(ScenarioStep step, Instant startedAt, Map<String, Object> parameters, RestRequest request, OptionalInt expectedStatus, List<RestAssertion> assertions, List<RestCapture> captures, StepExecutionContext context) {
+    private StepResult executeExpectEventually(ScenarioStep step, Instant startedAt, Map<String, Object> parameters, RestRequest request,
+            OptionalInt expectedStatus, List<RestAssertion> assertions, List<RestCapture> captures, StepExecutionContext context) {
         String service = RestStepParameters.requireString(parameters, RestStepParameters.SERVICE);
-        Duration timeout = Duration.ofMillis(RestStepParameters.positiveMillis(parameters, RestStepParameters.TIMEOUT_MILLIS, RestStepParameters.DEFAULT_TIMEOUT_MILLIS));
-        Duration pollInterval = Duration.ofMillis(RestStepParameters.positiveMillis(parameters, RestStepParameters.POLL_INTERVAL_MILLIS, RestStepParameters.DEFAULT_POLL_INTERVAL_MILLIS));
+        Duration timeout = Duration.ofMillis(RestStepParameters.positiveMillis(parameters, RestStepParameters.TIMEOUT_MILLIS,
+                RestStepParameters.DEFAULT_TIMEOUT_MILLIS));
+        Duration pollInterval = Duration.ofMillis(RestStepParameters.positiveMillis(parameters, RestStepParameters.POLL_INTERVAL_MILLIS,
+                RestStepParameters.DEFAULT_POLL_INTERVAL_MILLIS));
         AwaitPolicy policy = AwaitPolicy.builder("rest.expectEventually " + service + " " + request.path())
                 .timeout(timeout)
                 .pollInterval(pollInterval)
@@ -150,14 +154,16 @@ public final class RestStepExecutor implements StepExecutor {
                 policy,
                 () -> {
                     PollProbe polled = probe(request, expectedStatus, assertions);
-                    LOG.debug("REST poll #{} {} {} -> {}", attempt.incrementAndGet(), request.method(), request.path(), polled.response().statusCode());
+                    LOG.debug("REST poll #{} {} {} -> {}", attempt.incrementAndGet(), request.method(), request.path(),
+                            polled.response().statusCode());
                     return polled;
                 },
                 observed -> observed.mismatch() == null);
         PollProbe last = result.orElseThrow(diagnostics -> {
             LOG.debug("REST poll {} {} timed out: {}", request.method(), request.path(), diagnostics.summary());
             return new DiagnosticAssertionError(
-                    "rest.expectEventually '" + service + " " + request.path() + "' did not observe the expected response: " + diagnostics.summary()
+                    "rest.expectEventually '" + service + " " + request.path() + "' did not observe the expected response: "
+                            + diagnostics.summary()
                             + " (service=" + service + ", path=" + request.path() + ")",
                     diagnostics.withAttribute("rest.service", service).withAttribute("rest.path", request.path()).toMap());
         });
@@ -186,7 +192,8 @@ public final class RestStepExecutor implements StepExecutor {
                 .environment(environment)
                 .orElseThrow(() -> new StandTestException("Environment '" + environment + "' is not whitelisted"));
         return definition.service(service)
-                .orElseThrow(() -> new StandTestException("Service '" + service + "' is not whitelisted in environment '" + environment + "'"));
+                .orElseThrow(() -> new StandTestException("Service '" + service + "' is not whitelisted in environment '" + environment
+                        + "'"));
     }
 
     private RestRequest buildRequest(Map<String, Object> parameters, ServiceEndpointDefinition endpoint, StepExecutionContext context) {
@@ -215,7 +222,8 @@ public final class RestStepExecutor implements StepExecutor {
         return resolved;
     }
 
-    private static void injectCorrelationId(Map<String, Object> parameters, ServiceEndpointDefinition endpoint, Map<String, String> headers, StepExecutionContext context) {
+    private static void injectCorrelationId(Map<String, Object> parameters, ServiceEndpointDefinition endpoint,
+            Map<String, String> headers, StepExecutionContext context) {
         CorrelationConfig correlation = endpoint.correlation();
         boolean hasHeaderCarrier = correlation != null && correlation.source() == CorrelationSource.HEADER;
         boolean shouldInject = RestStepParameters.injectCorrelationIdFlag(parameters).orElse(hasHeaderCarrier);
@@ -223,7 +231,8 @@ public final class RestStepExecutor implements StepExecutor {
             return;
         }
         if (!hasHeaderCarrier) {
-            throw new StandTestException("Correlation id injection was requested for service '" + endpoint.name() + "', but it has no HEADER correlation config");
+            throw new StandTestException("Correlation id injection was requested for service '" + endpoint.name()
+                    + "', but it has no HEADER correlation config");
         }
         headers.put(correlation.name(), context.scenarioContext().correlationId().value());
     }
@@ -232,7 +241,8 @@ public final class RestStepExecutor implements StepExecutor {
         Optional<String> resource = RestStepParameters.optionalString(parameters, RestStepParameters.BODY_RESOURCE);
         Optional<String> inline = RestStepParameters.optionalString(parameters, RestStepParameters.BODY);
         if (resource.isPresent() && inline.isPresent()) {
-            throw new StandTestException("A REST step must set either '" + RestStepParameters.BODY + "' or '" + RestStepParameters.BODY_RESOURCE + "', not both");
+            throw new StandTestException("A REST step must set either '" + RestStepParameters.BODY + "' or '"
+                    + RestStepParameters.BODY_RESOURCE + "', not both");
         }
         if (resource.isPresent()) {
             return resolver.resolve(readResource(resource.get()));
@@ -263,9 +273,11 @@ public final class RestStepExecutor implements StepExecutor {
      * asserted paths are echoed (that diagnostic is the point of the assertion); the response body
      * never is.
      */
-    private static String firstMismatch(OptionalInt expectedStatus, List<RestAssertion> assertions, RestResponse response, RestRequest request) {
+    private static String firstMismatch(OptionalInt expectedStatus, List<RestAssertion> assertions, RestResponse response,
+            RestRequest request) {
         if (expectedStatus.isPresent() && expectedStatus.getAsInt() != response.statusCode()) {
-            return "Expected HTTP status " + expectedStatus.getAsInt() + " but got " + response.statusCode() + " for " + request.method() + " " + request.path();
+            return "Expected HTTP status " + expectedStatus.getAsInt() + " but got " + response.statusCode() + " for " + request.method()
+                    + " " + request.path();
         }
         if (assertions.isEmpty()) {
             return null;
@@ -300,17 +312,20 @@ public final class RestStepExecutor implements StepExecutor {
             if (!pathPresent) {
                 return "JSONPath '" + assertion.jsonPath() + "' not found in response body";
             }
-            return "JSONPath assertion failed at '" + assertion.jsonPath() + "': expected <" + assertion.expectedValue() + "> but got <" + actual + ">";
+            return "JSONPath assertion failed at '" + assertion.jsonPath() + "': expected <" + assertion.expectedValue() + "> but got <"
+                    + actual + ">";
         }
         String observed = pathPresent ? "<" + actual + ">" : "no value (path not found)";
-        return "JSONPath assertion failed at '" + assertion.jsonPath() + "': matcher " + assertion.matcher() + " expected <" + assertion.expectedValue() + "> but got " + observed;
+        return "JSONPath assertion failed at '" + assertion.jsonPath() + "': matcher " + assertion.matcher() + " expected <"
+                + assertion.expectedValue() + "> but got " + observed;
     }
 
     private static void applyCaptures(List<RestCapture> captures, DocumentContext document, VariableStore store) {
         for (RestCapture capture : captures) {
             Object value = read(document, capture.jsonPath());
             if (value == null) {
-                throw new StandTestAssertionError("Captured value at '" + capture.jsonPath() + "' is null; cannot store variable '" + capture.variableName() + "'");
+                throw new StandTestAssertionError("Captured value at '" + capture.jsonPath() + "' is null; cannot store variable '"
+                        + capture.variableName() + "'");
             }
             store.put(capture.variableName(), value);
         }

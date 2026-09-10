@@ -61,7 +61,8 @@ final class UiAccountPools {
         String asked = fingerprint(roster);
         if (!registration.fingerprint.equals(asked)) {
             throw new StandTestException("The account roster of UI application '" + application + "' in environment '" + environment
-                    + "' changed within one JVM: this process is already leasing from " + registration.fingerprint + ", and was now asked for " + asked
+                    + "' changed within one JVM: this process is already leasing from " + registration.fingerprint
+                            + ", and was now asked for " + asked
                     + ". Two rosters for one application would each lease 'exclusively' while handing the same account to two runs;"
                     + " use one roster per application per environment, or a distinct application alias for a distinct set of accounts.");
         }

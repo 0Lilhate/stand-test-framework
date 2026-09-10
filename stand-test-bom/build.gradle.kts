@@ -78,6 +78,14 @@ tasks.named("check") {
   dependsOn(verifyBomCoversEveryPublishedModule)
 }
 
+// `ru.alfalab.library-configurer` здесь неприменим: он тянет `java-library`, несовместимый с
+// `java-platform`. Публикацию и репозиторий поэтому объявляем сами, но ЧИТАЯ те же свойства, что
+// корпоративный MavenPublishRepositoriesConfigurer, — иначе BOM уехал бы не туда, где лежат
+// остальные 12 артефактов.
+fun corporateProperty(name: String): String? = providers.gradleProperty(name)
+  .orElse(providers.environmentVariable(name))
+  .orNull
+
 publishing {
   publications {
     create<MavenPublication>("maven") {
@@ -85,6 +93,25 @@ publishing {
       pom {
         name.set(project.name)
         description.set("Bill of materials for the stand-test SDK: aligned versions of every published module plus the curated third-party libraries the adapters are tested against")
+      }
+    }
+  }
+
+  repositories {
+    maven {
+      name = "alfa"
+      val host = corporateProperty("ARTIFACTORY_HOST") ?: "https://binary.alfabank.ru"
+      val isSnapshot = version.toString().endsWith("-SNAPSHOT")
+      val repo = if (isSnapshot) {
+        corporateProperty("LIBRARY_SNAPSHOT_REPOSITORY") ?: "libs-snapshot-local"
+      } else {
+        corporateProperty("LIBRARY_RELEASE_REPOSITORY") ?: "libs-release-local"
+      }
+      url = uri("$host/artifactory/$repo")
+      isAllowInsecureProtocol = true
+      credentials {
+        username = corporateProperty("ARTIFACTORY_USER")
+        password = corporateProperty("ARTIFACTORY_PASSWORD")
       }
     }
   }

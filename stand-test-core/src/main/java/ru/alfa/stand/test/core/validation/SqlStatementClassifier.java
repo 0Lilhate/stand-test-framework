@@ -326,7 +326,8 @@ public final class SqlStatementClassifier {
     }
 
     private static SqlClassification destructive(String keyword) {
-        return new SqlClassification(SqlStatementKind.DESTRUCTIVE, keyword + " is destructive/DDL", keyword, null, null, false, false, false);
+        return new SqlClassification(SqlStatementKind.DESTRUCTIVE, keyword + " is destructive/DDL", keyword, null, null, false, false,
+                false);
     }
 
     private static SqlClassification rejected(String reason) {
@@ -400,7 +401,7 @@ public final class SqlStatementClassifier {
     private static boolean containsBatchSeparatorLine(String skeleton) {
         for (String line : skeleton.split("\\R", -1)) {
             String stripped = line.strip();
-            if (stripped.equals("/") || stripped.equalsIgnoreCase("GO")) {
+            if ("/".equals(stripped) || "GO".equalsIgnoreCase(stripped)) {
                 return true;
             }
         }

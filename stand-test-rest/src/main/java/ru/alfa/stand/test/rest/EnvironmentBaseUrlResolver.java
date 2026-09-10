@@ -45,7 +45,8 @@ public final class EnvironmentBaseUrlResolver implements BaseUrlResolver {
         String resolved = SecretReferences.resolve(baseUrlRef, this.lookup);
         if (resolved == null || resolved.isBlank()) {
             if (SecretReferences.isLiteral(baseUrlRef)) {
-                throw new StandTestException("Base URL is configured as a literal value but it is empty — an unset environment variable behind a ${VAR:} placeholder resolves to the empty default");
+                throw new StandTestException("Base URL is configured as a literal value but it is empty — an unset environment variable "
+                        + "behind a ${VAR:} placeholder resolves to the empty default");
             }
             throw new StandTestException("Base URL reference '" + baseUrlRef + "' did not resolve (environment variable not set)");
         }

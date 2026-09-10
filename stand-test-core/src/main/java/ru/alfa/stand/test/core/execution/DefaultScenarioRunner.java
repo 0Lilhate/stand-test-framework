@@ -213,10 +213,12 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
             try {
                 outcome = compensator.compensate();
                 if (outcome == null) {
-                    outcome = CompensationOutcome.failed(compensator.actionId(), compensator.target(), "compensator returned a null outcome", null, Map.of());
+                    outcome = CompensationOutcome.failed(compensator.actionId(), compensator.target(),
+                            "compensator returned a null outcome", null, Map.of());
                 }
             } catch (Throwable unexpected) {
-                outcome = CompensationOutcome.failed(compensator.actionId(), compensator.target(), unexpected.getMessage(), unexpected, Map.of());
+                outcome = CompensationOutcome.failed(compensator.actionId(), compensator.target(), unexpected.getMessage(), unexpected,
+                        Map.of());
             }
             outcomes.add(outcome);
             publishCompensationStep(context, compensator.actionId(), StepPhase.FINISHED, outcome);
@@ -329,7 +331,8 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
                     executor.prepare(step, executionContext);
                 } catch (StandTestException alreadyClassified) {
                     recordPrepareFailure(step, start, context, stepResults, alreadyClassified);
-                    LOG.error("{} failed to prepare: {}", stepLabel(index + 1, total, step), safeMessage(alreadyClassified), alreadyClassified);
+                    LOG.error("{} failed to prepare: {}", stepLabel(index + 1, total, step), safeMessage(alreadyClassified),
+                            alreadyClassified);
                     throw alreadyClassified;
                 } catch (RuntimeException unexpected) {
                     recordPrepareFailure(step, start, context, stepResults, unexpected);
@@ -392,7 +395,8 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
                 throw new StandTestException(message, unexpected);
             }
             stepResults.add(result);
-            publishStep(context, step, StepPhase.FINISHED, result.status(), result.errorMessage(), result.diagnostics(), result.attachments());
+            publishStep(context, step, StepPhase.FINISHED, result.status(), result.errorMessage(), result.diagnostics(),
+                    result.attachments());
             logStepOutcome(index, total, step, result);
             return result;
         }

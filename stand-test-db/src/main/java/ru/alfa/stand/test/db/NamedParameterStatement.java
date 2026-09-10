@@ -123,10 +123,12 @@ final class NamedParameterStatement {
     }
 
     private static boolean isNameStart(char character) {
-        return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || character == '_';
+        return character >= 'a' && character <= 'z'
+                || character >= 'A' && character <= 'Z'
+                || character == '_';
     }
 
     private static boolean isNamePart(char character) {
-        return isNameStart(character) || (character >= '0' && character <= '9');
+        return isNameStart(character) || character >= '0' && character <= '9';
     }
 }

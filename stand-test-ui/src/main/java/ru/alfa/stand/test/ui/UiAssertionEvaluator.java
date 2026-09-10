@@ -86,7 +86,8 @@ final class UiAssertionEvaluator {
     }
 
     private static String maskedDescribe(UiAssertion assertion) {
-        String name = (assertion.property() == UiProperty.ATTRIBUTE) ? assertion.property() + "[" + assertion.attribute() + "]" : assertion.property().toString();
+        String name = (assertion.property() == UiProperty.ATTRIBUTE) ? assertion.property() + "[" + assertion.attribute()
+                + "]" : assertion.property().toString();
         return name + " " + assertion.matcher() + " " + MASK;
     }
 

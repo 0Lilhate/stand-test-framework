@@ -52,7 +52,8 @@ public record UiLoginFormConfig(
         requireLocatorExpressionOrAbsent(submitLocator, "submit-locator");
         requireLocatorExpressionOrAbsent(signedInLocator, "signed-in-locator");
         if (path == null && usernameLocator == null && passwordLocator == null && submitLocator == null && signedInLocator == null) {
-            throw new IllegalArgumentException("a login section that declares nothing is a configuration mistake — remove it or fill it in");
+            throw new IllegalArgumentException("a login section that declares nothing is a configuration "
+                    + "mistake — remove it or fill it in");
         }
     }
 
@@ -85,8 +86,10 @@ public record UiLoginFormConfig(
             throw new IllegalArgumentException("login form field '" + field + "' must not be blank when declared");
         }
         if (!LOCATOR_EXPRESSION.matcher(value.trim()).matches()) {
-            throw new IllegalArgumentException("login form field '" + field + "' must be a locator expression '<strategy>=<value>' (for example testId=login-submit or role=button:Sign in)."
-                    + " This field addresses an element on the page and never holds a credential; logins and passwords come from the account roster behind credentials-pool-ref."
+            throw new IllegalArgumentException("login form field '" + field
+                    + "' must be a locator expression '<strategy>=<value>' (for example testId=login-submit or role=button:Sign in)."
+                    + " This field addresses an element on the page and never holds a credential; logins and passwords come from the "
+                    + "account roster behind credentials-pool-ref."
                     + " (The offending value is not repeated here — it may be the credential itself.)");
         }
     }
@@ -100,7 +103,9 @@ public record UiLoginFormConfig(
         }
         String lower = path.trim().toLowerCase(Locale.ROOT);
         if (lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("//")) {
-            throw new IllegalArgumentException("login form field 'path' must be relative to the application's base URL, but was the absolute address '" + path + "'");
+            throw new IllegalArgumentException("login form field 'path' must be relative to the application's base URL, "
+                    + "but was the absolute address '"
+                    + path + "'");
         }
     }
 }

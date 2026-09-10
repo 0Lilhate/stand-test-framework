@@ -90,6 +90,9 @@ public final class UiStepExecutor implements StepExecutor {
 
     private static final Logger LOG = LoggerFactory.getLogger(UiStepExecutor.class);
 
+    /** Message prefix shared by every diagnostic naming the application a step addresses. */
+    private static final String APPLICATION_PREFIX = "UI application '";
+
     private final UiDriverFactory driverFactory;
 
     private final UiApplicationResolver applicationResolver;
@@ -149,7 +152,8 @@ public final class UiStepExecutor implements StepExecutor {
      * @param awaiter drives {@code ui.expectEventually} polling
      * @param settings supplies the run settings when a session is opened
      */
-    public UiStepExecutor(UiDriverFactory driverFactory, UiApplicationResolver applicationResolver, Awaiter awaiter, Supplier<UiRunSettings> settings) {
+    public UiStepExecutor(UiDriverFactory driverFactory, UiApplicationResolver applicationResolver, Awaiter awaiter,
+            Supplier<UiRunSettings> settings) {
         this(driverFactory, applicationResolver, awaiter, settings, System::getenv);
     }
 
@@ -234,7 +238,8 @@ public final class UiStepExecutor implements StepExecutor {
                 case UiStepParameters.EXPECT_EVENTUALLY_TYPE -> expectEventually(parameters, session, runSettings, context);
                 default -> throw new StandTestException("Unsupported UI step type: '" + step.type() + "'");
             }
-            return new StepResult(step.id(), step.type(), StepStatus.SUCCESS, startedAt, Instant.now(), null, diagnostics(parameters, session));
+            return new StepResult(step.id(), step.type(), StepStatus.SUCCESS, startedAt, Instant.now(), null,
+                    diagnostics(parameters, session));
         } catch (StandTestAssertionError assertion) {
             UiEvidence evidence = captureFailure(application, runSettings.artifactsDirectory(), context, sensitiveZones);
             throw new UiAssertionFailure(assertion.getMessage(), assertion, evidence);
@@ -268,7 +273,8 @@ public final class UiStepExecutor implements StepExecutor {
      * @return the evidence gathered on the failure path (screenshot attachment and masked-zone count),
      *     or {@link UiEvidence#EMPTY} when nothing could be captured
      */
-    private UiEvidence captureFailure(String application, Path artifactsDirectory, StepExecutionContext context, List<UiLocator> sensitiveZones) {
+    private UiEvidence captureFailure(String application, Path artifactsDirectory, StepExecutionContext context,
+            List<UiLocator> sensitiveZones) {
         if (application == null) {
             return UiEvidence.EMPTY;
         }
@@ -432,7 +438,8 @@ public final class UiStepExecutor implements StepExecutor {
         UiLocator locator = UiStepParameters.locator(parameters);
         String value = context.resolver().resolve(UiStepParameters.requireString(parameters, UiStepParameters.VALUE));
         LOG.debug("UI fill {}", locator.describe());
-        Runnable typing = () -> driverCall(() -> session.driver().fill(locator, value, settings.actionTimeout()), "fill " + locator.describe());
+        Runnable typing = () -> driverCall(() -> session.driver().fill(locator, value, settings.actionTimeout()), "fill "
+                + locator.describe());
         if (locator.sensitive()) {
             UiSecrets.guard(typing, List.of(value), "fill " + locator.describe());
         } else {
@@ -456,9 +463,11 @@ public final class UiStepExecutor implements StepExecutor {
         UiLocator locator = UiStepParameters.locator(parameters);
         List<UiAssertion> assertions = UiStepParameters.assertions(parameters);
         List<UiCapture> captures = UiStepParameters.captures(parameters);
-        Duration timeout = Duration.ofMillis(UiStepParameters.positiveMillis(parameters, UiStepParameters.TIMEOUT_MILLIS, UiStepParameters.DEFAULT_TIMEOUT_MILLIS));
+        Duration timeout = Duration.ofMillis(UiStepParameters.positiveMillis(parameters, UiStepParameters.TIMEOUT_MILLIS,
+                UiStepParameters.DEFAULT_TIMEOUT_MILLIS));
         Duration pollInterval = Duration.ofMillis(
-                UiStepParameters.positiveMillis(parameters, UiStepParameters.POLL_INTERVAL_MILLIS, UiStepParameters.DEFAULT_POLL_INTERVAL_MILLIS));
+                UiStepParameters.positiveMillis(parameters, UiStepParameters.POLL_INTERVAL_MILLIS,
+                        UiStepParameters.DEFAULT_POLL_INTERVAL_MILLIS));
         Duration probeTimeout = (pollInterval.compareTo(timeout) > 0) ? timeout : pollInterval;
         AwaitPolicy policy = AwaitPolicy.builder("ui.expectEventually " + session.application().alias() + " " + locator.describe())
                 .timeout(timeout)
@@ -467,7 +476,8 @@ public final class UiStepExecutor implements StepExecutor {
                 .build();
         AwaitResult<String> result = this.awaiter.await(
                 policy,
-                () -> UiAssertionEvaluator.firstMismatch(assertions, locator, snapshot(session, locator, assertions, List.of(), probeTimeout)),
+                () -> UiAssertionEvaluator.firstMismatch(assertions, locator,
+                        snapshot(session, locator, assertions, List.of(), probeTimeout)),
             Objects::isNull);
         result.orElseThrow(diagnostics -> new DiagnosticAssertionError(
                 "ui.expectEventually on " + locator.describe() + " did not hold: " + diagnostics.summary()
@@ -478,11 +488,14 @@ public final class UiStepExecutor implements StepExecutor {
         applyCaptures(captures, session, settings, context);
     }
 
-    private ElementSnapshot snapshot(UiSession session, UiLocator locator, List<UiAssertion> assertions, List<UiCapture> captures, Duration probeTimeout) {
+    private ElementSnapshot snapshot(UiSession session, UiLocator locator, List<UiAssertion> assertions, List<UiCapture> captures,
+            Duration probeTimeout) {
         Set<String> attributes = UiAssertionEvaluator.attributeNames(assertions, captures);
-        ElementSnapshot snapshot = driverCall(() -> session.driver().snapshot(locator, attributes, probeTimeout), "observe " + locator.describe());
+        ElementSnapshot snapshot = driverCall(() -> session.driver().snapshot(locator, attributes, probeTimeout), "observe "
+                + locator.describe());
         if (snapshot == null) {
-            throw new StandTestException("The UI driver returned no snapshot for " + locator.describe() + " — a driver must report absence as ElementSnapshot.absent()");
+            throw new StandTestException("The UI driver returned no snapshot for " + locator.describe()
+                    + " — a driver must report absence as ElementSnapshot.absent()");
         }
         return snapshot;
     }
@@ -491,7 +504,8 @@ public final class UiStepExecutor implements StepExecutor {
         for (UiCapture capture : captures) {
             ElementSnapshot snapshot = snapshot(session, capture.locator(), List.of(), List.of(capture), settings.actionTimeout());
             if (!snapshot.present()) {
-                throw new StandTestAssertionError("Cannot capture '" + capture.variableName() + "': element " + capture.locator().describe() + " was not found on the page");
+                throw new StandTestAssertionError("Cannot capture '" + capture.variableName() + "': element "
+                        + capture.locator().describe() + " was not found on the page");
             }
             String value = switch (capture.source()) {
                 case TEXT -> snapshot.text();
@@ -527,9 +541,11 @@ public final class UiStepExecutor implements StepExecutor {
             Instant startedAt,
             List<UiLocator> sensitiveZones) {
         String role = UiStepParameters.optionalString(parameters, UiStepParameters.ROLE);
-        Duration timeout = Duration.ofMillis(UiStepParameters.positiveMillis(parameters, UiStepParameters.TIMEOUT_MILLIS, UiStepParameters.DEFAULT_TIMEOUT_MILLIS));
+        Duration timeout = Duration.ofMillis(UiStepParameters.positiveMillis(parameters, UiStepParameters.TIMEOUT_MILLIS,
+                UiStepParameters.DEFAULT_TIMEOUT_MILLIS));
         Duration accountTimeout = Duration.ofMillis(
-                UiStepParameters.positiveMillis(parameters, UiStepParameters.ACCOUNT_TIMEOUT_MILLIS, UiStepParameters.DEFAULT_ACCOUNT_TIMEOUT_MILLIS));
+                UiStepParameters.positiveMillis(parameters, UiStepParameters.ACCOUNT_TIMEOUT_MILLIS,
+                        UiStepParameters.DEFAULT_ACCOUNT_TIMEOUT_MILLIS));
 
         String environment = context.scenarioContext().environment();
         UiSession opened = context.resourceScope().get(UiSession.resourceKey(application)).map(UiSession.class::cast).orElse(null);
@@ -551,7 +567,8 @@ public final class UiStepExecutor implements StepExecutor {
             }
             injectCorrelationId(parameters, session, context);
             UiLoginOutcome outcome = this.loginService.signIn(session, account, runSettings, timeout, store, stateFile);
-            return new StepResult(step.id(), step.type(), StepStatus.SUCCESS, startedAt, Instant.now(), null, loginDiagnostics(session, auth, account, outcome));
+            return new StepResult(step.id(), step.type(), StepStatus.SUCCESS, startedAt, Instant.now(), null,
+                    loginDiagnostics(session, auth, account, outcome));
         } finally {
             if (!ownedByScope) {
                 account.close();
@@ -571,21 +588,27 @@ public final class UiStepExecutor implements StepExecutor {
      * <p>When neither applies — no saved session to lose, same account, or a scheme that keeps nothing on
      * disk — the existing session is used as it is, which is what an ordinary re-authentication needs.
      */
-    private static UiSession requireExistingSessionUsableBy(UiSession opened, UiAuthConfig auth, LeasedAccount account, StorageStateStore store, Path stateFile) {
+    private static UiSession requireExistingSessionUsableBy(UiSession opened, UiAuthConfig auth, LeasedAccount account,
+            StorageStateStore store, Path stateFile) {
         if (auth.scheme() != UiAuthScheme.STORAGE_STATE) {
             return opened;
         }
         String alias = opened.application().alias();
         String signedIn = opened.signedInAccountId();
         if (signedIn != null && !signedIn.equals(account.accountId())) {
-            throw new StandTestException("UI application '" + alias + "' signs in with scheme STORAGE_STATE, and this run is already signed in as account '" + signedIn
-                    + "'. Signing in as '" + account.accountId() + "' in the same browsing context would save a session state carrying both identities."
-                    + " Use one scenario per account, or declare auth.scheme FORM for an application whose test really is 'sign in as somebody else'.");
+            throw new StandTestException(APPLICATION_PREFIX + alias
+                    + "' signs in with scheme STORAGE_STATE, and this run is already signed in as account '" + signedIn
+                    + "'. Signing in as '" + account.accountId()
+                            + "' in the same browsing context would save a session state carrying both identities."
+                    + " Use one scenario per account, or declare auth.scheme FORM for an application whose test really "
+                    + "is 'sign in as somebody else'.");
         }
         if (store.usable(stateFile) && !stateFile.equals(opened.restoredFrom())) {
-            throw new StandTestException("UI application '" + alias + "' signs in with scheme STORAGE_STATE and account '" + account.accountId()
+            throw new StandTestException(APPLICATION_PREFIX + alias + "' signs in with scheme STORAGE_STATE and account '"
+                    + account.accountId()
                     + "' has a saved session, but a browsing session for this application was already opened by an earlier step,"
-                    + " and a saved session can only be restored while the browser context is created. Move the ui.login step before the first ui.* step of this application.");
+                    + " and a saved session can only be restored while the browser context is created. Move the ui.login step before the "
+                    + "first ui.* step of this application.");
         }
         return opened;
     }
@@ -639,8 +662,10 @@ public final class UiStepExecutor implements StepExecutor {
      * by application and role, so a second {@code ui.login} does not queue behind the pool for an account
      * this very run is holding.
      */
-    private LeasedAccount leaseAccount(String environment, ResolvedUiApplication application, UiAuthConfig auth, String role, Duration accountTimeout, StepExecutionContext context) {
-        LeasedAccount held = context.resourceScope().get(leaseKey(environment, application.alias(), role)).map(LeasedAccount.class::cast).orElse(null);
+    private LeasedAccount leaseAccount(String environment, ResolvedUiApplication application, UiAuthConfig auth, String role,
+            Duration accountTimeout, StepExecutionContext context) {
+        LeasedAccount held = context.resourceScope().get(leaseKey(environment, application.alias(), role)).map(LeasedAccount.class::cast)
+                .orElse(null);
         if (held != null) {
             return held;
         }
@@ -691,18 +716,23 @@ public final class UiStepExecutor implements StepExecutor {
     private static UiAuthConfig requireSignInConfigured(ResolvedUiApplication application) {
         UiAuthConfig auth = application.auth();
         if (auth == null || auth.scheme() == UiAuthScheme.NONE) {
-            throw new StandTestException("UI application '" + application.alias() + "' declares no sign-in (auth is absent or its scheme is NONE),"
-                    + " so there is nothing for ui.login to do — remove the step, or declare an auth section with scheme FORM or STORAGE_STATE.");
+            throw new StandTestException(APPLICATION_PREFIX + application.alias()
+                    + "' declares no sign-in (auth is absent or its scheme is NONE),"
+                    + " so there is nothing for ui.login to do — remove the step, or declare an auth section with "
+                    + "scheme FORM or STORAGE_STATE.");
         }
         if (auth.scheme() == UiAuthScheme.SSO) {
-            throw new StandTestException("UI application '" + application.alias() + "' declares auth.scheme SSO, which this SDK version does not implement:"
-                    + " an identity-provider redirect flow is configured per application and sits behind the same external gate as the MFA question (G-1)."
+            throw new StandTestException(APPLICATION_PREFIX + application.alias()
+                    + "' declares auth.scheme SSO, which this SDK version does not implement:"
+                    + " an identity-provider redirect flow is configured per application and sits behind the same external "
+                    + "gate as the MFA question (G-1)."
                     + " Use scheme FORM, or STORAGE_STATE with a session prepared once outside the SDK.");
         }
         return auth;
     }
 
-    private static Map<String, Object> loginDiagnostics(UiSession session, UiAuthConfig auth, LeasedAccount account, UiLoginOutcome outcome) {
+    private static Map<String, Object> loginDiagnostics(UiSession session, UiAuthConfig auth, LeasedAccount account,
+            UiLoginOutcome outcome) {
         Map<String, Object> diagnostics = new LinkedHashMap<>();
         diagnostics.put("ui.application", session.application().alias());
         String url = currentUrl(session);
@@ -745,13 +775,16 @@ public final class UiStepExecutor implements StepExecutor {
                 .orElseGet(() -> openSession(this.applicationResolver.resolve(application, context), runSettings, context, null));
     }
 
-    private UiSession openSession(ResolvedUiApplication resolved, UiRunSettings runSettings, StepExecutionContext context, Path storageState) {
+    private UiSession openSession(ResolvedUiApplication resolved, UiRunSettings runSettings, StepExecutionContext context,
+            Path storageState) {
         String application = resolved.alias();
-        LOG.debug("Opening UI session for application '{}' ({}, headless={}, restoredSession={})", application, runSettings.browser(), runSettings.headless(), storageState != null);
+        LOG.debug("Opening UI session for application '{}' ({}, headless={}, restoredSession={})", application, runSettings.browser(),
+                runSettings.headless(), storageState != null);
         if (this.retentionSwept.compareAndSet(false, true)) {
             new RunArtifactRetention(runSettings.artifactRetention()).sweep(runSettings.artifactsDirectory());
         }
-        UiDriver driver = driverCall(() -> this.driverFactory.open(resolved, runSettings, storageState), "open a browsing session for application '" + application + "'");
+        UiDriver driver = driverCall(() -> this.driverFactory.open(resolved, runSettings, storageState),
+                "open a browsing session for application '" + application + "'");
         if (driver == null) {
             throw new StandTestException("The UI driver factory returned no driver for application '" + application + "'");
         }

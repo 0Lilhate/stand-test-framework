@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- http://spotbugs.readthedocs.io/en/latest/filter.html -->
+<FindBugsFilter>
+
+    <!--
+      ОВЕРЛЕЙ КОРПОРАТИВНОГО exclude.xml. `ru.alfalab.codestyle` копирует файл из
+      `gradle/style/config/spotbugs/` в `.gradle/quality/config/spotbugs/` ВМЕСТО своего.
+      Это копия корпоративного файла 1.2.1 плюс блок «[ОВЕРЛЕЙ]» в конце.
+    -->
+
+    <!-- Do not check groovy, kotlin, mapstruct generated files -->
+    <Match>
+        <Or>
+            <Source name="~.*\.groovy"/>
+            <Source name="~.*\.kt"/>
+            <Source name="~.*MapperImpl\.java"/>
+            <Source name="~.*ConverterImpl\.java"/>
+        </Or>
+    </Match>
+
+    <Match>
+        <!-- Disabled due to confusing false positives -->
+        <Or>
+            <Bug pattern="EI_EXPOSE_REP"/>
+            <Bug pattern="EI_EXPOSE_REP2"/>
+        </Or>
+    </Match>
+    <!--
+      [ОВЕРЛЕЙ] KafkaConsumer.position(TopicPartition) — НЕ чистая функция, вопреки выводу детектора:
+      seekToEnd() у kafka-clients ленив, и именно position() форсирует разрешение позиции до первого
+      poll(). Возвращаемое смещение здесь действительно не нужно — нужен сам вызов. Исключение точечное:
+      конкретный класс, конкретный метод, конкретный паттерн.
+    -->
+    <Match>
+        <Class name="ru.alfa.stand.test.kafka.ArmedConsumer"/>
+        <Method name="arm"/>
+        <Bug pattern="RV_RETURN_VALUE_IGNORED_NO_SIDE_EFFECT"/>
+    </Match>
+</FindBugsFilter>

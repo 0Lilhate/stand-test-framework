@@ -70,7 +70,8 @@ final class ArmedConsumer implements AutoCloseable {
      *     topic declares none (then no foreign-record eviction is applied)
      * @param runCorrelationId this run's SDK-owned correlation id, used to evict other runs' records
      */
-    ArmedConsumer(Consumer<String, String> consumer, String topicAlias, String realTopic, String correlationHeaderName, String runCorrelationId) {
+    ArmedConsumer(Consumer<String, String> consumer, String topicAlias, String realTopic, String correlationHeaderName,
+            String runCorrelationId) {
         this.consumer = consumer;
         this.topicAlias = topicAlias;
         this.realTopic = realTopic;
@@ -81,7 +82,8 @@ final class ArmedConsumer implements AutoCloseable {
     void arm() {
         List<PartitionInfo> infos = this.consumer.partitionsFor(this.realTopic);
         if (infos == null || infos.isEmpty()) {
-            throw new StandTestException("Kafka topic '" + this.realTopic + "' (alias '" + this.topicAlias + "') has no partitions to assign");
+            throw new StandTestException("Kafka topic '" + this.realTopic + "' (alias '" + this.topicAlias
+                    + "') has no partitions to assign");
         }
         List<TopicPartition> assigned = new ArrayList<>();
         for (PartitionInfo info : infos) {
@@ -116,8 +118,11 @@ final class ArmedConsumer implements AutoCloseable {
             }
         }
         if (this.buffer.size() > MAX_BUFFERED) {
-            throw new StandTestException("Kafka expect on topic '" + this.realTopic + "' (alias '" + this.topicAlias + "') buffered more than "
-                    + MAX_BUFFERED + " unmatched messages that could be this run's (other runs' correlated records are already evicted) — the selection matches nothing; narrow the correlation/key selection or use a more specific topic");
+            throw new StandTestException("Kafka expect on topic '" + this.realTopic + "' (alias '" + this.topicAlias
+                    + "') buffered more than "
+                    + MAX_BUFFERED
+                            + " unmatched messages that could be this run's (other runs' correlated records are already evicted) — the "
+                            + "selection matches nothing; narrow the correlation/key selection or use a more specific topic");
         }
         Iterator<ConsumerRecord<String, String>> records = this.buffer.iterator();
         while (records.hasNext()) {

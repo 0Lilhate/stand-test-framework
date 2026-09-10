@@ -63,7 +63,7 @@ public final class UiRunArtifacts {
         if (fileName == null) {
             return false;
         }
-        return (fileName.startsWith(SCREENSHOT_PREFIX) && fileName.endsWith(".png"))
-                || (fileName.startsWith(TRACE_PREFIX) && fileName.endsWith(".zip"));
+        return fileName.startsWith(SCREENSHOT_PREFIX) && fileName.endsWith(".png")
+                || fileName.startsWith(TRACE_PREFIX) && fileName.endsWith(".zip");
     }
 }

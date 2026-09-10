@@ -56,7 +56,8 @@ final class ResponseAssertions {
         for (GrpcCapture capture : captures) {
             Object value = read(document, capture.jsonPath());
             if (value == null) {
-                throw new StandTestAssertionError("Captured value at '" + capture.jsonPath() + "' is null; cannot store variable '" + capture.variableName() + "'");
+                throw new StandTestAssertionError("Captured value at '" + capture.jsonPath() + "' is null; cannot store variable '"
+                        + capture.variableName() + "'");
             }
             store.put(capture.variableName(), value);
         }

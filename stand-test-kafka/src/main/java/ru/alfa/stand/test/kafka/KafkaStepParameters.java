@@ -58,13 +58,16 @@ public final class KafkaStepParameters {
     /** Default per-probe consumer poll timeout when none is set, in milliseconds. */
     public static final long DEFAULT_POLL_TIMEOUT_MILLIS = 500L;
 
+    /** Message prefix shared by every parameter diagnostic of this adapter. */
+    private static final String PARAMETER_PREFIX = "Kafka step parameter '";
+
     private KafkaStepParameters() {
     }
 
     static String requireString(Map<String, Object> parameters, String key) {
         Object value = parameters.get(key);
         if (!(value instanceof String text) || text.isBlank()) {
-            throw new StandTestException("Kafka step parameter '" + key + "' must be a non-blank string");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a non-blank string");
         }
         return text;
     }
@@ -75,7 +78,7 @@ public final class KafkaStepParameters {
             return Optional.empty();
         }
         if (!(value instanceof String text)) {
-            throw new StandTestException("Kafka step parameter '" + key + "' must be a string");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a string");
         }
         return Optional.of(text);
     }
@@ -101,11 +104,11 @@ public final class KafkaStepParameters {
             return defaultValue;
         }
         if (!(value instanceof Number number)) {
-            throw new StandTestException("Kafka step parameter '" + key + "' must be a number of milliseconds");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a number of milliseconds");
         }
         long millis = number.longValue();
         if (millis <= 0) {
-            throw new StandTestException("Kafka step parameter '" + key + "' must be a positive number of milliseconds");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a positive number of milliseconds");
         }
         return millis;
     }
@@ -116,7 +119,7 @@ public final class KafkaStepParameters {
             return Map.of();
         }
         if (!(value instanceof Map<?, ?> raw)) {
-            throw new StandTestException("Kafka step parameter '" + key + "' must be a map");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a map");
         }
         Map<String, String> result = new LinkedHashMap<>();
         for (Map.Entry<?, ?> entry : raw.entrySet()) {
@@ -168,12 +171,12 @@ public final class KafkaStepParameters {
             return List.of();
         }
         if (!(value instanceof List<?> list)) {
-            throw new StandTestException("Kafka step parameter '" + key + "' must be a list");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a list");
         }
         return list.stream()
                 .map(item -> {
                     if (!(item instanceof Map<?, ?>)) {
-                        throw new StandTestException("Kafka step parameter '" + key + "' entries must be maps");
+                        throw new StandTestException(PARAMETER_PREFIX + key + "' entries must be maps");
                     }
                     return (Map<String, Object>) item;
                 })

@@ -17,7 +17,8 @@ import java.util.Map;
  * @param value the value of an input element, or null
  * @param attributes the attributes the driver was asked to read
  */
-public record ElementSnapshot(boolean present, boolean visible, boolean enabled, String text, String value, Map<String, String> attributes) {
+public record ElementSnapshot(boolean present, boolean visible, boolean enabled, String text, String value,
+        Map<String, String> attributes) {
 
     /**
      * Defensively copies the attribute map.

@@ -84,7 +84,8 @@ public final class DefaultAwaiter implements Awaiter {
         }
 
         Duration elapsed = elapsedSince(start);
-        LOG.debug("await '{}' timed out: {} attempt(s), elapsed {}, pollInterval {}, lastError {}", policy.description(), attempts, elapsed, policy.pollInterval(), lastError == null ? "none" : lastError.getClass().getSimpleName());
+        LOG.debug("await '{}' timed out: {} attempt(s), elapsed {}, pollInterval {}, lastError {}", policy.description(), attempts,
+                elapsed, policy.pollInterval(), lastError == null ? "none" : lastError.getClass().getSimpleName());
         TimeoutDiagnostics diagnostics = new TimeoutDiagnostics(
                 policy.description(), policy.timeout(), policy.pollInterval(), attempts, elapsed, lastValue, render(lastError), Map.of());
         return AwaitResult.timedOut(lastValue, attempts, elapsed, lastError, diagnostics);

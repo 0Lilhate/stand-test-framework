@@ -57,13 +57,16 @@ public final class DbStepParameters {
     /** Default poll interval between probes when none is set, in milliseconds. */
     public static final long DEFAULT_POLL_INTERVAL_MILLIS = 200L;
 
+    /** Message prefix shared by every parameter diagnostic of this adapter. */
+    private static final String PARAMETER_PREFIX = "DB step parameter '";
+
     private DbStepParameters() {
     }
 
     static String requireString(Map<String, Object> parameters, String key) {
         Object value = parameters.get(key);
         if (!(value instanceof String text) || text.isBlank()) {
-            throw new StandTestException("DB step parameter '" + key + "' must be a non-blank string");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a non-blank string");
         }
         return text;
     }
@@ -74,7 +77,7 @@ public final class DbStepParameters {
             return Optional.empty();
         }
         if (!(value instanceof String text)) {
-            throw new StandTestException("DB step parameter '" + key + "' must be a string");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a string");
         }
         return Optional.of(text);
     }
@@ -98,10 +101,10 @@ public final class DbStepParameters {
         } else if (value instanceof Integer intMillis) {
             millis = intMillis;
         } else {
-            throw new StandTestException("DB step parameter '" + key + "' must be a whole number of milliseconds (Integer or Long)");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a whole number of milliseconds (Integer or Long)");
         }
         if (millis <= 0) {
-            throw new StandTestException("DB step parameter '" + key + "' must be a positive number of milliseconds");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a positive number of milliseconds");
         }
         return millis;
     }
@@ -112,7 +115,7 @@ public final class DbStepParameters {
             return Map.of();
         }
         if (!(value instanceof Map<?, ?> raw)) {
-            throw new StandTestException("DB step parameter '" + PARAMS + "' must be a map");
+            throw new StandTestException(PARAMETER_PREFIX + PARAMS + "' must be a map");
         }
         Map<String, Object> result = new LinkedHashMap<>();
         for (Map.Entry<?, ?> entry : raw.entrySet()) {
@@ -130,15 +133,15 @@ public final class DbStepParameters {
             return List.of();
         }
         if (!(value instanceof List<?> list)) {
-            throw new StandTestException("DB step parameter '" + IDENTIFIED_BY + "' must be a list of column names");
+            throw new StandTestException(PARAMETER_PREFIX + IDENTIFIED_BY + "' must be a list of column names");
         }
         List<String> result = new ArrayList<>();
         for (Object item : list) {
             if (!(item instanceof String column) || column.isBlank()) {
-                throw new StandTestException("DB step parameter '" + IDENTIFIED_BY + "' entries must be non-blank column names");
+                throw new StandTestException(PARAMETER_PREFIX + IDENTIFIED_BY + "' entries must be non-blank column names");
             }
             if (!SqlIdentifiers.isPlainIdentifier(column)) {
-                throw new StandTestException("DB step parameter '" + IDENTIFIED_BY + "' entry '" + column + "' must be a plain identifier");
+                throw new StandTestException(PARAMETER_PREFIX + IDENTIFIED_BY + "' entry '" + column + "' must be a plain identifier");
             }
             result.add(column);
         }
@@ -165,12 +168,12 @@ public final class DbStepParameters {
             return List.of();
         }
         if (!(value instanceof List<?> list)) {
-            throw new StandTestException("DB step parameter '" + key + "' must be a list");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a list");
         }
         List<Map<String, Object>> result = new ArrayList<>();
         for (Object item : list) {
             if (!(item instanceof Map<?, ?>)) {
-                throw new StandTestException("DB step parameter '" + key + "' entries must be maps");
+                throw new StandTestException(PARAMETER_PREFIX + key + "' entries must be maps");
             }
             result.add((Map<String, Object>) item);
         }

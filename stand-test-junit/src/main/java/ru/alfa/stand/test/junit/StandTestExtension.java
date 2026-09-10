@@ -13,7 +13,6 @@ import org.junit.jupiter.api.extension.ParameterContext;
 import org.junit.jupiter.api.extension.ParameterResolutionException;
 import org.junit.jupiter.api.extension.ParameterResolver;
 import org.junit.platform.commons.support.AnnotationSupport;
-import org.junit.platform.commons.support.SearchOption;
 import ru.alfa.stand.test.await.Awaiter;
 import ru.alfa.stand.test.core.DefaultStandClient;
 import ru.alfa.stand.test.core.StandClient;
@@ -155,8 +154,9 @@ public final class StandTestExtension implements ParameterResolver {
         if (fromMethod != null) {
             return fromMethod;
         }
+        List<Class<?>> enclosingTestClasses = extensionContext.getEnclosingTestClasses();
         return extensionContext.getTestClass()
-                .flatMap(testClass -> AnnotationSupport.findAnnotation(testClass, annotationType, SearchOption.INCLUDE_ENCLOSING_CLASSES))
+                .flatMap(testClass -> AnnotationSupport.findAnnotation(testClass, annotationType, enclosingTestClasses))
                 .map(valueAccessor)
                 .filter(value -> !value.isBlank())
                 .orElse(null);
@@ -165,7 +165,7 @@ public final class StandTestExtension implements ParameterResolver {
     private static StandClient standClient(ExtensionContext extensionContext) {
         return extensionContext.getRoot()
                 .getStore(NAMESPACE)
-                .getOrComputeIfAbsent(StandClient.class, key -> buildStandClient(), StandClient.class);
+                .computeIfAbsent(StandClient.class, key -> buildStandClient(), StandClient.class);
     }
 
     private static StandClient buildStandClient() {

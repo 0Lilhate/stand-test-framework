@@ -71,7 +71,8 @@ public final class EnvironmentAuthHeaderResolver implements AuthHeaderResolver {
         for (int i = 0; i < token.length(); i++) {
             char symbol = token.charAt(i);
             if (Character.isWhitespace(symbol) || Character.isISOControl(symbol)) {
-                throw new StandTestException("Bearer token resolved from auth reference '" + auth.tokenRef() + "' contains whitespace or control characters — refusing to build the Authorization header");
+                throw new StandTestException("Bearer token resolved from auth reference '" + auth.tokenRef()
+                        + "' contains whitespace or control characters — refusing to build the Authorization header");
             }
         }
         return "Bearer " + token;
@@ -80,7 +81,8 @@ public final class EnvironmentAuthHeaderResolver implements AuthHeaderResolver {
     private String resolveReference(String reference, AuthScheme scheme) {
         String resolved = SecretReferences.resolve(reference, this.lookup);
         if (resolved == null || resolved.isBlank()) {
-            throw new StandTestException("Auth reference '" + reference + "' for service auth (scheme " + scheme + ") did not resolve (environment variable not set)");
+            throw new StandTestException("Auth reference '" + reference + "' for service auth (scheme " + scheme
+                    + ") did not resolve (environment variable not set)");
         }
         return resolved;
     }
@@ -100,7 +102,8 @@ public final class EnvironmentAuthHeaderResolver implements AuthHeaderResolver {
     private static void requireNoControlCharacters(String value, String reference) {
         for (int i = 0; i < value.length(); i++) {
             if (Character.isISOControl(value.charAt(i))) {
-                throw new StandTestException("Value resolved from auth reference '" + reference + "' contains control characters — refusing to build the Authorization header");
+                throw new StandTestException("Value resolved from auth reference '" + reference
+                        + "' contains control characters — refusing to build the Authorization header");
             }
         }
     }

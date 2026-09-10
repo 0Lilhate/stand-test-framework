@@ -132,13 +132,19 @@ public final class UiStepParameters {
     /** Nested key (capture): where the value is read from. */
     public static final String SOURCE = StepParameterKeys.SOURCE;
 
+    /** Message prefix shared by every parameter diagnostic of this adapter. */
+    private static final String PARAMETER_PREFIX = "UI step parameter '";
+
+    /** Tail of the diagnostic every required string parameter shares. */
+    private static final String MUST_BE_NON_BLANK = "' must be a non-blank string";
+
     private UiStepParameters() {
     }
 
     static String requireString(Map<String, Object> parameters, String key) {
         Object value = parameters.get(key);
         if (!(value instanceof String text) || text.isBlank()) {
-            throw new StandTestException("UI step parameter '" + key + "' must be a non-blank string");
+            throw new StandTestException(PARAMETER_PREFIX + key + MUST_BE_NON_BLANK);
         }
         return text;
     }
@@ -149,7 +155,7 @@ public final class UiStepParameters {
             return null;
         }
         if (!(value instanceof String text) || text.isBlank()) {
-            throw new StandTestException("UI step parameter '" + key + "' must be a non-blank string when present");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a non-blank string when present");
         }
         return text;
     }
@@ -165,11 +171,11 @@ public final class UiStepParameters {
             return defaultMillis;
         }
         if (!(value instanceof Number number)) {
-            throw new StandTestException("UI step parameter '" + key + "' must be a number of milliseconds");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a number of milliseconds");
         }
         long millis = number.longValue();
         if (millis <= 0) {
-            throw new StandTestException("UI step parameter '" + key + "' must be strictly positive, but was " + millis);
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be strictly positive, but was " + millis);
         }
         return millis;
     }
@@ -177,7 +183,7 @@ public final class UiStepParameters {
     static UiLocator locator(Map<String, Object> parameters) {
         Object value = parameters.get(LOCATOR);
         if (!(value instanceof Map<?, ?> raw)) {
-            throw new StandTestException("UI step parameter '" + LOCATOR + "' must be a map");
+            throw new StandTestException(PARAMETER_PREFIX + LOCATOR + "' must be a map");
         }
         return readLocator(raw);
     }
@@ -225,7 +231,7 @@ public final class UiStepParameters {
                 .map(entry -> {
                     Object variableName = entry.get(VARIABLE_NAME);
                     if (!(variableName instanceof String name) || name.isBlank()) {
-                        throw new StandTestException("UI capture '" + VARIABLE_NAME + "' must be a non-blank string");
+                        throw new StandTestException("UI capture '" + VARIABLE_NAME + MUST_BE_NON_BLANK);
                     }
                     Object locator = entry.get(LOCATOR);
                     if (!(locator instanceof Map<?, ?> raw)) {
@@ -252,7 +258,7 @@ public final class UiStepParameters {
         LocatorStrategy strategy = enumValue(LocatorStrategy.class, raw.get(STRATEGY), STRATEGY);
         Object value = raw.get(VALUE);
         if (!(value instanceof String text) || text.isBlank()) {
-            throw new StandTestException("UI locator '" + VALUE + "' must be a non-blank string");
+            throw new StandTestException("UI locator '" + VALUE + MUST_BE_NON_BLANK);
         }
         Object accessibleName = raw.get(ACCESSIBLE_NAME);
         if (accessibleName != null && !(accessibleName instanceof String)) {
@@ -290,7 +296,7 @@ public final class UiStepParameters {
 
     private static <E extends Enum<E>> E enumValue(Class<E> type, Object value, String key) {
         if (!(value instanceof String name) || name.isBlank()) {
-            throw new StandTestException("UI step parameter '" + key + "' must be a non-blank string");
+            throw new StandTestException(PARAMETER_PREFIX + key + MUST_BE_NON_BLANK);
         }
         try {
             return Enum.valueOf(type, name.trim().toUpperCase(Locale.ROOT));
@@ -306,7 +312,7 @@ public final class UiStepParameters {
             return List.of();
         }
         if (!(value instanceof List<?> raw)) {
-            throw new StandTestException("UI step parameter '" + key + "' must be a list");
+            throw new StandTestException(PARAMETER_PREFIX + key + "' must be a list");
         }
         List<Map<String, Object>> result = new ArrayList<>();
         for (Object element : raw) {

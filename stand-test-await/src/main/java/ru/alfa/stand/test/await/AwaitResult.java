@@ -72,7 +72,8 @@ public record AwaitResult<T>(
      * @param diagnostics the timeout diagnostics
      * @return a timed-out result
      */
-    public static <T> AwaitResult<T> timedOut(T lastValue, int attempts, Duration elapsed, Throwable lastError, TimeoutDiagnostics diagnostics) {
+    public static <T> AwaitResult<T> timedOut(T lastValue, int attempts, Duration elapsed, Throwable lastError,
+            TimeoutDiagnostics diagnostics) {
         Objects.requireNonNull(diagnostics, "diagnostics must not be null");
         return new AwaitResult<>(false, lastValue, attempts, elapsed, lastError, diagnostics);
     }

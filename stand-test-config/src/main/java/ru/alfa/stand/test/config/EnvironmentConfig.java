@@ -50,13 +50,17 @@ import ru.alfa.stand.test.core.exception.StandTestException;
 public final class EnvironmentConfig {
 
     private static final Set<String> ROOT_KEYS = Set.of("environments", EnvironmentConfigFormat.VERSION_FIELD);
-    private static final Set<String> ENV_KEYS = Set.of("services", "topics", "datasources", "grpc-targets", "grpcTargets", "kafka-cluster", "kafkaCluster", "kafka-clusters", "kafkaClusters", "ui-applications", "uiApplications");
+    private static final Set<String> ENV_KEYS = Set.of("services", "topics", "datasources", "grpc-targets", "grpcTargets", "kafka-cluster",
+            "kafkaCluster", "kafka-clusters", "kafkaClusters", "ui-applications", "uiApplications");
     private static final Set<String> SERVICE_KEYS = Set.of("base-url-ref", "baseUrlRef", "correlation", "auth");
 
-    private static final Set<String> AUTH_KEYS = Set.of("scheme", "username-ref", "usernameRef", "password-ref", "passwordRef", "token-ref", "tokenRef");
-    private static final Set<String> UI_APPLICATION_KEYS = Set.of("base-url-ref", "baseUrlRef", "default-viewport", "defaultViewport", "viewport-profiles", "viewportProfiles", "trace", "auth");
+    private static final Set<String> AUTH_KEYS = Set.of("scheme", "username-ref", "usernameRef", "password-ref", "passwordRef",
+            "token-ref", "tokenRef");
+    private static final Set<String> UI_APPLICATION_KEYS = Set.of("base-url-ref", "baseUrlRef", "default-viewport", "defaultViewport",
+            "viewport-profiles", "viewportProfiles", "trace", "auth");
     private static final Set<String> UI_AUTH_KEYS = Set.of(
-            "scheme", "credentials-pool-ref", "credentialsPoolRef", "credentials-username", "credentialsUsername", "credentials-password", "credentialsPassword",
+            "scheme", "credentials-pool-ref", "credentialsPoolRef", "credentials-username", "credentialsUsername", "credentials-password",
+                    "credentialsPassword",
             "credentials-username-ref", "credentialsUsernameRef", "credentials-password-ref", "credentialsPasswordRef",
             "roles", "discovery-account-ref", "discoveryAccountRef", "login", "challenge");
     private static final Set<String> UI_LOGIN_KEYS = Set.of(
@@ -67,10 +71,15 @@ public final class EnvironmentConfig {
             "signed-in-locator", "signedInLocator");
     private static final Set<String> VIEWPORT_KEYS = Set.of("width", "height");
     private static final Set<String> TOPIC_KEYS = Set.of("name", "correlation", "cluster");
-    private static final Set<String> DATASOURCE_KEYS = Set.of("url-ref", "urlRef", "user-ref", "userRef", "password-ref", "passwordRef", "allowed-schemas", "allowedSchemas", "write-allowed", "writeAllowed");
+    private static final Set<String> DATASOURCE_KEYS = Set.of("url-ref", "urlRef", "user-ref", "userRef", "password-ref", "passwordRef",
+            "allowed-schemas", "allowedSchemas", "write-allowed", "writeAllowed");
     private static final Set<String> GRPC_KEYS = Set.of("target-ref", "targetRef", "correlation");
-    private static final Set<String> KAFKA_KEYS = Set.of("bootstrap-servers-ref", "bootstrapServersRef", "security-protocol-ref", "securityProtocolRef", "sasl-jaas-config-ref", "saslJaasConfigRef");
+    private static final Set<String> KAFKA_KEYS = Set.of("bootstrap-servers-ref", "bootstrapServersRef", "security-protocol-ref",
+            "securityProtocolRef", "sasl-jaas-config-ref", "saslJaasConfigRef");
     private static final Set<String> CORRELATION_KEYS = Set.of("source", "name");
+
+    /** Shared tail of the closed-list diagnostics ({@code scheme}, {@code trace}, {@code challenge}, correlation source). */
+    private static final String MUST_BE_ONE_OF = " must be one of ";
 
     private EnvironmentConfig() {
     }
@@ -113,16 +122,21 @@ public final class EnvironmentConfig {
             datasources.put(entry.getKey(), datasource(entry.getKey(), entry.getValue(), location + ".datasources." + entry.getKey()));
         }
         Map<String, GrpcTargetDefinition> grpcTargets = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> entry : namedMap(pick(fields, "grpc-targets", "grpcTargets"), location + ".grpc-targets").entrySet()) {
+        for (Map.Entry<String, Object> entry : namedMap(pick(fields, "grpc-targets", "grpcTargets"), location
+                + ".grpc-targets").entrySet()) {
             grpcTargets.put(entry.getKey(), grpcTarget(entry.getKey(), entry.getValue(), location + ".grpc-targets." + entry.getKey()));
         }
         KafkaClusterDefinition kafkaCluster = kafkaCluster(pick(fields, "kafka-cluster", "kafkaCluster"), location + ".kafka-cluster");
         Map<String, KafkaClusterDefinition> kafkaClusters = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> entry : namedMap(pick(fields, "kafka-clusters", "kafkaClusters"), location + ".kafka-clusters").entrySet()) {
+        for (Map.Entry<String, Object> entry : namedMap(pick(fields, "kafka-clusters", "kafkaClusters"), location
+                + ".kafka-clusters").entrySet()) {
             kafkaClusters.put(entry.getKey(), kafkaCluster(entry.getValue(), location + ".kafka-clusters." + entry.getKey()));
         }
-        Map<String, UiApplicationDefinition> uiApplications = uiApplications(pick(fields, "ui-applications", "uiApplications"), location, version);
-        return build(location, () -> new EnvironmentDefinition(name, services, topics, datasources, grpcTargets, kafkaCluster, kafkaClusters, uiApplications));
+        Map<String, UiApplicationDefinition> uiApplications = uiApplications(pick(fields, "ui-applications", "uiApplications"), location,
+                version);
+        return build(location,
+                () -> new EnvironmentDefinition(name, services, topics, datasources, grpcTargets, kafkaCluster, kafkaClusters,
+                uiApplications));
     }
 
     /**
@@ -137,7 +151,8 @@ public final class EnvironmentConfig {
         if (value == null) {
             return Map.of();
         }
-        EnvironmentConfigFormat.requireSectionSupported(version, "ui-applications", EnvironmentConfigFormat.UI_APPLICATIONS_SINCE_VERSION, location);
+        EnvironmentConfigFormat.requireSectionSupported(version, "ui-applications", EnvironmentConfigFormat.UI_APPLICATIONS_SINCE_VERSION,
+                location);
         Map<String, UiApplicationDefinition> result = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : namedMap(value, location).entrySet()) {
             result.put(entry.getKey(), uiApplication(entry.getKey(), entry.getValue(), location + "." + entry.getKey(), version));
@@ -151,7 +166,8 @@ public final class EnvironmentConfig {
         String baseUrlRef = requireReference(fields, "base-url-ref", "baseUrlRef", location);
         String defaultViewport = optionalString(pick(fields, "default-viewport", "defaultViewport"), location + ".default-viewport");
         Map<String, ViewportProfile> viewportProfiles = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> entry : namedMap(pick(fields, "viewport-profiles", "viewportProfiles"), location + ".viewport-profiles").entrySet()) {
+        for (Map.Entry<String, Object> entry : namedMap(pick(fields, "viewport-profiles", "viewportProfiles"), location
+                + ".viewport-profiles").entrySet()) {
             viewportProfiles.put(entry.getKey(), viewportProfile(entry.getValue(), location + ".viewport-profiles." + entry.getKey()));
         }
         UiTraceMode trace = traceMode(fields.get("trace"), location + ".trace");
@@ -191,7 +207,8 @@ public final class EnvironmentConfig {
         if (fields.containsKey("credentials-username") || fields.containsKey("credentialsUsername")
                 || fields.containsKey("credentials-password") || fields.containsKey("credentialsPassword")) {
             EnvironmentConfigFormat.requireSectionSupported(
-                    version, "auth.credentials-username/credentials-password", EnvironmentConfigFormat.UI_DIRECT_CREDENTIALS_SINCE_VERSION, location);
+                    version, "auth.credentials-username/credentials-password", EnvironmentConfigFormat.UI_DIRECT_CREDENTIALS_SINCE_VERSION,
+                            location);
         }
         if (fields.containsKey("credentials-username-ref") || fields.containsKey("credentialsUsernameRef")
                 || fields.containsKey("credentials-password-ref") || fields.containsKey("credentialsPasswordRef")) {
@@ -204,14 +221,18 @@ public final class EnvironmentConfig {
         String discoveryAccountRef = optionalReference(fields, "discovery-account-ref", "discoveryAccountRef", location);
         List<String> roles = stringList(fields.get("roles"), location + ".roles");
         if (fields.containsKey("login")) {
-            EnvironmentConfigFormat.requireSectionSupported(version, "auth.login", EnvironmentConfigFormat.UI_LOGIN_SINCE_VERSION, location + ".login");
+            EnvironmentConfigFormat.requireSectionSupported(version, "auth.login", EnvironmentConfigFormat.UI_LOGIN_SINCE_VERSION, location
+                    + ".login");
         }
         if (fields.containsKey("challenge")) {
-            EnvironmentConfigFormat.requireSectionSupported(version, "auth.challenge", EnvironmentConfigFormat.UI_LOGIN_SINCE_VERSION, location + ".challenge");
+            EnvironmentConfigFormat.requireSectionSupported(version, "auth.challenge", EnvironmentConfigFormat.UI_LOGIN_SINCE_VERSION,
+                    location + ".challenge");
         }
         UiLoginFormConfig login = uiLogin(fields.get("login"), location + ".login");
         UiLoginChallenge challenge = uiLoginChallenge(fields.get("challenge"), location + ".challenge");
-        return build(location, () -> new UiAuthConfig(scheme, credentialsPoolRef, roles, discoveryAccountRef, login, challenge, credentialsUsername, credentialsPassword));
+        return build(location,
+                () -> new UiAuthConfig(scheme, credentialsPoolRef, roles, discoveryAccountRef, login, challenge, credentialsUsername,
+                credentialsPassword));
     }
 
     /**
@@ -255,7 +276,8 @@ public final class EnvironmentConfig {
         try {
             return UiLoginChallenge.valueOf(declared.trim().replace('-', '_').toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException unknown) {
-            throw new StandTestException("Field 'challenge' at " + location + " must be one of " + Set.of(UiLoginChallenge.values()) + ", but was '" + declared + "'");
+            throw new StandTestException("Field 'challenge' at " + location + MUST_BE_ONE_OF + Set.of(UiLoginChallenge.values())
+                    + ", but was '" + declared + "'");
         }
     }
 
@@ -263,7 +285,8 @@ public final class EnvironmentConfig {
         try {
             return UiAuthScheme.valueOf(scheme.trim().replace('-', '_').toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException unknown) {
-            throw new StandTestException("Field 'scheme' at " + location + " must be one of " + Set.of(UiAuthScheme.values()) + ", but was '" + scheme + "'");
+            throw new StandTestException("Field 'scheme' at " + location + MUST_BE_ONE_OF + Set.of(UiAuthScheme.values())
+                    + ", but was '" + scheme + "'");
         }
     }
 
@@ -332,7 +355,8 @@ public final class EnvironmentConfig {
         try {
             return CorrelationSource.valueOf(source.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException unknown) {
-            throw new StandTestException("Field 'source' at " + location + " must be one of " + Set.of(CorrelationSource.values()) + ", but was '" + source + "'");
+            throw new StandTestException("Field 'source' at " + location + MUST_BE_ONE_OF + Set.of(CorrelationSource.values())
+                    + ", but was '" + source + "'");
         }
     }
 
@@ -353,7 +377,8 @@ public final class EnvironmentConfig {
         try {
             return AuthScheme.valueOf(scheme.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException unknown) {
-            throw new StandTestException("Field 'scheme' at " + location + " must be one of " + Set.of(AuthScheme.values()) + ", but was '" + scheme + "'");
+            throw new StandTestException("Field 'scheme' at " + location + MUST_BE_ONE_OF + Set.of(AuthScheme.values()) + ", but was '"
+                    + scheme + "'");
         }
     }
 

@@ -114,7 +114,8 @@ public final class Scenario {
 
     @Override
     public String toString() {
-        return "Scenario{id=" + id + ", environment=" + environment + ", steps=" + steps.size() + ", tags=" + tags + ", cleanupPolicy=" + cleanupPolicy + "}";
+        return "Scenario{id=" + id + ", environment=" + environment + ", steps=" + steps.size() + ", tags=" + tags + ", cleanupPolicy="
+                + cleanupPolicy + "}";
     }
 
     /**

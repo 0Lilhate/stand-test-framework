@@ -29,18 +29,22 @@ public record UiAssertion(UiProperty property, String attribute, Object expected
                 throw new IllegalArgumentException("an ATTRIBUTE assertion requires an attribute name");
             }
         } else if (attribute != null) {
-            throw new IllegalArgumentException("an attribute name is only meaningful for an ATTRIBUTE assertion, but property was " + property);
+            throw new IllegalArgumentException("an attribute name is only meaningful for an ATTRIBUTE assertion, but property was "
+                    + property);
         }
         if (property.booleanValued()) {
             if (matcher != AssertionMatcher.EQUALS) {
-                throw new IllegalArgumentException("property " + property + " is boolean and supports only the EQUALS matcher, but got " + matcher);
+                throw new IllegalArgumentException("property " + property + " is boolean and supports only the EQUALS matcher, but got "
+                        + matcher);
             }
             if (!(expectedValue instanceof Boolean)) {
-                throw new IllegalArgumentException("property " + property + " is boolean and requires a boolean expected value, but got " + expectedValue.getClass().getSimpleName());
+                throw new IllegalArgumentException("property " + property + " is boolean and requires a boolean expected value, but got "
+                        + expectedValue.getClass().getSimpleName());
             }
         }
         if ((matcher == AssertionMatcher.EXISTS || matcher == AssertionMatcher.NOT_NULL) && !(expectedValue instanceof Boolean)) {
-            throw new IllegalArgumentException("matcher " + matcher + " requires a boolean expected value, but got " + expectedValue.getClass().getSimpleName());
+            throw new IllegalArgumentException("matcher " + matcher + " requires a boolean expected value, but got "
+                    + expectedValue.getClass().getSimpleName());
         }
     }
 

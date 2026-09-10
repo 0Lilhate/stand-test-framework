@@ -163,7 +163,7 @@ public interface UiDriver extends AutoCloseable {
     @Override
     void close();
 
-/**
+    /**
      * Captures the browser <em>trace</em> of the failing run into the given directory, as a second failure
      * artifact alongside the screenshot.
      *

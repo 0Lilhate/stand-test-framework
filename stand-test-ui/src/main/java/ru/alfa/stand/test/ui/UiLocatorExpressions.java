@@ -15,7 +15,8 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  *   <caption>Accepted expressions</caption>
  *   <tr><th>Expression</th><th>Locator</th></tr>
  *   <tr><td>{@code testId=login-submit}</td><td>{@link UiLocator#testId(String)} — preferred</td></tr>
- *   <tr><td>{@code role=button:Sign in}</td><td>{@link UiLocator#role(String, String)}; the accessible name follows the first colon</td></tr>
+ *   <tr><td>{@code role=button:Sign in}</td><td>{@link UiLocator#role(String, String)}; the accessible name follows the first
+ * colon</td></tr>
  *   <tr><td>{@code label=Password}</td><td>{@link UiLocator#label(String)}</td></tr>
  *   <tr><td>{@code text=Sign in}</td><td>{@link UiLocator#text(String)}</td></tr>
  *   <tr><td>{@code css=#login .submit}</td><td>{@link UiLocator#css(String)} — last resort, fragile</td></tr>
@@ -40,12 +41,14 @@ final class UiLocatorExpressions {
      */
     static UiLocator parse(String expression, String field, String application) {
         if (expression == null || expression.isBlank()) {
-            throw new StandTestException("UI application '" + application + "' declares no '" + field + "' locator, which this sign-in needs");
+            throw new StandTestException("UI application '" + application + "' declares no '" + field
+                    + "' locator, which this sign-in needs");
         }
         String trimmed = expression.trim();
         int separator = trimmed.indexOf('=');
         if (separator <= 0 || separator == trimmed.length() - 1) {
-            throw new StandTestException(problem(field, application) + ": expected '<strategy>=<value>', for example 'testId=login-submit'");
+            throw new StandTestException(problem(field, application)
+                    + ": expected '<strategy>=<value>', for example 'testId=login-submit'");
         }
         String strategy = trimmed.substring(0, separator).trim().toLowerCase(Locale.ROOT).replace("-", "").replace("_", "");
         String operand = trimmed.substring(separator + 1).trim();
@@ -66,7 +69,8 @@ final class UiLocatorExpressions {
     private static UiLocator role(String operand, String field, String application) {
         int separator = operand.indexOf(':');
         if (separator <= 0 || separator == operand.length() - 1) {
-            throw new StandTestException(problem(field, application) + ": a role locator is spelled 'role=<role>:<accessible name>', for example 'role=button:Sign in'");
+            throw new StandTestException(problem(field, application)
+                    + ": a role locator is spelled 'role=<role>:<accessible name>', for example 'role=button:Sign in'");
         }
         return UiLocator.role(operand.substring(0, separator).trim(), operand.substring(separator + 1).trim());
     }

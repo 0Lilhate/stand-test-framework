@@ -153,7 +153,8 @@ CS=$(find ~/.gradle/caches/modules-2 \( -name 'checkstyle-10*.jar' -o -name 'pic
      -o -name 'failureaccess-*.jar' -o -name 'Saxon-HE-*.jar' -o -name 'xmlresolver-*.jar' \) \
      ! -name '*-sources.jar' ! -name '*-javadoc.jar' ! -name '*-data.jar' | tr '\n' ':')
 printf 'basedir=%s\n' "$(pwd)" > /tmp/ui201/cs.properties
-java -cp "$CS" com.puppycrawl.tools.checkstyle.Main -c checkstyle.xml -p /tmp/ui201/cs.properties \
+# Конфиг checkstyle пишет корпоративный codestyle-плагин при сборке; в репозитории его нет.
+java -cp "$CS" com.puppycrawl.tools.checkstyle.Main -c .gradle/quality/config/checkstyle/checkstyle.xml -p /tmp/ui201/cs.properties \
      $(find /tmp/ui201 -name '*.java')
 ```
 

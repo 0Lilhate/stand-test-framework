@@ -123,7 +123,9 @@ public final class DefaultGrpcCallInvoker implements GrpcCallInvoker {
 
     private static Throwable mapReflectionError(Throwable throwable) {
         if (throwable instanceof StatusRuntimeException status && status.getStatus().getCode() == Status.Code.UNIMPLEMENTED) {
-            return new StandTestException("gRPC Server Reflection (grpc.reflection.v1) is not implemented by the target; the server may expose only the older v1alpha reflection, or reflection may be disabled. Original: " + throwable.getMessage(), throwable);
+            return new StandTestException("gRPC Server Reflection (grpc.reflection.v1) is not implemented by the target; the server may "
+                    + "expose only the older v1alpha reflection, or reflection may be disabled. Original: "
+                    + throwable.getMessage(), throwable);
         }
         return throwable;
     }
@@ -139,8 +141,11 @@ public final class DefaultGrpcCallInvoker implements GrpcCallInvoker {
                     }
                 }
             }
-            case ERROR_RESPONSE -> failure.compareAndSet(null, new StandTestException("reflection error " + response.getErrorResponse().getErrorCode() + ": " + response.getErrorResponse().getErrorMessage()));
-            default -> failure.compareAndSet(null, new StandTestException("unexpected reflection response: " + response.getMessageResponseCase()));
+            case ERROR_RESPONSE -> failure.compareAndSet(null,
+                    new StandTestException("reflection error " + response.getErrorResponse().getErrorCode() + ": "
+                    + response.getErrorResponse().getErrorMessage()));
+            default -> failure.compareAndSet(null,
+                    new StandTestException("unexpected reflection response: " + response.getMessageResponseCase()));
         }
     }
 
@@ -176,7 +181,8 @@ public final class DefaultGrpcCallInvoker implements GrpcCallInvoker {
         throw new StandTestException("gRPC service '" + serviceName + "' not found in the reflected descriptors");
     }
 
-    private static FileDescriptor buildFile(String name, Map<String, FileDescriptorProto> byName, Map<String, FileDescriptor> built, Set<String> inProgress) {
+    private static FileDescriptor buildFile(String name, Map<String, FileDescriptorProto> byName, Map<String, FileDescriptor> built,
+            Set<String> inProgress) {
         FileDescriptor cached = built.get(name);
         if (cached != null) {
             return cached;

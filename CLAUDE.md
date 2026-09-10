@@ -28,12 +28,13 @@ plain-JUnit and Spring Boot setup) — keep it in sync when consumer-visible beh
 ## Build & test commands
 
 ```bash
-./gradlew build                       # full build: compile + checkstyle + tests, all modules
+./gradlew build                       # full build: compile + corporate analysis + tests, all modules
 ./gradlew :stand-test-core:build      # build one module
 ./gradlew :stand-test-core:test       # run a module's tests
-./gradlew :stand-test-core:checkstyleMain :stand-test-core:checkstyleTest   # lint only (main + test)
+./gradlew :stand-test-core:checkstyleMain :stand-test-core:spotbugsMain   # analysis only (report-only, never fails)
 ./gradlew publishToMavenLocal         # publish modules locally (never needs the remote-repo properties)
-./gradlew publish -PstandTestPublishUrl=<repo>   # remote publish; docs/publishing.md lists all properties
+./gradlew publish -PARTIFACTORY_USER=<user> -PARTIFACTORY_PASSWORD=<token>   # remote publish; see docs/publishing.md
+./gradlew printVersion                # the version the CI publish stage reads (ru.alfalab.semantic-version)
 
 # Run a single test class / method (JUnit 5 platform):
 ./gradlew :stand-test-core:test --tests 'ru.alfa.stand.test.core.variable.VariableResolverTest'
@@ -45,33 +46,65 @@ Use `--console=plain` for clean CI-style output. Configuration cache, parallel a
 
 ## Build conventions (non-obvious, enforced)
 
-- **No `buildSrc` / convention plugins.** All shared configuration lives in the root
-  `build.gradle.kts` `subprojects { }` block plus the version catalog `gradle/libs.versions.toml`.
-  Add dependencies to a module by referencing catalog accessors (`libs.junit.jupiter`,
-  `libs.assertj.core`, …); add new versions/libraries to the catalog, not inline coordinates.
+- **The build runs on the corporate configurer plugins** (since 2026-09-09, to make the Jenkins job
+  green: it calls `:sonar` and `dockerCreateDockerfile`, neither of which a hand-rolled build has).
+  Root declares `ru.alfalab.library-configurer:10.0.4` (`apply false` — that is what puts
+  `ru.alfalab.gradle:base`, and with it `sonarqube-gradle-plugin`, on the script classpath) plus
+  `ru.alfalab.semantic-version`, and applies `ru.alfalab.codestyle` and `org.sonarqube` to the root
+  project itself. `ru.alfalab.codestyle` on the **root** is not optional: it registers
+  `writeCodeAnalysisConfigs`, which every module's `initQualityConfig` resolves from `rootProject` —
+  without it configuration fails with `Task with name 'writeCodeAnalysisConfigs' not found`.
+- **The configurer is applied from the root `subprojects` block, not from each module's `plugins { }`.**
+  That keeps Gradle generating type-safe accessors (`implementation(…)`, `sourceSets[…]`) in the module
+  scripts; declaring it per-module would remove them and force the string notation
+  (`"implementation"(…)`) the reference project `alfa-prc` has to use. Dependencies still come from the
+  version catalog `gradle/libs.versions.toml` — add versions there, not as inline coordinates.
+- **What the configurer brings** (verified in its sources): `java-library`, `maven-publish` with a
+  publication named `artifact` and an `alfa` repository (`ARTIFACTORY_HOST` / `ARTIFACTORY_USER` /
+  `ARTIFACTORY_PASSWORD`, repo keys `LIBRARY_RELEASE_REPOSITORY` / `LIBRARY_SNAPSHOT_REPOSITORY`),
+  `withSourcesJar()`, JUnit-platform test wiring, JaCoCo **reports** (no coverage gate), SonarQube,
+  and checkstyle + SpotBugs through the `ru.vyarus` quality plugin. Three consequences worth knowing
+  before they surprise you: the corporate checkstyle config is generated into
+  `.gradle/quality/config/checkstyle/` (the repo-root `checkstyle.xml` is gone — the sanctioned place
+  for own rules is the overlay `gradle/style/config/checkstyle/`); `.editorconfig` is **generated** on
+  every build, so project-specific lines are appended through the `alfaCodeStyle` extension rather than
+  edited into the file; and every published POM now imports the Spring Boot and Spring Cloud BOMs in
+  `dependencyManagement`, `stand-test-core` included — the configurer adds them as `api` platforms.
+- **Static analysis is report-only**: the root sets `strict = false` on the quality extension, because
+  the plugin's own default fails the build on any violation. Findings live in
+  `<module>/build/reports/{checkstyle,spotbugs}` and go to Sonar. **There is no coverage gate any more** —
+  the corporate JaCoCo wiring produces reports only, so the 80% rule in `.claude/rules/common/testing.md`
+  is a convention, not something the build enforces.
+- **The overlay under `gradle/style/config/` is now populated, and the repository is at zero findings.**
+  `WriteCodeAnalysisConfigsTask` copies each file **whole** — it never merges — so
+  `gradle/style/config/checkstyle/checkstyle.xml` and `.../spotbugs/exclude.xml` are copies of the
+  corporate 1.2.1 files with the deviations marked `[ОВЕРЛЕЙ]` and argued on the spot. Checkstyle's are:
+  `MultipleStringLiterals` ignores literals up to 12 characters and allows 3 duplicates (message
+  punctuation and the wire keys the adapter mappers deliberately mirror at their point of use);
+  `ReturnCount`, `CyclomaticComplexity`, `BooleanExpressionComplexity`, `ClassDataAbstractionCoupling`,
+  `ClassFanOutComplexity`, `ExecutableStatementCount` and `ParameterNumber` are raised to just above the
+  worst real occurrence, so a *new* method worse than today's worst is still caught; and
+  **`NPathComplexity` is off** — it is multiplicative, so N independent `if (bad) throw` guards score
+  2^N (`UiStep.validate`: 746 496 at cyclomatic 25), which on a fail-closed validator measures the number
+  of checks rather than tangledness. SpotBugs excludes exactly one thing: `RV_RETURN_VALUE_IGNORED` on
+  `ArmedConsumer.arm`, where `KafkaConsumer.position(...)` is called for its side effect of resolving the
+  lazy `seekToEnd`. **`LineLength` stays at 140 and is met by the sources, not relaxed** — keep it that
+  way: wrap with the operator starting the next line (`OperatorWrap` is `nl`), the comma ending the
+  previous one, and `.` starting the next.
 - **`stand-test-bom` is a `java-platform`** and is deliberately *skipped* by the root `subprojects`
-  block (it must not get `java-library`/checkstyle). External consumers import it via
-  `testImplementation(platform("ru.alfa.stand.test:stand-test-bom:<version>"))`.
-- **Checkstyle is zero-tolerance** (`maxWarnings = 0`, config `checkstyle.xml`) and runs on **both**
-  `src/main/java` and `src/test/java`. The build fails on any violation. Notable rules that change how
-  you write code:
-  - `org.junit.jupiter.api.Assertions` and JUnit 4 `org.junit.Test` are **banned imports** → use
-    **AssertJ** (`assertThat`, `assertThatThrownBy`, `assertThatCode`) with JUnit 5 (`@Test`,
-    `@DisplayName`).
-  - Non-JetBrains `@NotNull`/`@Nullable`/`@NonNull` are banned → use `Objects.requireNonNull` / blank
-    checks instead of nullability annotations.
-  - `OneStatementPerLine` (no `{ this.x = x; return this; }` one-liners — builders are verbose),
-    `EmptyLineSeparator` (blank line between members), `MutableException` (exception fields must be
-    `final`), no tabs, `System.out/err` forbidden. `LineLength` max is 1000 (so long lines are fine —
-    don't wrap method chains, since `SeparatorWrapDot` would then require the `.` at line start).
-- **No Java toolchain is declared** — the build compiles on whatever JDK runs Gradle (developers 21,
-  the Jenkins agent 25), because the CI image ships JDK 25 only and toolchain auto-provisioning is
-  unreachable from the corporate network. What pins the artefact is **`--release 17`** (catalog
-  `javaRelease`, applied in the root `subprojects` `JavaCompile` block), so bytecode targets Java 17 and
-  the SDK loads on consumer JDK 17/21/24 (plan §14 resolved) no matter which JDK built it. `--release 17`
-  also bans APIs newer than 17, so keep sources 17-compatible (no Sequenced-collection APIs,
-  `Math.clamp`, virtual threads, record-patterns / pattern-switch). To retarget, change `javaRelease`
-  only. Gradle wrapper is 9.3.0.
+  block — `library-configurer` cannot be applied to it, since it pulls in `java-library`. It therefore
+  keeps its own `maven-publish` block, which mirrors the corporate `alfa` repository property-for-property
+  so all 13 artefacts land in the same place, plus the `verifyBomCoversEveryPublishedModule` guard.
+  External consumers import it via `testImplementation(platform("ru.alfa.stand.test:stand-test-bom:<version>"))`.
+- **The toolchain the configurer declares is overridden on purpose.** Its `SourcesConfigurer` pins
+  toolchain **17**, and the CI agent has only JDK 25 with no way to provision another, so the root
+  `subprojects` block re-points the toolchain at the JVM running Gradle
+  (`JavaVersion.current()`) and keeps the artefact contract through **`--release 17`** (catalog
+  `javaRelease`). Bytecode still targets Java 17 and the SDK still loads on consumer JDK 17/21/24 (plan
+  §14 resolved) whichever JDK built it. `--release 17` also bans APIs newer than 17, so keep sources
+  17-compatible (no Sequenced-collection APIs, `Math.clamp`, virtual threads, record-patterns /
+  pattern-switch). To retarget, change `javaRelease` only. Gradle wrapper is **9.6.1** — the corporate
+  `AlfaBasePlugin` refuses to run on anything older.
 - Indentation: **4 spaces** for Java, **2 spaces** for `*.kts`/`*.toml`/`*.yaml` (`.editorconfig`).
 - Coordinates: group `ru.alfa.stand.test`, base package `ru.alfa.stand.test.<module>`.
 
@@ -272,7 +305,8 @@ before picking up work on the kit.
 line owner. It shipped the declarative format's JSON Schema, the generation-rules catalogue and a
 60-line resource loader; its `src/test` had grown into the CI home of everything else — kit bundle
 parity (`.claude/` ⇄ `.opencode/`), the `ForbiddenOperation` cross-check, the KB and evaluation-corpus
-schemas, the capability censuses, `.gitlab-ci.yml` and the count-bearing docs. All 49 test classes went
+schemas, the capability censuses, `.gitlab-ci.yml` (the file itself removed on 2026-09-09 — Jenkins is
+the only pipeline) and the count-bearing docs. All 49 test classes went
 with it. Two consequences to keep in mind rather than rediscover: the AI/declarative document has **no
 pre-flight gate** any more (`AiScenarioParser` fail-closed + `DefaultScenarioValidator` are the whole
 net, both after loading), and **nothing machine-checks the kit against this repository** — a kit asset
@@ -313,10 +347,12 @@ ships with the corpus — see `docs/agent-evaluation/ui-wave-1-readiness.md`), a
 0001, 0002, 0003, 0005, 0008 — are gone with it, as are 0009, 0010 and 0011, whose motivation was
 real but whose remedy was Java.
 
-Publishing is fully wired but endpoint-less: the repository URL/credentials arrive via
-`standTestPublish*` Gradle properties or `STAND_TEST_PUBLISH_*` env vars (snapshot/release repo chosen by
-the version suffix; `publish` without a URL fails loudly; see `docs/publishing.md`) — only the actual
-internal Nexus/Artifactory coordinates and a first real publish run remain. Remediation from the 2026-07
+Publishing is wired by the corporate configurer: the `alfa` repository takes its host and credentials
+from `ARTIFACTORY_HOST` / `ARTIFACTORY_USER` / `ARTIFACTORY_PASSWORD` and its repo keys from
+`LIBRARY_SNAPSHOT_REPOSITORY` / `LIBRARY_RELEASE_REPOSITORY` (snapshot or release chosen by the version
+suffix; `stand-test-bom` mirrors the same properties by hand — see `docs/publishing.md`). Only a first
+real publish run remains; note that the Jenkins job publishes a docker image, not maven artifacts, so a
+green pipeline does not mean the SDK was published. Remediation from the 2026-07
 full-library review is **complete** (the critical, all 9 majors and all deferred minors are fixed and
 pinned by tests — see the memory note `full-library-review-2026-07` for the item-by-item record). The
 standing rules still apply: do not start work that destabilises a module's dependencies, and do not pull
@@ -326,8 +362,9 @@ adapter/IO, Spring, Allure, YAML or business logic into `stand-test-core`.
 
 `.claude/rules/` defines standards: `common/` (language-agnostic) plus `java/` and `kotlin/`
 (language-specific override common). Highlights already encoded above: AssertJ over JUnit assertions,
-immutability/defensive copies, records for value types, and the 80% coverage target — enforced as a
-JaCoCo INSTRUCTION gate wired into `check` by the root `subprojects` block.
+immutability/defensive copies, records for value types, and the 80% coverage target — which since the
+move to the corporate configurer is a convention only: the corporate JaCoCo wiring produces reports and
+no gate, so nothing fails a build for dropping below it.
 `.claude/skills/`, `.claude/commands/` and `.claude/agents/` provide deeper task-specific tooling.
 
 Do not confuse this root harness with the **shippable bundle** under `docs/ai-agent/` — that one

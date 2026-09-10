@@ -69,7 +69,7 @@ UI-линии и выполни её целиком.
 - секреты только через `*-ref`, никаких значений в коде и конфигурации;
 - AssertJ вместо `org.junit.jupiter.api.Assertions`; JetBrains-аннотации вместо прочих `@NotNull`;
 - исходники Java 17 (`--release 17`): без Sequenced Collections, `Math.clamp`, record-patterns;
-- checkstyle `maxWarnings = 0`, JaCoCo ≥80% INSTRUCTION.
+- статанализ корпоративный и отчётный (сборку не валит), гейта покрытия нет — 80% остаётся договорённостью.
 
 Полный список — `docs/ui-test-generation/planning/01-current-architecture.md` §6–§7 и `CLAUDE.md`.
 

@@ -22,8 +22,10 @@ import ru.alfa.stand.test.core.event.RunArtifacts;
  * <tr><td>{@code stand.test.ui.browser}</td><td>{@code chromium}</td><td>Browser engine</td></tr>
  * <tr><td>{@code stand.test.ui.action.timeout.millis}</td><td>{@code 10000}</td><td>Bound on one click / fill</td></tr>
  * <tr><td>{@code stand.test.ui.navigation.timeout.millis}</td><td>{@code 30000}</td><td>Bound on one navigation</td></tr>
- * <tr><td>{@code stand.test.ui.artifacts.dir}</td><td>{@code build/stand-test-ui}</td><td>Where saved browser sessions and the failure artefacts are kept</td></tr>
- * <tr><td>{@code stand.test.ui.artifacts.retention.days}</td><td>{@code 7}</td><td>How long a run's failure artefacts are kept before the next run sweeps them</td></tr>
+ * <tr><td>{@code stand.test.ui.artifacts.dir}</td><td>{@code build/stand-test-ui}</td><td>Where saved browser sessions and the failure
+ * artefacts are kept</td></tr>
+ * <tr><td>{@code stand.test.ui.artifacts.retention.days}</td><td>{@code 7}</td><td>How long a run's failure artefacts are kept before the
+ * next run sweeps them</td></tr>
  * </table>
  *
  * @param headless whether the browser runs without a visible window
@@ -76,6 +78,9 @@ public record UiRunSettings(
 
     /** The default retention of failure artefacts: no longer than the CI report retention (SEC-09). */
     public static final Duration DEFAULT_ARTIFACT_RETENTION = Duration.ofDays(7);
+
+    /** Message prefix shared by every diagnostic about a misconfigured system property. */
+    private static final String PROPERTY_PREFIX = "System property '";
 
     /**
      * Validates the settings.
@@ -142,8 +147,10 @@ public record UiRunSettings(
         return new UiRunSettings(
                 headless == null || Boolean.parseBoolean(headless),
                 (browser == null || browser.isBlank()) ? DEFAULT_BROWSER : browser.trim(),
-                Duration.ofMillis(positiveMillis(source.apply(ACTION_TIMEOUT_PROPERTY), ACTION_TIMEOUT_PROPERTY, UiStepParameters.DEFAULT_ACTION_TIMEOUT_MILLIS)),
-                Duration.ofMillis(positiveMillis(source.apply(NAVIGATION_TIMEOUT_PROPERTY), NAVIGATION_TIMEOUT_PROPERTY, UiStepParameters.DEFAULT_TIMEOUT_MILLIS)),
+                Duration.ofMillis(positiveMillis(source.apply(ACTION_TIMEOUT_PROPERTY), ACTION_TIMEOUT_PROPERTY,
+                        UiStepParameters.DEFAULT_ACTION_TIMEOUT_MILLIS)),
+                Duration.ofMillis(positiveMillis(source.apply(NAVIGATION_TIMEOUT_PROPERTY), NAVIGATION_TIMEOUT_PROPERTY,
+                        UiStepParameters.DEFAULT_TIMEOUT_MILLIS)),
                 RunArtifacts.directory(source),
                 Duration.ofDays(positiveDays(retentionDays, ARTIFACTS_RETENTION_DAYS_PROPERTY, DEFAULT_ARTIFACT_RETENTION.toDays())));
     }
@@ -156,10 +163,11 @@ public record UiRunSettings(
         try {
             millis = Long.parseLong(raw.trim());
         } catch (NumberFormatException notANumber) {
-            throw new IllegalArgumentException("System property '" + property + "' must be a number of milliseconds, but was '" + raw + "'", notANumber);
+            throw new IllegalArgumentException(PROPERTY_PREFIX + property + "' must be a number of milliseconds, but was '" + raw
+                    + "'", notANumber);
         }
         if (millis <= 0) {
-            throw new IllegalArgumentException("System property '" + property + "' must be strictly positive, but was " + millis);
+            throw new IllegalArgumentException(PROPERTY_PREFIX + property + "' must be strictly positive, but was " + millis);
         }
         return millis;
     }
@@ -176,10 +184,11 @@ public record UiRunSettings(
         try {
             days = Long.parseLong(raw.trim());
         } catch (NumberFormatException notANumber) {
-            throw new IllegalArgumentException("System property '" + property + "' must be a number of days, but was '" + raw + "'", notANumber);
+            throw new IllegalArgumentException(PROPERTY_PREFIX + property + "' must be a number of days, but was '" + raw + "'",
+                    notANumber);
         }
         if (days <= 0) {
-            throw new IllegalArgumentException("System property '" + property + "' must be strictly positive, but was " + days);
+            throw new IllegalArgumentException(PROPERTY_PREFIX + property + "' must be strictly positive, but was " + days);
         }
         return days;
     }

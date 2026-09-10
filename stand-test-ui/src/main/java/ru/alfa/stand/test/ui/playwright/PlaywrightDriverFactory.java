@@ -63,7 +63,8 @@ public final class PlaywrightDriverFactory implements UiDriverFactory {
             if (failure instanceof StandTestException classified) {
                 throw classified;
             }
-            throw new StandTestException("Could not start the '" + settings.browser() + "' browser for application '" + application.alias() + "': " + failure.getMessage(), failure);
+            throw new StandTestException("Could not start the '" + settings.browser() + "' browser for application '" + application.alias()
+                    + "': " + failure.getMessage(), failure);
         }
     }
 
@@ -89,7 +90,8 @@ public final class PlaywrightDriverFactory implements UiDriverFactory {
         } catch (PlaywrightException unavailable) {
             throw new StandTestException(
                     "Playwright could not start. The browser binaries are installed on first use and cached outside the build; "
-                            + "run './gradlew :stand-test-ui:installPlaywrightBrowsers' (or point PLAYWRIGHT_DOWNLOAD_HOST at an internal mirror in a closed network). Cause: "
+                            + "run './gradlew :stand-test-ui:installPlaywrightBrowsers' (or point PLAYWRIGHT_DOWNLOAD_HOST at an internal "
+                            + "mirror in a closed network). Cause: "
                             + unavailable.getMessage(),
                     unavailable);
         }
@@ -120,7 +122,8 @@ public final class PlaywrightDriverFactory implements UiDriverFactory {
             case "chromium" -> playwright.chromium();
             case "firefox" -> playwright.firefox();
             case "webkit" -> playwright.webkit();
-            default -> throw new StandTestException("Unknown browser '" + browser + "': set " + UiRunSettings.BROWSER_PROPERTY + " to chromium, firefox or webkit");
+            default -> throw new StandTestException("Unknown browser '" + browser + "': set " + UiRunSettings.BROWSER_PROPERTY
+                    + " to chromium, firefox or webkit");
         };
     }
 }

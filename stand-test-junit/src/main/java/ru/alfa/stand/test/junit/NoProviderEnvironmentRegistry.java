@@ -24,6 +24,7 @@ final class NoProviderEnvironmentRegistry implements EnvironmentRegistry {
         Objects.requireNonNull(name, "name must not be null");
         throw new StandTestException("No EnvironmentRegistry provider found on the test classpath, so environment '" + name
                 + "' cannot be resolved. Register a provider via META-INF/services/ru.alfa.stand.test.core.environment.EnvironmentRegistry"
-                + " (for example add the stand-test-config module with a stand-test-environments.yml) so the SDK knows the whitelisted environments.");
+                + " (for example add the stand-test-config module with a stand-test-environments.yml) so the SDK knows "
+                + "the whitelisted environments.");
     }
 }

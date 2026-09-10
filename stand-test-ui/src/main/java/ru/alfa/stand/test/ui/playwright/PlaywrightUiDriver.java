@@ -80,8 +80,12 @@ final class PlaywrightUiDriver implements UiDriver {
      * impossible) must not turn into one more loss of the original step failure. Sealing is therefore
      * idempotent — the trace is exported or released at most once, and a driver whose trace is already gone
      * answers {@code null} like one that never recorded.
+     *
+     * <p>{@code volatile} because the writer and the reader need not be the same thread: the step writes it,
+     * while the run's {@code ResourceScope} may close the driver from another. Idempotence is only worth
+     * something if the second caller can see the first one's write.
      */
-    private boolean traceStopped;
+    private volatile boolean traceStopped;
 
     /**
      * Whether the recording has been given up on purpose, because a credential was about to be typed and the
@@ -89,8 +93,11 @@ final class PlaywrightUiDriver implements UiDriver {
      * exported — {@link #captureTrace} answers {@code null} exactly as it does for a run that never recorded
      * — while the buffer is still released at {@link #close()}. Giving up the artefact is the fail-closed
      * direction: a trace costs a debugging session, a leaked password costs a rotation.
+     *
+     * <p>{@code volatile} for the same reason as {@link #traceStopped}, and here it is the safety property
+     * itself: a suppression another thread cannot see would let the recorder be resumed over a credential.
      */
-    private boolean traceSuppressed;
+    private volatile boolean traceSuppressed;
 
     /**
      * The page's console lines observed since this run's page was opened, newest-last (UITG-S014). A
@@ -135,7 +142,7 @@ final class PlaywrightUiDriver implements UiDriver {
         this.browser = Objects.requireNonNull(browser, "browser must not be null");
         this.context = Objects.requireNonNull(context, "context must not be null");
         this.application = Objects.requireNonNull(application, "application must not be null");
-        this.traceEnabled = (application.trace() == UiTraceMode.ON_FAILURE);
+        this.traceEnabled = application.trace() == UiTraceMode.ON_FAILURE;
         this.page = context.newPage();
         this.page.onConsoleMessage(this::recordConsoleMessage);
         this.page.onResponse(this::recordResponse);
@@ -215,12 +222,14 @@ final class PlaywrightUiDriver implements UiDriver {
                 return ElementSnapshot.absent();
             }
             if (matches > 1) {
-                throw new StandTestException("Locator " + locator.describe() + " matched " + matches + " elements — a step must address exactly one; narrow the locator");
+                throw new StandTestException("Locator " + locator.describe() + " matched " + matches
+                        + " elements — a step must address exactly one; narrow the locator");
             }
             boolean visible = element.isVisible();
             boolean enabled = element.isEnabled();
             String text = element.textContent(new Locator.TextContentOptions().setTimeout(timeout));
-            return new ElementSnapshot(true, visible, enabled, text, inputValue(element, timeout), readAttributes(element, attributes, timeout));
+            return new ElementSnapshot(true, visible, enabled, text, inputValue(element, timeout),
+                    readAttributes(element, attributes, timeout));
         } catch (TimeoutError timedOut) {
             LOG.debug("UI probe of {} timed out after {}", locator.describe(), probeTimeout);
             return ElementSnapshot.absent();
@@ -266,7 +275,8 @@ final class PlaywrightUiDriver implements UiDriver {
         try {
             this.context.storageState(new BrowserContext.StorageStateOptions().setPath(target));
         } catch (PlaywrightException failure) {
-            throw new StandTestException("Could not save the browser session of application '" + this.application.alias() + "' to " + target + ": " + failure.getMessage(), failure);
+            throw new StandTestException("Could not save the browser session of application '" + this.application.alias() + "' to "
+                    + target + ": " + failure.getMessage(), failure);
         }
     }
 
@@ -289,7 +299,8 @@ final class PlaywrightUiDriver implements UiDriver {
             }
             this.page.screenshot(options);
         } catch (PlaywrightException failure) {
-            throw new StandTestException("Could not capture a screenshot for application '" + this.application.alias() + "': " + failure.getMessage(), failure);
+            throw new StandTestException("Could not capture a screenshot for application '" + this.application.alias() + "': "
+                    + failure.getMessage(), failure);
         }
         return target;
     }
@@ -352,7 +363,8 @@ final class PlaywrightUiDriver implements UiDriver {
             this.context.tracing().stop(new Tracing.StopOptions().setPath(directory.resolve(name)));
             return directory.resolve(name);
         } catch (PlaywrightException failure) {
-            throw new StandTestException("Could not export the browser trace for application '" + this.application.alias() + "': " + failure.getMessage(), failure);
+            throw new StandTestException("Could not export the browser trace for application '" + this.application.alias() + "': "
+                    + failure.getMessage(), failure);
         }
     }
 
@@ -434,7 +446,8 @@ final class PlaywrightUiDriver implements UiDriver {
             try {
                 this.context.tracing().stop();
             } catch (PlaywrightException alreadyGone) {
-                LOG.warn("Could not release the browser trace for application '{}': {}", this.application.alias(), alreadyGone.getMessage());
+                LOG.warn("Could not release the browser trace for application '{}': {}", this.application.alias(),
+                        alreadyGone.getMessage());
             }
         }
     }

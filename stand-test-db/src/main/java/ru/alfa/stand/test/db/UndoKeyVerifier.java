@@ -66,8 +66,10 @@ final class UndoKeyVerifier {
                 }
             }
             throw new StandTestException("db.write on '" + datasourceAlias + "' cannot arm a safe undo: identifiedBy(" + identifiedBy
-                    + ") is neither the primary key " + render(primaryKey) + " nor any unique key " + render(uniqueKeys) + " of " + schema + "." + table
-                    + " — a non-unique undo key could delete rows this test did not create; declare the table's primary key or a unique key");
+                    + ") is neither the primary key " + render(primaryKey) + " nor any unique key " + render(uniqueKeys) + " of " + schema
+                            + "." + table
+                    + " — a non-unique undo key could delete rows this test did not create; declare the "
+                    + "table's primary key or a unique key");
         } catch (SQLException failure) {
             throw new StandTestException("db.write on '" + datasourceAlias + "' could not verify that identifiedBy(" + identifiedBy
                     + ") is a unique key of " + schema + "." + table + " via database metadata: " + failure.getMessage(), failure);

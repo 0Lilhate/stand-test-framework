@@ -130,7 +130,8 @@ public final class GrpcStep {
             // the authoritative validator rather than duplicating its character set.
             Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER);
         } catch (IllegalArgumentException invalid) {
-            throw new IllegalArgumentException("metadata key '" + key + "' is not a valid gRPC metadata name: " + invalid.getMessage(), invalid);
+            throw new IllegalArgumentException("metadata key '" + key + "' is not a valid gRPC metadata name: " + invalid.getMessage(),
+                    invalid);
         }
         this.metadata.put(key, Objects.requireNonNull(value, "metadata value must not be null"));
         return this;
@@ -333,14 +334,18 @@ public final class GrpcStep {
     private List<Map<String, Object>> assertionMaps() {
         return this.assertions.stream()
                 .map(assertion -> assertion.matcher() == AssertionMatcher.EQUALS
-                        ? Map.of(GrpcStepParameters.JSON_PATH, assertion.jsonPath(), GrpcStepParameters.EXPECTED_VALUE, assertion.expectedValue())
-                        : Map.of(GrpcStepParameters.JSON_PATH, assertion.jsonPath(), GrpcStepParameters.EXPECTED_VALUE, assertion.expectedValue(), GrpcStepParameters.MATCHER, assertion.matcher().name()))
+                        ? Map.of(GrpcStepParameters.JSON_PATH, assertion.jsonPath(), GrpcStepParameters.EXPECTED_VALUE,
+                                assertion.expectedValue())
+                        : Map.of(GrpcStepParameters.JSON_PATH, assertion.jsonPath(), GrpcStepParameters.EXPECTED_VALUE,
+                                assertion.expectedValue(), GrpcStepParameters.MATCHER, assertion.matcher().name()))
                 .toList();
     }
 
     private List<Map<String, Object>> captureMaps() {
         return this.captures.stream()
-                .map(capture -> Map.<String, Object>of(GrpcStepParameters.VARIABLE_NAME, capture.variableName(), GrpcStepParameters.JSON_PATH, capture.jsonPath()))
+                .map(capture -> Map.<String,
+                        Object>of(GrpcStepParameters.VARIABLE_NAME, capture.variableName(), GrpcStepParameters.JSON_PATH,
+                        capture.jsonPath()))
                 .toList();
     }
 

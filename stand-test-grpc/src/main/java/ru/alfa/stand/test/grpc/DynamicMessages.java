@@ -26,7 +26,8 @@ final class DynamicMessages {
         try {
             JsonFormat.parser().merge(json, builder);
         } catch (InvalidProtocolBufferException invalid) {
-            throw new StandTestException("Request JSON does not match protobuf type '" + descriptor.getFullName() + "': " + invalid.getMessage(), invalid);
+            throw new StandTestException("Request JSON does not match protobuf type '" + descriptor.getFullName() + "': "
+                    + invalid.getMessage(), invalid);
         }
         return builder.build();
     }

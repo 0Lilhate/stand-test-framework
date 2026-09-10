@@ -73,6 +73,39 @@ public final class StepExecutorDiscovery {
     }
 
     /**
+     * The merge itself, with the discovered executors supplied rather than loaded — the seam the unit
+     * tests use, so the rules can be exercised without a {@code META-INF/services} file that would
+     * then apply to every other test in this module.
+     *
+     * @param beans the executors declared as beans, in context order (never null)
+     * @param discovered the executors offered by the service loader (never null)
+     * @return beans first, then the discovered executors that add something
+     */
+    static List<StepExecutor> merge(List<StepExecutor> beans, Iterable<StepExecutor> discovered) {
+        Objects.requireNonNull(beans, "beans");
+        Objects.requireNonNull(discovered, "discovered");
+        Set<Class<?>> declared = new LinkedHashSet<>();
+        for (StepExecutor bean : beans) {
+            declared.add(bean.getClass());
+        }
+        List<StepExecutor> merged = new ArrayList<>(beans);
+        List<String> added = new ArrayList<>();
+        for (StepExecutor candidate : discovered) {
+            if (declared.contains(candidate.getClass())) {
+                LOG.debug("Step executor {} is declared as a bean; the service-loader copy is ignored", candidate.getClass().getName());
+                continue;
+            }
+            merged.add(candidate);
+            added.add(candidate.getClass().getName());
+        }
+        if (!added.isEmpty()) {
+            LOG.info("Step executors discovered on the classpath (no bean declared): {}."
+                    + " A declared bean always takes precedence over a discovered executor.", added);
+        }
+        return List.copyOf(merged);
+    }
+
+    /**
      * The loader to search, never {@code null}.
      *
      * <p>{@code ResourceLoader.getClassLoader()} is documented as nullable, and
@@ -132,38 +165,5 @@ public final class StepExecutorDiscovery {
         LOG.warn("Stopped looking for step executors after {} service entries — the classpath declares an implausible number of them,"
                 + " or an entry cannot be stepped over. Executors declared as beans are unaffected.", MAX_PROVIDERS);
         return found;
-    }
-
-    /**
-     * The merge itself, with the discovered executors supplied rather than loaded — the seam the unit
-     * tests use, so the rules can be exercised without a {@code META-INF/services} file that would
-     * then apply to every other test in this module.
-     *
-     * @param beans the executors declared as beans, in context order (never null)
-     * @param discovered the executors offered by the service loader (never null)
-     * @return beans first, then the discovered executors that add something
-     */
-    static List<StepExecutor> merge(List<StepExecutor> beans, Iterable<StepExecutor> discovered) {
-        Objects.requireNonNull(beans, "beans");
-        Objects.requireNonNull(discovered, "discovered");
-        Set<Class<?>> declared = new LinkedHashSet<>();
-        for (StepExecutor bean : beans) {
-            declared.add(bean.getClass());
-        }
-        List<StepExecutor> merged = new ArrayList<>(beans);
-        List<String> added = new ArrayList<>();
-        for (StepExecutor candidate : discovered) {
-            if (declared.contains(candidate.getClass())) {
-                LOG.debug("Step executor {} is declared as a bean; the service-loader copy is ignored", candidate.getClass().getName());
-                continue;
-            }
-            merged.add(candidate);
-            added.add(candidate.getClass().getName());
-        }
-        if (!added.isEmpty()) {
-            LOG.info("Step executors discovered on the classpath (no bean declared): {}."
-                    + " A declared bean always takes precedence over a discovered executor.", added);
-        }
-        return List.copyOf(merged);
     }
 }

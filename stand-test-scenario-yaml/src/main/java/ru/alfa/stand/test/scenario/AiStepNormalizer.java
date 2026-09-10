@@ -25,9 +25,11 @@ import ru.alfa.stand.test.core.exception.StandTestException;
 final class AiStepNormalizer {
 
     private static final Set<String> REST_KNOWN =
-            Set.of("id", "type", "description", "service", "path", "query", "headers", "correlation", "body", "expect", "assert", "capture");
+            Set.of("id", "type", "description", "service", "path", "query", "headers", "correlation", "body", "expect", "assert",
+                    "capture");
     private static final Set<String> REST_EXPECT_KNOWN =
-            Set.of("id", "type", "description", "service", "path", "query", "headers", "correlation", "timeout", "expect", "assert", "capture");
+            Set.of("id", "type", "description", "service", "path", "query", "headers", "correlation", "timeout", "expect", "assert",
+                    "capture");
     private static final Set<String> KAFKA_SEND_KNOWN =
             Set.of("id", "type", "description", "topic", "key", "correlation", "payload");
     private static final Set<String> KAFKA_EXPECT_KNOWN =
@@ -140,7 +142,8 @@ final class AiStepNormalizer {
         out.put(surfaceKey, SurfaceValues.boolFlag(correlation, innerKey, correlationLoc));
     }
 
-    private static void applyPayload(Map<String, Object> fields, Map<String, Object> out, String aiField, String resourceKey, String location) {
+    private static void applyPayload(Map<String, Object> fields, Map<String, Object> out, String aiField, String resourceKey,
+            String location) {
         if (!fields.containsKey(aiField)) {
             return;
         }
@@ -172,7 +175,8 @@ final class AiStepNormalizer {
         Map<String, Object> expect = SurfaceValues.asMap(fields.get("expect"), expectLoc);
         SurfaceValues.checkKnownKeys(expect, Set.of("status", "assert"), expectLoc);
         if (expect.containsKey("status")) {
-            throw new StandTestException("'expect.status' at " + expectLoc + " is not executable yet: the gRPC status is surfaced as an exception, not a declarative assertion");
+            throw new StandTestException("'expect.status' at " + expectLoc
+                    + " is not executable yet: the gRPC status is surfaced as an exception, not a declarative assertion");
         }
         if (expect.containsKey("assert")) {
             out.put("assert", checkedAssertItems(expect.get("assert"), expectLoc + ".assert"));
@@ -211,7 +215,9 @@ final class AiStepNormalizer {
         SurfaceValues.checkKnownKeys(item, SurfaceValues.ASSERT_ITEM_KEYS, itemLoc);
         String path = SurfaceValues.requireString(item, "path", itemLoc);
         if (SurfaceValues.declaresNonEqualsMatcher(item)) {
-            throw new StandTestException("Assertion at " + itemLoc + " uses a matcher that kafka.expect cannot execute: kafka.expect runs 'equals' only (REST and grpc.unary support the full matcher set)");
+            throw new StandTestException("Assertion at " + itemLoc
+                    + " uses a matcher that kafka.expect cannot execute: kafka.expect runs 'equals' only (REST and grpc.unary "
+                    + "support the full matcher set)");
         }
         Object expected = item.get("equals");
         if (expected == null) {
@@ -228,7 +234,8 @@ final class AiStepNormalizer {
         Map<String, Object> expect = SurfaceValues.asMap(fields.get("expect"), expectLoc);
         SurfaceValues.checkKnownKeys(expect, Set.of("singleValue", "rowExists"), expectLoc);
         if (expect.containsKey("rowExists")) {
-            throw new StandTestException("'expect.rowExists' at " + expectLoc + " is not executable yet: use 'expect.singleValue' (equals the first column)");
+            throw new StandTestException("'expect.rowExists' at " + expectLoc
+                    + " is not executable yet: use 'expect.singleValue' (equals the first column)");
         }
         Object single = expect.get("singleValue");
         if (single == null) {

@@ -94,7 +94,8 @@ public record CompensationOutcome(
      * @param diagnostics masked diagnostics
      * @return the outcome
      */
-    public static CompensationOutcome failed(String actionId, String target, String message, Throwable cause, Map<String, Object> diagnostics) {
+    public static CompensationOutcome failed(String actionId, String target, String message, Throwable cause,
+            Map<String, Object> diagnostics) {
         return new CompensationOutcome(actionId, target, CompensationStatus.FAILED, -1L, message, diagnostics, cause);
     }
 }

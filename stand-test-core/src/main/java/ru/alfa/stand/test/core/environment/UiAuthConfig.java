@@ -70,8 +70,10 @@ public record UiAuthConfig(
         requireReferenceOrAbsent(credentialsPassword, "credentialsPassword must not be blank when declared");
         requireCredentialPairIsWhole(credentialsUsername, credentialsPassword);
         if (credentialsPoolRef != null && credentialsUsername != null) {
-            throw new IllegalArgumentException("auth declares both a credentials-pool-ref and a direct credentials-username/credentials-password pair,"
-                    + " and which of the two the accounts come from would be a coin toss — keep the roster for several accounts, or the pair for exactly one");
+            throw new IllegalArgumentException("auth declares both a credentials-pool-ref and a direct "
+                    + "credentials-username/credentials-password pair,"
+                    + " and which of the two the accounts come from would be a coin toss — keep the roster for several "
+                    + "accounts, or the pair for exactly one");
         }
         for (String role : roles) {
             if (role == null || role.isBlank()) {
@@ -84,18 +86,23 @@ public record UiAuthConfig(
         if (scheme == UiAuthScheme.NONE) {
             if (credentialsPoolRef != null || !roles.isEmpty() || discoveryAccountRef != null || credentialsUsername != null) {
                 throw new IllegalArgumentException("auth scheme NONE must not carry credentials —"
-                        + " remove credentialsPoolRef/credentialsUsername/credentialsPassword/roles/discoveryAccountRef or declare a scheme that signs in");
+                        + " remove credentialsPoolRef/credentialsUsername/credentialsPassword/roles/discoveryAccountRef or "
+                        + "declare a scheme that signs in");
             }
             if (login != null) {
-                throw new IllegalArgumentException("auth scheme NONE must not declare a login form — remove the login section or declare a scheme that signs in");
+                throw new IllegalArgumentException("auth scheme NONE must not declare a login form — remove the login section or "
+                        + "declare a scheme that signs in");
             }
             if (challenge != UiLoginChallenge.NONE) {
-                throw new IllegalArgumentException("auth scheme NONE cannot meet a sign-in challenge — remove 'challenge' or declare a scheme that signs in");
+                throw new IllegalArgumentException("auth scheme NONE cannot meet a sign-in challenge — remove 'challenge' or "
+                        + "declare a scheme that signs in");
             }
         }
         if (!roles.isEmpty() && credentialsPoolRef == null && credentialsUsername == null) {
-            throw new IllegalArgumentException("auth roles are requested from a credentials pool, so declaring roles requires a credentialsPoolRef"
-                    + " — or a direct credentials-username/credentials-password pair, which answers every declared role with the same account");
+            throw new IllegalArgumentException("auth roles are requested from a credentials pool, so declaring roles "
+                    + "requires a credentialsPoolRef"
+                    + " — or a direct credentials-username/credentials-password pair, which answers every "
+                    + "declared role with the same account");
         }
         if (scheme == UiAuthScheme.FORM || scheme == UiAuthScheme.STORAGE_STATE) {
             requireSigningInIsConfigured(scheme, credentialsPoolRef, credentialsUsername, login);
@@ -176,23 +183,29 @@ public record UiAuthConfig(
      * only evidence the SDK has that a sign-in completed, and the only way a reused session can be told
      * from an expired one.
      */
-    private static void requireSigningInIsConfigured(UiAuthScheme scheme, String credentialsPoolRef, String credentialsUsername, UiLoginFormConfig login) {
+    private static void requireSigningInIsConfigured(UiAuthScheme scheme, String credentialsPoolRef, String credentialsUsername,
+            UiLoginFormConfig login) {
         if (credentialsPoolRef == null && credentialsUsername == null) {
-            throw new IllegalArgumentException("auth scheme " + scheme + " signs in as a test account, so it requires somewhere to draw one from:"
-                    + " a credentialsPoolRef naming the variable that holds the account roster, or a credentials-username/credentials-password pair for an application with exactly one account");
+            throw new IllegalArgumentException("auth scheme " + scheme
+                    + " signs in as a test account, so it requires somewhere to draw one from:"
+                    + " a credentialsPoolRef naming the variable that holds the account roster, or a "
+                    + "credentials-username/credentials-password pair for an application with exactly one account");
         }
         // The keys are spelled exactly as both configuration surfaces accept them. A message that names a key
         // the loader would then reject costs the reader a second failed run for one mistake.
         if (login == null) {
             throw new IllegalArgumentException("auth scheme " + scheme
-                    + " requires a login section — at least 'signed-in-locator', which is how a completed sign-in and a live session are recognised");
+                    + " requires a login section — at least 'signed-in-locator', which is how a completed sign-in and "
+                    + "a live session are recognised");
         }
         if (login.signedInLocator() == null) {
             throw new IllegalArgumentException("auth scheme " + scheme
-                    + " requires login.signed-in-locator — the element present only once signed in, which is how rejected credentials and an expired session are told apart from success");
+                    + " requires login.signed-in-locator — the element present only once signed in, which is how rejected credentials and "
+                    + "an expired session are told apart from success");
         }
         if (scheme == UiAuthScheme.FORM && !login.fillable()) {
-            throw new IllegalArgumentException("auth scheme FORM fills a login form, so login.username-locator, login.password-locator and login.submit-locator are all required");
+            throw new IllegalArgumentException("auth scheme FORM fills a login form, so login.username-locator, login.password-locator and "
+                    + "login.submit-locator are all required");
         }
     }
 
@@ -209,10 +222,12 @@ public record UiAuthConfig(
      */
     private static void requireCredentialPairIsWhole(String credentialsUsername, String credentialsPassword) {
         if (credentialsUsername != null && credentialsPassword == null) {
-            throw new IllegalArgumentException("auth declares credentialsUsername without credentialsPassword — an account needs both, or neither");
+            throw new IllegalArgumentException("auth declares credentialsUsername without credentialsPassword — an "
+                    + "account needs both, or neither");
         }
         if (credentialsPassword != null && credentialsUsername == null) {
-            throw new IllegalArgumentException("auth declares credentialsPassword without credentialsUsername — an account needs both, or neither");
+            throw new IllegalArgumentException("auth declares credentialsPassword without credentialsUsername — an "
+                    + "account needs both, or neither");
         }
     }
 }

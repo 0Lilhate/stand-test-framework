@@ -43,7 +43,8 @@ public final class EnvironmentReferenceResolver implements ReferenceResolver {
         String resolved = SecretReferences.resolve(reference, this.lookup);
         if (resolved == null || resolved.isBlank()) {
             if (SecretReferences.isLiteral(reference)) {
-                throw new StandTestException("Kafka cluster setting is configured as a literal value but it is empty — an unset environment variable behind a ${VAR:} placeholder resolves to the empty default");
+                throw new StandTestException("Kafka cluster setting is configured as a literal value but it is empty — an unset "
+                        + "environment variable behind a ${VAR:} placeholder resolves to the empty default");
             }
             throw new StandTestException("Kafka cluster reference '" + reference + "' did not resolve (environment variable not set)");
         }

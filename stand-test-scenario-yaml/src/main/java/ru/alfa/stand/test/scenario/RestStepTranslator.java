@@ -30,7 +30,8 @@ final class RestStepTranslator {
         SurfaceValues.checkKnownKeys(fields, KNOWN, location);
         String method = type.substring("rest.".length()).toUpperCase(Locale.ROOT);
         if (!METHODS.contains(method)) {
-            throw new StandTestException("Unsupported REST method in '" + type + "' at " + location + " (use rest.get/post/put/delete or rest.expectEventually)");
+            throw new StandTestException("Unsupported REST method in '" + type + "' at " + location
+                    + " (use rest.get/post/put/delete or rest.expectEventually)");
         }
         Map<String, Object> params = common(fields, method, location);
         SurfaceValues.putInlineOrResource(params, fields, "body", "bodyResource",
@@ -49,7 +50,8 @@ final class RestStepTranslator {
         SurfaceValues.putOptionalDuration(params, fields, "timeout", YamlStepKeys.TIMEOUT_MILLIS, location);
         SurfaceValues.putOptionalDuration(params, fields, "pollInterval", YamlStepKeys.POLL_INTERVAL_MILLIS, location);
         if (!fields.containsKey("expectStatus") && !fields.containsKey("assert")) {
-            throw new StandTestException("rest.expectEventually at " + location + " requires at least one expectation: 'expectStatus' or 'assert'");
+            throw new StandTestException("rest.expectEventually at " + location
+                    + " requires at least one expectation: 'expectStatus' or 'assert'");
         }
         return params;
     }

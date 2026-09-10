@@ -137,10 +137,12 @@ public final class GrpcStepExecutor implements StepExecutor {
             ResponseAssertions.verify(assertions, document);
             ResponseAssertions.applyCaptures(captures, document, context.variableStore());
         }
-        return success(step, startedAt, targetAlias, methodFullName, deadlineMillis, correlationId, customMetadata, requestJson, responseJson);
+        return success(step, startedAt, targetAlias, methodFullName, deadlineMillis, correlationId, customMetadata, requestJson,
+                responseJson);
     }
 
-    private String invoke(ManagedChannel channel, String methodFullName, String requestJson, Metadata metadata, long deadlineMillis, String targetAlias) {
+    private String invoke(ManagedChannel channel, String methodFullName, String requestJson, Metadata metadata, long deadlineMillis,
+            String targetAlias) {
         LOG.debug("gRPC {} (deadline={} ms)", methodFullName, deadlineMillis);
         try {
             String responseJson = this.invoker.invokeUnary(channel, methodFullName, requestJson, metadata, deadlineMillis);
@@ -149,7 +151,8 @@ public final class GrpcStepExecutor implements StepExecutor {
         } catch (StatusRuntimeException status) {
             LOG.debug("gRPC {} -> status {}", methodFullName, status.getStatus().getCode());
             String description = (status.getStatus().getDescription() == null) ? "" : ": " + status.getStatus().getDescription();
-            throw new StandTestException("gRPC call to '" + targetAlias + "' method '" + methodFullName + "' failed with status " + status.getStatus().getCode() + description, status);
+            throw new StandTestException("gRPC call to '" + targetAlias + "' method '" + methodFullName + "' failed with status "
+                    + status.getStatus().getCode() + description, status);
         }
     }
 
@@ -159,7 +162,8 @@ public final class GrpcStepExecutor implements StepExecutor {
                 .environment(environment)
                 .orElseThrow(() -> new StandTestException("Environment '" + environment + "' is not whitelisted"));
         return definition.grpcTarget(targetAlias)
-                .orElseThrow(() -> new StandTestException("gRPC target '" + targetAlias + "' is not whitelisted in environment '" + environment + "'"));
+                .orElseThrow(() -> new StandTestException("gRPC target '" + targetAlias + "' is not whitelisted in environment '"
+                        + environment + "'"));
     }
 
     private ResolvedGrpcTarget resolve(GrpcTargetDefinition target) {
@@ -181,7 +185,8 @@ public final class GrpcStepExecutor implements StepExecutor {
         return channel;
     }
 
-    private static String correlationId(Map<String, Object> parameters, GrpcTargetDefinition target, String targetAlias, StepExecutionContext context) {
+    private static String correlationId(Map<String, Object> parameters, GrpcTargetDefinition target, String targetAlias,
+            StepExecutionContext context) {
         CorrelationConfig correlation = target.correlation();
         boolean hasMetadataCarrier = correlation != null && correlation.source() == CorrelationSource.METADATA;
         boolean shouldInject = GrpcStepParameters.injectCorrelationIdFlag(parameters).orElse(hasMetadataCarrier);
@@ -189,7 +194,8 @@ public final class GrpcStepExecutor implements StepExecutor {
             return null;
         }
         if (!hasMetadataCarrier) {
-            throw new StandTestException("Correlation id injection was requested for gRPC target '" + targetAlias + "', but it has no METADATA correlation config");
+            throw new StandTestException("Correlation id injection was requested for gRPC target '" + targetAlias
+                    + "', but it has no METADATA correlation config");
         }
         return context.scenarioContext().correlationId().value();
     }
@@ -221,7 +227,8 @@ public final class GrpcStepExecutor implements StepExecutor {
         Optional<String> resource = GrpcStepParameters.optionalString(parameters, GrpcStepParameters.REQUEST_RESOURCE);
         Optional<String> inline = GrpcStepParameters.optionalString(parameters, GrpcStepParameters.REQUEST);
         if (resource.isPresent() && inline.isPresent()) {
-            throw new StandTestException("A gRPC step must set either '" + GrpcStepParameters.REQUEST + "' or '" + GrpcStepParameters.REQUEST_RESOURCE + "', not both");
+            throw new StandTestException("A gRPC step must set either '" + GrpcStepParameters.REQUEST + "' or '"
+                    + GrpcStepParameters.REQUEST_RESOURCE + "', not both");
         }
         if (resource.isPresent()) {
             return resolver.resolve(readResource(resource.get()));
@@ -251,7 +258,8 @@ public final class GrpcStepExecutor implements StepExecutor {
         throw new StandTestException("GrpcStepExecutor requires a GenericStep produced by GrpcStep, but got: " + step.getClass().getName());
     }
 
-    private static StepResult success(ScenarioStep step, Instant startedAt, String targetAlias, String methodFullName, long deadlineMillis, String correlationId, Map<String, String> metadata, String requestJson, String responseJson) {
+    private static StepResult success(ScenarioStep step, Instant startedAt, String targetAlias, String methodFullName, long deadlineMillis,
+            String correlationId, Map<String, String> metadata, String requestJson, String responseJson) {
         final Instant finishedAt = Instant.now();
         Map<String, Object> diagnostics = new LinkedHashMap<>();
         diagnostics.put("grpc.operation", "unary");

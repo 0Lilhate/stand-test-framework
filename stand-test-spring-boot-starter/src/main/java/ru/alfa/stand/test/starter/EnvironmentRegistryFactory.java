@@ -98,7 +98,8 @@ public final class EnvironmentRegistryFactory {
      * declare at least that version. Both surfaces call the same core check, which is what keeps them from
      * disagreeing about what they can read.
      */
-    private static Map<String, UiApplicationDefinition> uiApplications(StandTestProperties.Environment env, String environment, int version) {
+    private static Map<String, UiApplicationDefinition> uiApplications(StandTestProperties.Environment env, String environment,
+            int version) {
         Map<String, StandTestProperties.UiApplication> configured = env.getUiApplications();
         if (configured.isEmpty()) {
             return Map.of();
@@ -128,7 +129,8 @@ public final class EnvironmentRegistryFactory {
             try {
                 result.put(entry.getKey(), new ViewportProfile(viewport.getWidth(), viewport.getHeight()));
             } catch (IllegalArgumentException invalid) {
-                throw new IllegalArgumentException("ui application '" + alias + "' viewport profile '" + entry.getKey() + "': " + invalid.getMessage(), invalid);
+                throw new IllegalArgumentException("ui application '" + alias + "' viewport profile '" + entry.getKey() + "': "
+                        + invalid.getMessage(), invalid);
             }
         }
         return result;
@@ -154,14 +156,17 @@ public final class EnvironmentRegistryFactory {
         }
         String location = "stand.test.environments." + environment + ".ui-applications." + alias + ".auth";
         if (auth.getLogin() != null) {
-            EnvironmentConfigFormat.requireSectionSupported(version, "auth.login", EnvironmentConfigFormat.UI_LOGIN_SINCE_VERSION, location + ".login");
+            EnvironmentConfigFormat.requireSectionSupported(version, "auth.login", EnvironmentConfigFormat.UI_LOGIN_SINCE_VERSION, location
+                    + ".login");
         }
         if (auth.getChallenge() != null) {
-            EnvironmentConfigFormat.requireSectionSupported(version, "auth.challenge", EnvironmentConfigFormat.UI_LOGIN_SINCE_VERSION, location + ".challenge");
+            EnvironmentConfigFormat.requireSectionSupported(version, "auth.challenge", EnvironmentConfigFormat.UI_LOGIN_SINCE_VERSION,
+                    location + ".challenge");
         }
         if (auth.getCredentialsUsername() != null || auth.getCredentialsPassword() != null) {
             EnvironmentConfigFormat.requireSectionSupported(
-                    version, "auth.credentials-username/credentials-password", EnvironmentConfigFormat.UI_DIRECT_CREDENTIALS_SINCE_VERSION, location);
+                    version, "auth.credentials-username/credentials-password", EnvironmentConfigFormat.UI_DIRECT_CREDENTIALS_SINCE_VERSION,
+                            location);
         }
         if (auth.getCredentialsUsernameRef() != null || auth.getCredentialsPasswordRef() != null) {
             EnvironmentConfigFormat.requireSectionSupported(
@@ -175,8 +180,10 @@ public final class EnvironmentRegistryFactory {
                 ref(auth.getDiscoveryAccountRef(), "discovery-account-ref", alias),
                 uiLogin(auth.getLogin()),
                 (auth.getChallenge() == null) ? UiLoginChallenge.NONE : auth.getChallenge(),
-                uiCredential(auth.getCredentialsUsername(), auth.getCredentialsUsernameRef(), "credentials-username", alias, location, version),
-                uiCredential(auth.getCredentialsPassword(), auth.getCredentialsPasswordRef(), "credentials-password", alias, location, version));
+                uiCredential(auth.getCredentialsUsername(), auth.getCredentialsUsernameRef(), "credentials-username", alias, location,
+                        version),
+                uiCredential(auth.getCredentialsPassword(), auth.getCredentialsPasswordRef(), "credentials-password", alias, location,
+                        version));
     }
 
     /**
@@ -188,7 +195,8 @@ public final class EnvironmentRegistryFactory {
         if (login == null) {
             return null;
         }
-        return new UiLoginFormConfig(login.getPath(), login.getUsernameLocator(), login.getPasswordLocator(), login.getSubmitLocator(), login.getSignedInLocator());
+        return new UiLoginFormConfig(login.getPath(), login.getUsernameLocator(), login.getPasswordLocator(), login.getSubmitLocator(),
+                login.getSignedInLocator());
     }
 
     private static Map<String, ServiceEndpointDefinition> services(StandTestProperties.Environment env) {
@@ -196,7 +204,10 @@ public final class EnvironmentRegistryFactory {
         for (Map.Entry<String, StandTestProperties.Service> entry : env.getServices().entrySet()) {
             String alias = entry.getKey();
             StandTestProperties.Service service = entry.getValue();
-            result.put(alias, new ServiceEndpointDefinition(alias, refOrLiteral(service.getBaseUrl(), service.getBaseUrlRef(), "base-url", "base-url-ref", alias), correlation(service.getCorrelation()), auth(service.getAuth(), alias)));
+            result.put(alias,
+                    new ServiceEndpointDefinition(alias,
+                    refOrLiteral(service.getBaseUrl(), service.getBaseUrlRef(), "base-url", "base-url-ref",
+                    alias), correlation(service.getCorrelation()), auth(service.getAuth(), alias)));
         }
         return result;
     }
@@ -284,7 +295,9 @@ public final class EnvironmentRegistryFactory {
         for (Map.Entry<String, StandTestProperties.GrpcTarget> entry : env.getGrpcTargets().entrySet()) {
             String alias = entry.getKey();
             StandTestProperties.GrpcTarget target = entry.getValue();
-            result.put(alias, new GrpcTargetDefinition(alias, refOrLiteral(target.getTarget(), target.getTargetRef(), "target", "target-ref", alias), correlation(target.getCorrelation())));
+            result.put(alias,
+                    new GrpcTargetDefinition(alias, refOrLiteral(target.getTarget(), target.getTargetRef(), "target", "target-ref", alias),
+                    correlation(target.getCorrelation())));
         }
         return result;
     }
@@ -302,9 +315,12 @@ public final class EnvironmentRegistryFactory {
             return null;
         }
         return new KafkaClusterDefinition(
-                refOrLiteral(cluster.getBootstrapServers(), cluster.getBootstrapServersRef(), "bootstrap-servers", "bootstrap-servers-ref", "kafka-cluster"),
-                refOrLiteral(cluster.getSecurityProtocol(), cluster.getSecurityProtocolRef(), "security-protocol", "security-protocol-ref", "kafka-cluster"),
-                refOrLiteral(cluster.getSaslJaasConfig(), cluster.getSaslJaasConfigRef(), "sasl-jaas-config", "sasl-jaas-config-ref", "kafka-cluster"));
+                refOrLiteral(cluster.getBootstrapServers(), cluster.getBootstrapServersRef(), "bootstrap-servers", "bootstrap-servers-ref",
+                        "kafka-cluster"),
+                refOrLiteral(cluster.getSecurityProtocol(), cluster.getSecurityProtocolRef(), "security-protocol", "security-protocol-ref",
+                        "kafka-cluster"),
+                refOrLiteral(cluster.getSaslJaasConfig(), cluster.getSaslJaasConfigRef(), "sasl-jaas-config", "sasl-jaas-config-ref",
+                        "kafka-cluster"));
     }
 
     /**

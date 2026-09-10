@@ -19,7 +19,8 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  * <table border="1">
  *   <caption>Version handling</caption>
  *   <tr><th>Declared</th><th>Result</th></tr>
- *   <tr><td>absent</td><td>read as {@link #INITIAL_VERSION} — existing files stay valid unchanged; warned about, because version 1 is behind</td></tr>
+ *   <tr><td>absent</td><td>read as {@link #INITIAL_VERSION} — existing files stay valid unchanged; warned about, because version 1 is
+ * behind</td></tr>
  *   <tr><td>{@code < }{@link #SUPPORTED_VERSION}</td><td>read, with one {@code WARN} naming both versions</td></tr>
  *   <tr><td>{@code == }{@link #SUPPORTED_VERSION}</td><td>read, silently</td></tr>
  *   <tr><td>{@code > }{@link #SUPPORTED_VERSION}</td><td>rejected with a message naming both versions and the action</td></tr>
@@ -36,8 +37,6 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  * wording here is what stops the two hand-maintained mappers from disagreeing about what they can read.
  */
 public final class EnvironmentConfigFormat {
-
-    private static final Logger LOG = LoggerFactory.getLogger(EnvironmentConfigFormat.class);
 
     /** Configuration key carrying the format version (root of the file; {@code stand.test.version} on the starter). */
     public static final String VERSION_FIELD = "version";
@@ -112,6 +111,11 @@ public final class EnvironmentConfigFormat {
      */
     public static final String ENVIRONMENT_VARIABLE_NAME_PATTERN = "^[A-Z][A-Z0-9_]{2,63}$";
 
+    private static final Logger LOG = LoggerFactory.getLogger(EnvironmentConfigFormat.class);
+
+    private EnvironmentConfigFormat() {
+    }
+
     /**
      * Refuses a version-5 credential value that is shaped like an environment-variable name.
      *
@@ -128,9 +132,6 @@ public final class EnvironmentConfigFormat {
                 + UI_CREDENTIAL_VALUE_TWINS_SINCE_VERSION + " this field holds the VALUE itself."
                 + " Signing in with that literal string is almost certainly not what was meant."
                 + " Use '" + field + "-ref: " + value + "' to keep it a reference, or write the credential value here.");
-    }
-
-    private EnvironmentConfigFormat() {
     }
 
     /**
@@ -150,7 +151,8 @@ public final class EnvironmentConfigFormat {
         long version = wholeNumber(declared, location);
         if (version <= 0) {
             throw new StandTestException("Field '" + VERSION_FIELD + "' at " + location
-                    + " must be a positive whole number — the environment registry FORMAT version (not the SDK version) — but was " + version);
+                    + " must be a positive whole number — the environment registry FORMAT version (not the SDK version) — but was "
+                            + version);
         }
         if (version > SUPPORTED_VERSION) {
             throw new StandTestException("Environment registry format version " + version + " declared at " + location
@@ -213,7 +215,8 @@ public final class EnvironmentConfigFormat {
                 + since + ", but the document declares version " + declaredVersion
                 + " — declare the format version at the configuration root ('" + VERSION_FIELD + ": " + since
                 + "' in stand-test-environments.yml, 'stand.test." + VERSION_FIELD + ": " + since
-                + "' on the Spring starter) so an SDK that predates this section refuses with a version message instead of 'Unknown field'.");
+                + "' on the Spring starter) so an SDK that predates this section refuses with a version "
+                + "message instead of 'Unknown field'.");
     }
 
     private static long wholeNumber(Object declared, String location) {

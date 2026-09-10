@@ -16,10 +16,15 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  */
 final class DbStepTranslator {
 
+    /** Surface key naming the column a scoped write filters on; spelled once, read by seed and cleanup alike. */
+    private static final String WHERE_TEST_RUN_ID = "whereTestRunId";
+
     private static final Set<String> QUERY_KNOWN = Set.of("id", "datasource", "sql", "sqlResource", "params", "capture");
-    private static final Set<String> EXPECT_KNOWN = Set.of("id", "datasource", "sql", "sqlResource", "params", "equals", "timeout", "pollInterval");
-    private static final Set<String> SEED_KNOWN = Set.of("id", "datasource", "sql", "sqlResource", "params", "whereTestRunId", "taggedByTestRunId");
-    private static final Set<String> CLEANUP_KNOWN = Set.of("id", "datasource", "sql", "sqlResource", "params", "whereTestRunId");
+    private static final Set<String> EXPECT_KNOWN = Set.of("id", "datasource", "sql", "sqlResource", "params", "equals", "timeout",
+            "pollInterval");
+    private static final Set<String> SEED_KNOWN = Set.of("id", "datasource", "sql", "sqlResource", "params", WHERE_TEST_RUN_ID,
+            "taggedByTestRunId");
+    private static final Set<String> CLEANUP_KNOWN = Set.of("id", "datasource", "sql", "sqlResource", "params", WHERE_TEST_RUN_ID);
 
     private DbStepTranslator() {
     }
@@ -30,7 +35,8 @@ final class DbStepTranslator {
             case "db.expectEventually" -> EXPECT_KNOWN;
             case "db.seed" -> SEED_KNOWN;
             case "db.cleanup" -> CLEANUP_KNOWN;
-            default -> throw new StandTestException("Unknown DB step type '" + type + "' at " + location + " (db.query/expectEventually/seed/cleanup)");
+            default -> throw new StandTestException("Unknown DB step type '" + type + "' at " + location
+                    + " (db.query/expectEventually/seed/cleanup)");
         };
         SurfaceValues.checkKnownKeys(fields, known, location);
         Map<String, Object> params = new LinkedHashMap<>();
@@ -43,19 +49,21 @@ final class DbStepTranslator {
             case "db.expectEventually" -> {
                 Object expected = fields.get("equals");
                 if (expected == null) {
-                    throw new StandTestException("Field 'equals' at " + location + " is required for db.expectEventually and must not be null");
+                    throw new StandTestException("Field 'equals' at " + location
+                            + " is required for db.expectEventually and must not be null");
                 }
                 params.put(YamlStepKeys.EXPECTED_VALUE, expected);
                 SurfaceValues.putOptionalDuration(params, fields, "timeout", YamlStepKeys.TIMEOUT_MILLIS, location);
                 SurfaceValues.putOptionalDuration(params, fields, "pollInterval", YamlStepKeys.POLL_INTERVAL_MILLIS, location);
             }
-            case "db.cleanup" -> params.put(YamlStepKeys.WHERE_TEST_RUN_ID_COLUMN, SurfaceValues.requireString(fields, "whereTestRunId", location));
+            case "db.cleanup" -> params.put(YamlStepKeys.WHERE_TEST_RUN_ID_COLUMN,
+                    SurfaceValues.requireString(fields, WHERE_TEST_RUN_ID, location));
             case "db.seed" -> {
                 String tagColumn = SurfaceValues.optionalString(fields, "taggedByTestRunId", location);
                 if (tagColumn != null) {
                     params.put(YamlStepKeys.SEED_TEST_RUN_ID_COLUMN, tagColumn);
                 }
-                String whereColumn = SurfaceValues.optionalString(fields, "whereTestRunId", location);
+                String whereColumn = SurfaceValues.optionalString(fields, WHERE_TEST_RUN_ID, location);
                 if (whereColumn != null) {
                     params.put(YamlStepKeys.WHERE_TEST_RUN_ID_COLUMN, whereColumn);
                 }

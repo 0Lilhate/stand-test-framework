@@ -146,14 +146,16 @@ public final class SecretReferences {
         }
         if (isLiteral(value.trim())) {
             throw new StandTestException("Field '" + field + "' at " + location
-                    + " carries the SDK-internal literal marker — it must never appear in configuration; in the Spring starter use the sibling value field (base-url/url/target/bootstrap-servers/security-protocol) instead");
+                    + " carries the SDK-internal literal marker — it must never appear in configuration; in the Spring starter use the "
+                    + "sibling value field (base-url/url/target/bootstrap-servers/security-protocol) instead");
         }
         if (PLACEHOLDER.matcher(value.trim()).matches()) {
             return value;
         }
         if (value.trim().startsWith("${")) {
             throw new StandTestException("Field '" + field + "' at " + location
-                    + " looks like a malformed placeholder — use ${ENV_VAR} or ${ENV_VAR:default} (no whitespace or nested braces in the variable name)");
+                    + " looks like a malformed placeholder — use ${ENV_VAR} or ${ENV_VAR:default} (no whitespace or nested "
+                    + "braces in the variable name)");
         }
         String lower = value.toLowerCase(Locale.ROOT);
         if (value.chars().anyMatch(Character::isWhitespace)
@@ -161,7 +163,9 @@ public final class SecretReferences {
                 || lower.startsWith("bearer ")
                 || lower.startsWith("basic ")) {
             throw new StandTestException("Field '" + field + "' at " + location
-                    + " must be a reference NAME (an env-var / secret entry) or a ${ENV_VAR:default} placeholder, but the value looks like a resolved endpoint or an inline secret — never put bare URLs, credentials or connection strings in the configuration");
+                    + " must be a reference NAME (an env-var / secret entry) or a ${ENV_VAR:default} placeholder, but the value looks like "
+                    + "a resolved endpoint or an inline secret — never put bare URLs, credentials or connection "
+                    + "strings in the configuration");
         }
         return value;
     }

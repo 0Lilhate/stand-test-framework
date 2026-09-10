@@ -84,7 +84,8 @@ public final class ResourceScope implements AutoCloseable {
         }
         this.resources.clear();
         if (!failures.isEmpty()) {
-            StandTestException aggregate = new StandTestException("Failed to close " + failures.size() + " run-scoped resource(s)", failures.get(0));
+            StandTestException aggregate = new StandTestException("Failed to close " + failures.size() + " run-scoped resource(s)",
+                    failures.get(0));
             for (int index = 1; index < failures.size(); index++) {
                 aggregate.addSuppressed(failures.get(index));
             }
