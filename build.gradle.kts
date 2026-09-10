@@ -54,10 +54,21 @@ subprojects {
   }
 }
 
-
 tasks.register("dockerCreateDockerfile") {
   val dockerfile = layout.buildDirectory.file("docker/Dockerfile")
-  val content = "Заглужка"
+  val content = """
+      # ЗАГЛУШКА, а не описание образа.
+      #
+      # stand-test-framework — тестовый SDK: он поставляется 13 maven-артефактами и никакого образа не
+      # публикует. Микросервисный пайплайн всё равно требует Docker-контекст, и этот файл существует
+      # ровно для того, чтобы его проверка проходила.
+      #
+      # Если из этого контекста собрался и уехал в реестр образ — это ошибка конфигурации джобы, а не
+      # намерение: библиотеке нужен библиотечный пайплайн либо гейт на docker-стадиях.
+      FROM scratch
+      LABEL ru.alfa.stand.test.placeholder="true"
+      LABEL description="Placeholder: stand-test-framework ships maven artifacts, not a docker image."
+  """.trimIndent() + "\n"
 
   group = "docker"
   description = "Writes a placeholder build/docker/Dockerfile so the microservice CI pipeline finds a docker context."
