@@ -964,7 +964,7 @@ Guardrails выводятся из `ForbiddenOperation` и enforce'ятся ра
 ## 10. Сборка и публикация
 
 ```bash
-./gradlew build                       # компиляция + корпоративный анализ (отчётный) + тесты
+./gradlew build                       # компиляция + корпоративный анализ (валит сборку) + тесты
 ./gradlew :stand-test-core:test       # тесты одного модуля
 ./gradlew publishToMavenLocal         # локальная публикация всех модулей + BOM
 ./gradlew publish -PARTIFACTORY_USER=<user> -PARTIFACTORY_PASSWORD=<token>
@@ -982,9 +982,16 @@ Gradle 9.6.1 (ниже корпоративный плагин не запуск
 / `ARTIFACTORY_PASSWORD`, ключи репозиториев `LIBRARY_SNAPSHOT_REPOSITORY` / `LIBRARY_RELEASE_REPOSITORY`
 — см. [docs/publishing.md](docs/publishing.md).
 
-Статанализ (checkstyle + SpotBugs корпоративного codestyle) **отчётный**: находки лежат в
-`<модуль>/build/reports/{checkstyle,spotbugs}` и уезжают в Sonar, но сборку не валят. Гейта покрытия
-больше нет — корпоративная обвязка JaCoCo делает только отчёты.
+Статанализ (checkstyle + SpotBugs корпоративного codestyle) — **гейт сборки**: `strict = true`, любая
+находка валит `build`. Это стало возможным после того, как репозиторий довели до нуля находок; до этого
+стоял `strict = false` и анализ был отчётным. Находки по-прежнему лежат в
+`<модуль>/build/reports/{checkstyle,spotbugs}` и уезжают в Sonar. Проверяется только `main`: задачи
+`checkstyleTest`/`spotbugsTest` существуют, но в `check` не входят. Гейта покрытия нет — корпоративная
+обвязка JaCoCo делает только отчёты.
+
+Версия артефактов считается из git плагином `ru.alfalab.semantic-version`, а не объявляется: в
+`gradle.properties` строки `version` нет. `./gradlew printVersion` печатает снапшот текущей ветки
+(например `0.1.0-target.solution-SNAPSHOT`), `./gradlew printReleaseVersion` — релизный номер.
 
 ### CI
 

@@ -19,7 +19,7 @@ variable of the same name:
 | `LIBRARY_SNAPSHOT_REPOSITORY` | `libs-snapshot-local` | repo key for `-SNAPSHOT` versions |
 | `LIBRARY_RELEASE_REPOSITORY` | `libs-release-local` | repo key for release versions |
 
-Snapshot or release is chosen by the version in `gradle.properties`: `*-SNAPSHOT` → the snapshot repo,
+Snapshot or release is chosen by the version the build carries: `*-SNAPSHOT` → the snapshot repo,
 anything else → the release repo. `stand-test-bom` cannot use the configurer (it is a `java-platform`,
 and the configurer applies `java-library`), so its own build script mirrors the very same properties —
 keep the two in step if the corporate plugin ever changes them.
@@ -39,21 +39,32 @@ platforms to **every** module, so each published POM imports them under `depende
 `stand-test-core` included. No jars come with it (a platform contributes constraints only), but a
 consumer resolving our modules inherits those version constraints.
 
+## The version is computed, not declared
+
+`gradle.properties` carries **no `version`**, and that is deliberate: `ru.alfalab.semantic-version`
+honours an explicitly declared version and only computes one from git tags when none is set — so
+declaring it switched the plugin off. Two tasks read the result:
+
+| Task | Prints | Used for |
+| --- | --- | --- |
+| `./gradlew printVersion` | `0.1.0-<branch>-SNAPSHOT` | snapshots; this is what the CI publish stage reads |
+| `./gradlew printReleaseVersion` | `0.1.0` | the release number the next tag would carry |
+
+The snapshot is **branch-qualified** (on `target-solution` it is `0.1.0-target.solution-SNAPSHOT`), so
+two branches publish under two coordinates instead of overwriting one another. The base number comes
+from the git tags: with no release tag yet the plugin starts at `0.1.0`.
+
 ## Release process
 
-1. Set the release version in `gradle.properties` (`version=0.1.0`), commit.
-2. `./gradlew build` — full green build (compile + corporate analysis + tests; the analysis reports and
-   does not block, and there is no coverage gate).
-3. `./gradlew publish -PARTIFACTORY_USER=… -PARTIFACTORY_PASSWORD=…` — the release repo is chosen by the
-   version having no `-SNAPSHOT` suffix.
-4. Tag: `git tag v0.1.0 && git push --tags`.
-5. Bump to the next snapshot (`version=0.2.0-SNAPSHOT`), commit.
+1. `./gradlew build` — full green build (compile + corporate analysis + tests). The analysis is a gate:
+   `strict = true`, so any checkstyle or SpotBugs finding fails the build. There is no coverage gate.
+2. `./gradlew printReleaseVersion` — confirm the number the release will carry.
+3. Tag it: `git tag -a 0.1.0 -m 'Release 0.1.0' && git push origin 0.1.0`. The tag is what makes the
+   version a release; nothing is edited in `gradle.properties`.
+4. `./gradlew publish -PARTIFACTORY_USER=… -PARTIFACTORY_PASSWORD=…` from the tagged commit — the
+   release repo is chosen by the version having no `-SNAPSHOT` suffix.
 
-Snapshots need no ceremony: leave the `-SNAPSHOT` version in place and run `publish`.
-
-`gradle.properties` keeps the version static on purpose: `ru.alfalab.semantic-version` is applied, but it
-honours an explicitly declared `version` and only computes one from git tags when none is set. `./gradlew
-printVersion` prints exactly what the CI publish stage would read.
+Snapshots need no ceremony at all: publish from any branch and the coordinates carry the branch name.
 
 ## Environment-registry format version (a second, slower version number)
 

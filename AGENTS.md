@@ -31,7 +31,7 @@ plain-JUnit and Spring Boot setup) — keep it in sync when consumer-visible beh
 ./gradlew build                       # full build: compile + corporate analysis + tests, all modules
 ./gradlew :stand-test-core:build      # build one module
 ./gradlew :stand-test-core:test       # run a module's tests
-./gradlew :stand-test-core:checkstyleMain :stand-test-core:spotbugsMain   # analysis only (report-only, never fails)
+./gradlew :stand-test-core:checkstyleMain :stand-test-core:spotbugsMain   # analysis only (strict: any finding fails)
 ./gradlew publishToMavenLocal         # publish modules locally (never needs the remote-repo properties)
 ./gradlew publish -PARTIFACTORY_USER=<user> -PARTIFACTORY_PASSWORD=<token>   # remote publish; see docs/publishing.md
 ./gradlew printVersion                # the version the CI publish stage reads (ru.alfalab.semantic-version)
@@ -70,11 +70,18 @@ Use `--console=plain` for clean CI-style output. Configuration cache, parallel a
   every build, so project-specific lines are appended through the `alfaCodeStyle` extension rather than
   edited into the file; and every published POM now imports the Spring Boot and Spring Cloud BOMs in
   `dependencyManagement`, `stand-test-core` included — the configurer adds them as `api` platforms.
-- **Static analysis is report-only**: the root sets `strict = false` on the quality extension, because
-  the plugin's own default fails the build on any violation. Findings live in
-  `<module>/build/reports/{checkstyle,spotbugs}` and go to Sonar. **There is no coverage gate any more** —
-  the corporate JaCoCo wiring produces reports only, so the 80% rule in `.claude/rules/common/testing.md`
-  is a convention, not something the build enforces.
+- **Static analysis is a build gate**: the root sets `strict = true` on the quality extension, so a
+  single checkstyle or SpotBugs finding fails `build`. That was affordable only once the repository
+  reached zero findings; before that the root held `strict = false` and the analysis was report-only.
+  Findings still land in `<module>/build/reports/{checkstyle,spotbugs}` and go to Sonar. Only the `main`
+  source set is wired into `check` — `checkstyleTest`/`spotbugsTest` exist but nothing depends on them.
+  **There is no coverage gate** — the corporate JaCoCo wiring produces reports only, so the 80% rule in
+  `.claude/rules/common/testing.md` is a convention, not something the build enforces.
+- **The artifact version is computed from git, not declared.** `gradle.properties` carries no `version`:
+  `ru.alfalab.semantic-version` honours a declared one and only computes from git when none is set, so
+  declaring it disabled the plugin. `printVersion` gives the snapshot for the current branch
+  (`0.1.0-target.solution-SNAPSHOT` on `target-solution`), `printReleaseVersion` the release number.
+  Branch-qualified snapshots are the point: two branches publish under two coordinates.
 - **The overlay under `gradle/style/config/` is now populated, and the repository is at zero findings.**
   `WriteCodeAnalysisConfigsTask` copies each file **whole** — it never merges — so
   `gradle/style/config/checkstyle/checkstyle.xml` and `.../spotbugs/exclude.xml` are copies of the

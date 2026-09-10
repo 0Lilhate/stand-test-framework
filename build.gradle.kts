@@ -50,7 +50,7 @@ subprojects {
   }
 
   extensions.configure<QualityExtension> {
-    strict.set(false)
+    strict.set(true)
   }
 }
 
