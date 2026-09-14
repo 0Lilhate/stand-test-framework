@@ -13,7 +13,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.LocalDate;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import ru.alfa.stand.test.core.StandClient;
@@ -65,7 +64,6 @@ import ru.alfa.stand.test.rest.RestStep;
  * </ul>
  */
 @SpringBootTest
-@EnabledIfEnvironmentVariable(named = "CRM_SERVICE_URL", matches = ".+")
 class ProvisionThenTriggerExampleTest {
 
     @Autowired

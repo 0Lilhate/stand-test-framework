@@ -14,7 +14,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import ru.alfa.stand.test.core.StandClient;
 import ru.alfa.stand.test.core.result.ScenarioResult;
 import ru.alfa.stand.test.core.scenario.Scenario;
@@ -35,7 +34,6 @@ import <consumer.base.package>.ui.pages.<Screen>Page;
  * removes it — a browser action has no compensation in this SDK version>.
  */
 @StandTest(env = "<environment>")
-@EnabledIfEnvironmentVariable(named = "<BASE_URL_REF_VARIABLE>", matches = ".+")
 class <Case>UiTest {
 
     private static final String APPLICATION = "<application-alias>";

@@ -13,7 +13,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import example.qa.portal.ui.pages.NewApplicationPage;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import ru.alfa.stand.test.core.StandClient;
 import ru.alfa.stand.test.core.result.ScenarioResult;
 import ru.alfa.stand.test.core.scenario.Scenario;
@@ -50,7 +49,6 @@ import ru.alfa.stand.test.ui.UiStep;
  * something the SDK could not do.
  */
 @StandTest(env = "ift")
-@EnabledIfEnvironmentVariable(named = "CLIENT_PORTAL_URL", matches = ".+")
 class ApplicationSubmittedUiTest {
 
     private static final String APPLICATION = "client-portal";

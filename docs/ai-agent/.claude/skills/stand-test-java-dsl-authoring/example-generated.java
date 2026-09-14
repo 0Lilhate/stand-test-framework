@@ -11,7 +11,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import ru.alfa.stand.test.core.StandClient;
@@ -30,7 +29,6 @@ import ru.alfa.stand.test.rest.RestStep;
  * published for a rejected order" (no declarative negative-receive construct in the SDK).
  */
 @SpringBootTest
-@EnabledIfEnvironmentVariable(named = "ORDER_SERVICE_URL", matches = ".+")
 class OrderCreatedProjectionTest {
 
     @Autowired

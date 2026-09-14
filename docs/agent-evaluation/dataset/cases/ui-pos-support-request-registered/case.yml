@@ -86,7 +86,6 @@ expected:
   - TEXT·EQUALS·Зарегистрировано reached through ui.expectEventually with a bounded within(...)
   - TEXT·MATCHES on the request number written as a full-string match, not a fragment
   - The subject typed into «Тема» derives from ${testRunId} — no fixed literal anywhere in the fill values
-  - The test class carries @EnabledIfEnvironmentVariable on the application's base-url variable
   - Residual data (the created request) is stated in the class javadoc and in the generation report
   forbiddenConstructs:
   - literal-url

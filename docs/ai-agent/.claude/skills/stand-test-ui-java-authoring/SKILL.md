@@ -50,7 +50,6 @@ runner or `StandClient`.
 
 ```java
 @StandTest(env = "ift")
-@EnabledIfEnvironmentVariable(named = "CLIENT_PORTAL_URL", matches = ".+")
 class ApplicationSubmittedUiTest {
 
     @Test
@@ -104,11 +103,12 @@ acceptance criterion for this stage, not a style preference.
 6. **No shared mutable state in the test class.** No `static` mutable field, no reused mutable object:
    the runner and every executor are shared across test threads, and the SDK runs test classes
    concurrently. Everything run-varying flows through captures and `${testRunId}`.
-7. **Gate the test** — `@EnabledIfEnvironmentVariable(named = "<the application's base-url-ref
-   variable>", matches = ".+")`, so it **skips** rather than fails where no stand is configured.
-   Forward that variable into the test JVM in the consumer's build (a bare `export` does not reach a
-   forked test worker), and check `build/test-results/.../TEST-*.xml` for `skipped="0"` — a green
-   build over a skipped UI test is a test that never opened a browser.
+7. **Do NOT gate the test by default.** `@EnabledIfEnvironmentVariable` is optional: it sees only
+   the bare environment variable, not a `${VAR:default}` default in `application.yml`, so with a
+   default present it silently skips a UI test that would have run. Add it only when the
+   application's base-url variable has no default; then make sure that variable reaches the test JVM.
+   Either way check `build/test-results/.../TEST-*.xml` for `skipped="0"` — a green build over a
+   skipped UI test is a test that never opened a browser.
 8. **Do not catch SDK failures.** The happy path asserts `result.isSuccessful()`; an expected failure
    wraps `stand.run` in `assertThatThrownBy(...)`. Catching `StandTestAssertionError` /
    `StandTestException` to make a test pass is a BLOCK.
@@ -170,7 +170,8 @@ ceiling is the pool size; above it runs queue, bounded by `accountTimeout`.
 - [ ] `ui.login` is first and names a role; no hand-rolled sign-in.
 - [ ] Every `${var}` consumed is produced earlier; every run-unique value is `${testRunId}`-derived.
 - [ ] No shared mutable static/instance state.
-- [ ] Gated with `@EnabledIfEnvironmentVariable`; the variable is forwarded to the test JVM.
+- [ ] No run gate unless one is genuinely needed; if `@EnabledIfEnvironmentVariable` IS present, the
+      variable has no registry default and is forwarded to the test JVM.
 - [ ] Nothing outside the SDK surface (see the surface checklist) appears anywhere.
 - [ ] Run [`stand-test-ui-safety-review`](../stand-test-ui-safety-review/SKILL.md).
 

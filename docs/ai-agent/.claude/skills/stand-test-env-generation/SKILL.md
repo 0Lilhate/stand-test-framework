@@ -90,8 +90,9 @@ actually written in.
    value twins and no twin/ref duplicates. Apply
    [`application-yml-generation-checklist.md`](application-yml-generation-checklist.md).
 9. **Report** per [`env-generation-report-template.md`](env-generation-report-template.md),
-   including the env-var names a runner must export (feeds the `@EnabledIfEnvironmentVariable`
-   gate choice and the pre-run env check).
+   including the env-var names a runner must export and which of them have defaults (feeds the
+   pre-run env check, and the choice for an optional `@EnabledIfEnvironmentVariable` gate — only a
+   variable WITHOUT a default is a candidate).
 
 ## Forbidden
 

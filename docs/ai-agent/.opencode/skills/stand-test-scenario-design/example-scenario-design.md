@@ -52,8 +52,9 @@ Run gate: `ORDER_SERVICE_URL`.
   the deciding factor: team convention (Spring Boot consumer) and the negative variant in the
   same class. An AI-format variant of the happy path is also produced for illustration:
   [`generated-yaml-example.yaml`](../stand-test-yaml-authoring/example-generated.yaml).
-- **Wiring**: `@SpringBootTest` + `@Autowired StandClient`;
-  `@EnabledIfEnvironmentVariable(named = "ORDER_SERVICE_URL", matches = ".+")`.
+- **Wiring**: `@SpringBootTest` + `@Autowired StandClient`; no run gate (`ORDER_SERVICE_URL` has a
+  `${ORDER_SERVICE_URL:...}` default in the registry, so an `@EnabledIfEnvironmentVariable` on it
+  would only skip a test that runs fine against the default contour).
 
 ### Step table (happy path)
 

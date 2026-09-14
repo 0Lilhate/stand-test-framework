@@ -93,8 +93,9 @@ text case.
 ### 9. Wiring & gating
 - Correct consumer shape (`@SpringBootTest` + `@Autowired StandClient`, or `@StandTest`
   parameters passed into the builder explicitly).
-- `@EnabledIfEnvironmentVariable` gate present and names a variable the registry actually
-  requires.
+- Run gate optional: a missing `@EnabledIfEnvironmentVariable` is NOT a finding. If present, it must
+  name a variable the registry actually requires and that has no default — otherwise it silently
+  skips a runnable test.
 - Happy path asserts `result.isSuccessful()`; no inspection of `StepStatus.FAILED` as a
   pass/fail channel (the runner throws — a returned result is diagnostics).
 

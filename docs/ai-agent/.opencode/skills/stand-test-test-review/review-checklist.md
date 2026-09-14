@@ -48,7 +48,8 @@ Applied by `stand-test-test-review` and by the human approver. Complements — n
 
 - [ ] [`flakiness-checklist.md`](flakiness-checklist.md) fully green.
 - [ ] Cleanup pairs every seed; `whereTestRunId` column correct; residual-data note present.
-- [ ] `@EnabledIfEnvironmentVariable` gate present; test verified to SKIP without env vars.
+- [ ] Run gate: its ABSENCE is fine and is never a finding. If `@EnabledIfEnvironmentVariable` is
+      present, it names a variable with no registry default, and the test SKIPS (not fails) without it.
 
 ## Style (consumer repos mirroring SDK checkstyle)
 

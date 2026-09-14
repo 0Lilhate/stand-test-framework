@@ -30,12 +30,14 @@ Validation report: verdict `READY` / `READY-WITH-NOTES` / `NOT-READY`, evidence 
 2. **Compile** — `./gradlew compileTestJava checkstyleTest` in the consumer project
    (Java artifacts; the runner test for AI-format artifacts counts too).
 3. **Run the module test** — `./gradlew test --tests '<generated class>'`:
-   - with stand env vars absent, the test must be **SKIPPED** (gate works, does not fail);
+   - an ungated test is the norm: with a registry that carries `${VAR:default}` defaults it simply
+     runs against the default contour. Only if the class deliberately carries an
+     `@EnabledIfEnvironmentVariable` gate check that it SKIPS (does not fail) without that variable;
    - with a configured stand available, run for real; record pass/fail. A failure here goes
      to [Workflow 5](stand-test-debug.md) — do not "adjust" the test inside this workflow.
    - **Prove the real run actually executed.** `BUILD SUCCESSFUL` alone does not mean the test
-     ran: `@EnabledIfEnvironmentVariable` skips silently, and a skipped test leaves the build
-     green. Exporting the variable in the shell is NOT a reliable channel to the forked test JVM
+     ran: a skipped test (a run gate, `@Disabled`, an unmet assumption) leaves the build green
+     without touching the stand. Exporting the variable in the shell is NOT a reliable channel to the forked test JVM
      (observed: the Gradle JVM saw the variable while the test still skipped). Read the count out
      of `build/test-results/test/TEST-<class>.xml` and require `tests="1" skipped="0"`; if it says
      `skipped="1"`, the stage is NOT-RUN, never PASS. Wire the variable explicitly in the

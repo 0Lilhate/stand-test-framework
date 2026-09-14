@@ -20,8 +20,9 @@ generate "to see how it looks".
 - [ ] For any DB write: datasource has `write-allowed: true` and the target schema is in
       `allowed-schemas`.
 - [ ] The list of env vars needed at run time is known (`*-ref` names plus variables inside
-      starter value-twin `${ENV_VAR:...}` placeholders) — one of them chosen for the
-      `@EnabledIfEnvironmentVariable` gate.
+      starter value-twin `${ENV_VAR:...}` placeholders), and it is recorded which of them have a
+      default. A run gate is optional: pick a variable for `@EnabledIfEnvironmentVariable` ONLY if it
+      has no default — otherwise the gate would silently skip a runnable test.
 
 ## Design sound
 

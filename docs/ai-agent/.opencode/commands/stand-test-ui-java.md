@@ -46,14 +46,17 @@ One JUnit 5 test class in the consumer's test sources, composed from Page Object
    and **not** in any assertion's expected value. A misplaced placeholder is a test that fails on its
    first run for a reason that reads like application drift.
 
-4. **Gate the test** — `@EnabledIfEnvironmentVariable(named = "<the application's base-url-ref
-   variable>", matches = ".+")`, and forward that variable into the test JVM in the consumer's build
-   (a bare `export` does not reach a forked worker).
+4. **Gate the test — only if it is genuinely needed.** `@EnabledIfEnvironmentVariable` is OPTIONAL
+   and is not written by default: it reads the bare environment variable and ignores a
+   `${VAR:default}` default in `application.yml`, so with a default present it silently skips a test
+   that would have run. Add it only when the application's base-url variable has no default, and then
+   make sure that variable reaches the test JVM.
 
 5. **Compile** — `./gradlew compileTestJava checkstyleTest`. Both the test **and** the Page Objects.
 
 6. **Run**, if a stand is configured. Then read `build/test-results/test/TEST-*.xml`, not the exit
-   code: `skipped="1"` means the gate fired and no browser was ever opened.
+   code: `skipped="1"` means no browser was ever opened (a run gate, `@Disabled`, or an unmet
+   assumption) — a green build over it proves nothing.
 
 ## Mandatory checks
 

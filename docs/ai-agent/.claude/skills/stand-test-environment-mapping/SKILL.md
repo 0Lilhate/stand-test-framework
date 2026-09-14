@@ -77,7 +77,9 @@ An **environment mapping report** with four tables:
    a `*-ref`, never into a scenario.
 4. **Env vars required to run** — the union of env-var names the scenario will need at
    execution time: every `*-ref` name PLUS every variable named inside a starter value twin's
-   `${ENV_VAR:...}` placeholder (drives the `@EnabledIfEnvironmentVariable` gate choice).
+   `${ENV_VAR:...}` placeholder. Note for each whether it has a default: a defaulted variable is
+   never a candidate for an (optional) `@EnabledIfEnvironmentVariable` gate — gating on it would
+   silently skip a test that the default contour runs.
 
 ## Failure-mode knowledge (encode in the report when relevant)
 

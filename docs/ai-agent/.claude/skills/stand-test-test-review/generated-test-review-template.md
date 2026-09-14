@@ -24,7 +24,7 @@
 | Variable capture/resolve (every ${var} produced; no dead captures; no fixed ids) | OK/Issues | |
 | Cleanup (every seed paired; testRunId-scoped; residual-data note) | OK/Issues | |
 | Diagnostics & reporting (step ids, tags, no assertions on Allure content) | OK/Issues | |
-| Wiring & gating (StandClient injection, @EnabledIfEnvironmentVariable, isSuccessful happy path) | OK/Issues | |
+| Wiring & gating (StandClient injection, isSuccessful happy path; run gate optional — only check one that IS present) | OK/Issues | |
 
 ## Findings
 

@@ -61,7 +61,8 @@ A generated test that flakes is worse than no test. Every item must hold.
       via `${testRunId}` scoping); `@StandIsolated` / `@ResourceLock("<alias>")` present ONLY on a
       class touching a resource that cannot be `testRunId`-isolated (fixed port, shared file,
       process-wide singleton), with the reason noted.
-- [ ] The `@EnabledIfEnvironmentVariable` gate names a variable the scenario genuinely
-      needs — the test skips cleanly on unconfigured machines.
+- [ ] If an `@EnabledIfEnvironmentVariable` gate is present at all (it is optional), it names a
+      variable the scenario genuinely needs AND that has no `${VAR:default}` default — a gate on a
+      defaulted variable turns a runnable test into a silent skip.
 - [ ] Residual-data note present: cleanup is skipped after an earlier failure
       (short-circuit) — leftovers must be harmless and identifiable.

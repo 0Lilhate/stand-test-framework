@@ -105,7 +105,6 @@ expected:
   - ENABLED·EQUALS·true on «Отправить» after the form becomes valid, awaited rather than asserted once
   - No click on «Отправить» anywhere in the artifact — the case stops before the irreversible control
   - Every locator constant sits in a Page Object of the screen, none in the test body
-  - The test class carries @EnabledIfEnvironmentVariable on the application's base-url variable
   - The generation report states the residual data as none, explicitly — silence there is not the same
     claim
   forbiddenConstructs:

@@ -24,7 +24,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import ru.alfa.stand.test.core.StandClient;
 import ru.alfa.stand.test.core.result.ScenarioResult;
 import ru.alfa.stand.test.core.scenario.Scenario;
@@ -41,7 +40,6 @@ Build an immutable `Scenario`, hand it to an injected `StandClient`. Nothing els
 
 ```java
 @SpringBootTest
-@EnabledIfEnvironmentVariable(named = "ORDER_SERVICE_URL", matches = ".+")
 class OrderStatusProjectionTest {
 
     @Autowired
@@ -149,8 +147,11 @@ create — the boundary rule below still holds.
     concurrent runs on a shared stand get distinct ids and never collide.
 9. **Do not catch** `StandTestAssertionError`/`StandTestException`; happy path asserts
    `result.isSuccessful()`, expected failure wraps `stand.run` in `assertThatThrownBy`.
-10. **Gate the test**: `@EnabledIfEnvironmentVariable(named = "<a base-url env var>", matches = ".+")`
-    so it skips (not fails) without stand configuration.
+10. **Do NOT gate the test by default.** `@EnabledIfEnvironmentVariable` is optional: it reads the
+    bare environment variable and knows nothing about a `${VAR:default}` default in the consumer's
+    `application.yml`, so where the registry has defaults it silently SKIPS a test that would have
+    run. Write it only when a variable the scenario needs has no default at all — and then say so in
+    the generation report.
 11. **Parallel-safe by construction.** No shared mutable static or instance state in the test class —
     every run-varying value flows through captures / `${testRunId}`; the runner and each step
     executor are shared across test threads, so a static field or a reused mutable object would race.

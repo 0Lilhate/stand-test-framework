@@ -22,7 +22,8 @@
 ## Wiring
 
 - Consumer shape: `@SpringBootTest` + `@Autowired StandClient` | `@StandTest` (plain JUnit)
-- Run gate: `@EnabledIfEnvironmentVariable(named = "<ENV_VAR>", matches = ".+")`
+- Run gate: none (default) | `@EnabledIfEnvironmentVariable(named = "<ENV_VAR>", matches = ".+")` —
+  optional, only for a variable with NO `${VAR:default}` default in the registry; state the reason
 - Env vars required at run time: <list from the mapping report — `*-ref` names plus variables
   inside starter value-twin `${ENV_VAR:...}` placeholders>
 

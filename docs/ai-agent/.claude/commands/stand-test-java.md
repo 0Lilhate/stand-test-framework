@@ -24,7 +24,8 @@ starter vs plain JUnit; base package; existing template tests).
    [`stand-test-java-dsl-authoring`](../skills/stand-test-java-dsl-authoring/SKILL.md): one test
    class, scenario built exactly from the design's step table, correct consumer wiring
    (`@SpringBootTest` + `@Autowired StandClient`, or `@StandTest` with explicitly passed
-   `@StandScenarioId`/`@StandEnv` parameters), `@EnabledIfEnvironmentVariable` gate.
+   `@StandScenarioId`/`@StandEnv` parameters). No `@EnabledIfEnvironmentVariable` gate by default —
+   it is optional, see the guardrails.
 2. **Ensure no eager IO** — inspect: builders only build; the single execution point is
    `stand.run(scenario)`; no HTTP/Kafka/JDBC/gRPC client types imported; no
    `new DefaultScenarioRunner(...)`/`new DefaultStandClient(...)` in consumer code.

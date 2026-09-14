@@ -1,8 +1,9 @@
 // JUnit XML, read instead of gradle's stdout.
 //
 // The README of this kit already says why, and it is the most expensive lie in the whole cycle: a
-// test gated with @EnabledIfEnvironmentVariable that never ran still ends the build with
-// BUILD SUCCESSFUL. The exit code says nothing about whether anything was executed; the XML does.
+// test that never ran — skipped by a run gate, by @Disabled, by an unmet assumption — still ends the
+// build with BUILD SUCCESSFUL. The exit code says nothing about whether anything was executed; the
+// XML does.
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -163,8 +164,8 @@ function readOneResult(file, root, consumed, summary) {
 export function skipWarning(summary) {
   if (summary.tests === 0 || summary.skipped < summary.tests) return null;
   return `Сборка зелёная, но выполнено 0 тестов из ${summary.tests}: все пропущены (skipped=${summary.skipped}). `
-    + 'Скорее всего сработал гейт @EnabledIfEnvironmentVariable — переменные окружения не доехали до тестовой JVM. '
-    + 'Стенд не был затронут, и зелёная сборка об этом не говорит. Пробрасывать переменные надо в конфигурацию '
-    + 'тестовой задачи (Gradle: tasks.withType<Test>; Maven: <environmentVariables> у surefire), а не через export '
-    + 'перед командой сборки.';
+    + 'Стенд не был затронут, и зелёная сборка об этом не говорит. Причину смотреть в XML: условная аннотация '
+    + 'на классе (@EnabledIf*/@Disabled) либо невыполненное assumption. Если skip держит гейт по переменной '
+    + 'окружения — такой гейт НЕ обязателен и чаще вреден: он не видит умолчаний ${VAR:default} из application.yml '
+    + 'и глушит тест, который прекрасно прошёл бы на контуре по умолчанию.';
 }

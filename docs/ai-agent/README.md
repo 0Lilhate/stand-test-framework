@@ -389,16 +389,20 @@ AI track — the dependency existed only to run the removed schema resource.
 
 ## How to run generated tests
 
-Generated tests are gated to **skip** (not fail) without stand configuration:
+Generated tests carry **no run gate by default**. `@EnabledIfEnvironmentVariable` reads the bare
+environment variable and knows nothing about a `${VAR:default}` default in the consumer's
+`application.yml`, so on a registry that carries defaults — the normal case — a gate turns a test
+that would have run into a silent skip. It stays available for the one case that needs it, a variable
+with no default at all:
 
 ```java
 @EnabledIfEnvironmentVariable(named = "ORDER_SERVICE_URL", matches = ".+")
 ```
 
 Wire the registry's env vars into the **test JVM**, not just the shell. A bare
-`export VAR=... && ./gradlew test` is not a reliable channel to the forked test worker: the test then
-skips silently and the build still reports `BUILD SUCCESSFUL`, so a test that never issued a request
-looks like a passing one. In the consumer's `build.gradle.kts`:
+`export VAR=... && ./gradlew test` is not a reliable channel to the forked test worker: a test skipped
+for any reason still leaves `BUILD SUCCESSFUL`, so a test that never issued a request looks like a
+passing one. In the consumer's `build.gradle.kts`:
 
 ```kotlin
 tasks.withType<Test>().configureEach {
