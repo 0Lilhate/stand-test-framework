@@ -7,6 +7,7 @@ import java.util.ServiceLoader;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
+import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
 import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -36,5 +37,15 @@ class FileEnvironmentRegistryTest {
         registry.environment("ift");
         registry.environment("ift");
         assertThat(loads.get()).as("loaded exactly once, then cached").isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("BR-01: the SPI provider exposes its loaded default environment")
+    void exposesDefaultEnvironment() {
+        EnvironmentDefinition ift = new EnvironmentDefinition("ift", Map.of(), Map.of(), Map.of(), Map.of());
+        FileEnvironmentRegistry registry = new FileEnvironmentRegistry(
+                () -> new InMemoryEnvironmentRegistry(Map.of("ift", ift), "ift"));
+
+        assertThat(registry.defaultEnvironment()).contains("ift");
     }
 }

@@ -46,6 +46,8 @@ public final class YamlEnvironmentConfigLoader {
     /** Alternative application-config resource name ({@code .yaml} extension). */
     public static final String APPLICATION_RESOURCE_ALT = "application.yaml";
 
+    private static final String DEFAULT_ENVIRONMENT = "default-environment";
+
     private final UnaryOperator<String> systemProperty;
     private final ClassLoader classLoader;
 
@@ -98,7 +100,7 @@ public final class YamlEnvironmentConfigLoader {
             return new InMemoryEnvironmentRegistry(Map.of());
         }
         Map<String, Object> document = standTestSection(SafeYaml.load(content));
-        if (document.get("environments") == null) {
+        if (document.get("environments") == null && document.get(DEFAULT_ENVIRONMENT) == null) {
             // The application.yml belongs to the app; without a stand.test.environments section it
             // contributes nothing — same fail-safe outcome as having no config file at all.
             return new InMemoryEnvironmentRegistry(Map.of());
@@ -126,9 +128,11 @@ public final class YamlEnvironmentConfigLoader {
         if (standTest instanceof Map<?, ?> standTestMap) {
             putIfPresent(document, "environments", standTestMap.get("environments"));
             putIfPresent(document, EnvironmentConfigFormat.VERSION_FIELD, standTestMap.get(EnvironmentConfigFormat.VERSION_FIELD));
+            putIfPresent(document, DEFAULT_ENVIRONMENT, standTestMap.get(DEFAULT_ENVIRONMENT));
         }
         putIfPresent(document, "environments", map.get("stand.test.environments"));
         putIfPresent(document, EnvironmentConfigFormat.VERSION_FIELD, map.get("stand.test." + EnvironmentConfigFormat.VERSION_FIELD));
+        putIfPresent(document, DEFAULT_ENVIRONMENT, map.get("stand.test.default-environment"));
         return document;
     }
 

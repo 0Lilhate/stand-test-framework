@@ -84,6 +84,21 @@ class YamlEnvironmentConfigLoaderTest {
     }
 
     @Test
+    @DisplayName("BR-01a: plain JUnit reads the default environment from application.yml")
+    void readsDefaultEnvironmentFromApplicationYaml(@TempDir Path dir) throws Exception {
+        Files.writeString(dir.resolve("application.yml"), """
+                stand:
+                  test:
+                    version: 6
+                    default-environment: ${STAND_TEST_STAGE1_UNSET:ift}
+                    environments:
+                      ift: {}
+                """, StandardCharsets.UTF_8);
+
+        assertThat(loader(key -> null, directoryClassLoader(dir)).load().defaultEnvironment()).contains("ift");
+    }
+
+    @Test
     @DisplayName("application.yml with a dotted stand.test.environments key is read too")
     void readsApplicationYamlDottedSection(@TempDir Path dir) throws Exception {
         Files.writeString(dir.resolve("application.yml"), """

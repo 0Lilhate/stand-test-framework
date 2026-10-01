@@ -1,5 +1,10 @@
 package ru.alfa.stand.test.rest;
 
+import ru.alfa.stand.test.http.HttpCaller;
+import ru.alfa.stand.test.http.RestResponse;
+import ru.alfa.stand.test.http.BaseUrlResolver;
+import ru.alfa.stand.test.http.FakeHttpCaller;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

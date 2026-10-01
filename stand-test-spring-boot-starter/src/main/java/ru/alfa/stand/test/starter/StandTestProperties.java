@@ -44,6 +44,8 @@ public class StandTestProperties {
      */
     private Integer version;
 
+    private String defaultEnvironment;
+
     private final Await await = new Await();
 
     private final Reporting reporting = new Reporting();
@@ -64,6 +66,14 @@ public class StandTestProperties {
 
     public void setVersion(Integer version) {
         this.version = version;
+    }
+
+    public String getDefaultEnvironment() {
+        return defaultEnvironment;
+    }
+
+    public void setDefaultEnvironment(String defaultEnvironment) {
+        this.defaultEnvironment = defaultEnvironment;
     }
 
     public Await getAwait() {
@@ -161,6 +171,8 @@ public class StandTestProperties {
 
         private final Map<String, UiApplication> uiApplications = new LinkedHashMap<>();
 
+        private final Map<String, Map<String, Object>> eqBackends = new LinkedHashMap<>();
+
         private KafkaCluster kafkaCluster;
 
         public Map<String, Service> getServices() {
@@ -193,6 +205,10 @@ public class StandTestProperties {
 
         public Map<String, UiApplication> getUiApplications() {
             return uiApplications;
+        }
+
+        public Map<String, Map<String, Object>> getEqBackends() {
+            return eqBackends;
         }
     }
 

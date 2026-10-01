@@ -142,14 +142,13 @@ class StandTestExtensionTest {
     }
 
     @Test
-    @DisplayName("a missing environment fails resolution with a ParameterResolutionException")
-    void environment_missing_failsResolution() {
+    @DisplayName("BR-02: @StandEnv without a value uses the registry default")
+    void environment_missing_usesRegistryDefault() {
         EngineTestKit.engine("junit-jupiter")
                 .selectors(selectClass(MissingEnvFixture.class))
                 .execute()
                 .testEvents()
-                .assertThatEvents()
-                .haveExactly(1, finishedWithFailure(instanceOf(ParameterResolutionException.class)));
+                .assertStatistics(stats -> stats.started(1).succeeded(1));
     }
 
     @Test
@@ -385,7 +384,7 @@ class StandTestExtensionTest {
 
         @Test
         void hasEnv(@StandEnv String env) {
-            assertThat(env).isNull();
+            assertThat(env).isEqualTo("ift");
         }
     }
 

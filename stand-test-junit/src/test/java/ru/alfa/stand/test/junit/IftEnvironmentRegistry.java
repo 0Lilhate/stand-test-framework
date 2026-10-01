@@ -14,10 +14,15 @@ import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
 public final class IftEnvironmentRegistry implements EnvironmentRegistry {
 
     private final EnvironmentRegistry delegate = new InMemoryEnvironmentRegistry(
-            Map.of("ift", new EnvironmentDefinition("ift", Map.of(), Map.of(), Map.of(), Map.of())));
+            Map.of("ift", new EnvironmentDefinition("ift", Map.of(), Map.of(), Map.of(), Map.of())), "ift");
 
     @Override
     public Optional<EnvironmentDefinition> environment(String name) {
         return delegate.environment(name);
+    }
+
+    @Override
+    public Optional<String> defaultEnvironment() {
+        return delegate.defaultEnvironment();
     }
 }

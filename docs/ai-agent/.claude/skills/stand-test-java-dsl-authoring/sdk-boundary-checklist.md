@@ -15,8 +15,9 @@ The agent authors CONSUMER tests. It never crosses into the SDK. Verify on every
 ## Only sanctioned entry points used
 
 - [ ] Scenario building: `Scenario.builder(...)` + `RestStep`/`KafkaStep`/`DbStep`/`GrpcStep`
-      builders (or `AiScenarioParser`/`YamlScenarioParser` for documents). No hand-built
-      `GenericStep` parameter maps for kafka/grpc in consumer tests — the raw wire path
+      builders (or `AiScenarioParser`/`YamlScenarioParser` for documents). `EqSeed` is the
+      sanctioned step for an EQ client precondition (organisation/individual); never a hand-built
+      `GenericStep` parameter map for kafka/grpc in consumer tests — the raw wire path
       silently ignores a `matcher` key (degrades to equals without an error).
 - [ ] Execution: injected `StandClient` only (`@Autowired` via starter, or `@StandTest`
       parameter). No `new DefaultScenarioRunner(...)`, no `new DefaultStandClient(...)`,

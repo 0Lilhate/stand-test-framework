@@ -1,0 +1,227 @@
+[
+  {
+    "businessCode": "ACLM",
+    "version": 1,
+    "fields": [
+      {
+        "order": 1,
+        "entityCode": "hub_Client.BusinessKey",
+        "entityType": "STRING"
+      },
+      {
+        "order": 2,
+        "entityCode": "sat_Client_Main.Location",
+        "entityType": "STRING"
+      },
+      {
+        "order": 3,
+        "entityCode": "sat_Client_Main.CommonTypeId",
+        "entityType": "STRING"
+      },
+      {
+        "order": 4,
+        "entityCode": "sat_Client_Main.ClientTypeId",
+        "entityType": "STRING"
+      },
+      {
+        "order": 5,
+        "entityCode": "sat_Client_Main.INN",
+        "entityType": "STRING"
+      },
+      {
+        "order": 6,
+        "entityCode": "sat_Client_Main.ResidentCountryId",
+        "entityType": "STRING"
+      }
+    ]
+  },
+  {
+    "businessCode": "ACLN",
+    "version": 2,
+    "fields": [
+      {
+        "order": 1,
+        "entityCode": "hub_Client.BusinessKey",
+        "entityType": "STRING"
+      },
+      {
+        "order": 2,
+        "entityCode": "sat_Client_Main.Location",
+        "entityType": "STRING"
+      },
+      {
+        "order": 3,
+        "entityCode": "sat_Client_Main.Name",
+        "entityType": "STRING"
+      },
+      {
+        "order": 4,
+        "entityCode": "sat_Client_PhysInfo.SurName",
+        "entityType": "STRING"
+      },
+      {
+        "order": 5,
+        "entityCode": "sat_Client_PhysInfo.GivenName",
+        "entityType": "STRING"
+      },
+      {
+        "order": 6,
+        "entityCode": "sat_Client_PhysInfo.MiddleName",
+        "entityType": "STRING"
+      }
+    ]
+  },
+  {
+    "businessCode": "UACM",
+    "version": 1,
+    "fields": [
+      {
+        "order": 1,
+        "entityCode": "hub_Account.BusinessKey",
+        "entityType": "STRING"
+      },
+      {
+        "order": 2,
+        "entityCode": "hub_Client.BusinessKey",
+        "entityType": "STRING"
+      },
+      {
+        "order": 3,
+        "entityCode": "sat_Account_Main.BranchId",
+        "entityType": "STRING"
+      },
+      {
+        "order": 4,
+        "entityCode": "sat_Account_Main.Suffix",
+        "entityType": "STRING"
+      },
+      {
+        "order": 5,
+        "entityCode": "sat_Account_Main.AccountTypeId",
+        "entityType": "STRING"
+      },
+      {
+        "order": 6,
+        "entityCode": "sat_Account_Main.CountryId",
+        "entityType": "STRING"
+      },
+      {
+        "order": 7,
+        "entityCode": "sat_Account_Main.CurrencyId",
+        "entityType": "STRING"
+      },
+      {
+        "order": 8,
+        "entityCode": "sat_Account_Main.OpeningDate",
+        "entityType": "DATETIME"
+      },
+      {
+        "order": 9,
+        "entityCode": "sat_Account_Main.ClosingDate",
+        "entityType": "DATETIME"
+      },
+      {
+        "order": 10,
+        "entityCode": "sat_Account_Modes.IsEnableFeeSU1",
+        "entityType": "NUMBER"
+      },
+      {
+        "order": 11,
+        "entityCode": "sat_Account_Modes.IsEnableFeeSU2",
+        "entityType": "NUMBER"
+      },
+      {
+        "order": 12,
+        "entityCode": "sat_Account_Main.AccountGroupId",
+        "entityType": "STRING"
+      },
+      {
+        "order": 13,
+        "entityCode": "sat_Account_Modes.IsHoldList",
+        "entityType": "NUMBER"
+      },
+      {
+        "order": 14,
+        "entityCode": "sat_Account_Main.BalAcc2",
+        "entityType": "STRING"
+      }
+    ]
+  },
+  {
+    "businessCode": "FCLM",
+    "version": 1,
+    "fields": [
+      {
+        "order": 1,
+        "entityCode": "hub_Client.BusinessKey",
+        "entityType": "STRING"
+      },
+      {
+        "order": 2,
+        "entityCode": "sat_Client_Main.Location",
+        "entityType": "STRING"
+      },
+      {
+        "order": 3,
+        "entityCode": "sat_Client_Main.CommonTypeId",
+        "entityType": "STRING"
+      },
+      {
+        "order": 4,
+        "entityCode": "sat_Client_Main.ClientTypeId",
+        "entityType": "STRING"
+      },
+      {
+        "order": 5,
+        "entityCode": "sat_Client_Main.INN",
+        "entityType": "STRING"
+      },
+      {
+        "order": 6,
+        "entityCode": "sat_Client_Main.ResidentCountryId",
+        "entityType": "STRING"
+      },
+      {
+        "order": 7,
+        "entityCode": "sat_Client_Main.ConnectBankDate",
+        "entityType": "DATETIME"
+      }
+    ]
+  },
+  {
+    "businessCode": "FCLN",
+    "version": 1,
+    "fields": [
+      {
+        "order": 1,
+        "entityCode": "hub_Client.BusinessKey",
+        "entityType": "STRING"
+      },
+      {
+        "order": 2,
+        "entityCode": "sat_Client_Main.Location",
+        "entityType": "STRING"
+      },
+      {
+        "order": 3,
+        "entityCode": "sat_Client_PhysInfo.SurName",
+        "entityType": "STRING"
+      },
+      {
+        "order": 4,
+        "entityCode": "sat_Client_PhysInfo.GivenName",
+        "entityType": "STRING"
+      },
+      {
+        "order": 5,
+        "entityCode": "sat_Client_PhysInfo.MiddleName",
+        "entityType": "STRING"
+      },
+      {
+        "order": 6,
+        "entityCode": "sat_Client_PhysInfo.BirthDate",
+        "entityType": "DATETIME"
+      }
+    ]
+  }
+]

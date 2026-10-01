@@ -146,15 +146,22 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
     @Override
     public ScenarioResult run(Scenario scenario) {
         Objects.requireNonNull(scenario, "scenario must not be null");
-        validator.validate(scenario, environmentRegistry).throwIfInvalid();
+        Scenario effective = scenario.environment().isBlank()
+                ? environmentRegistry.defaultEnvironment().map(scenario::withEnvironment).orElse(scenario)
+                : scenario;
+        validator.validate(effective, environmentRegistry).throwIfInvalid();
 
-        ScenarioContext context = ScenarioContext.start(scenario.id(), scenario.environment(), scenario.tags(), clock);
+        ScenarioContext context = ScenarioContext.start(effective.id(), effective.environment(), effective.tags(), clock);
         ResourceScope resourceScope = new ResourceScope();
         UndoLog undoLog = new UndoLog();
+        List<ScenarioStep> steps = effective.steps();
+        Map<String, Integer> stepOrdinals = new LinkedHashMap<>();
+        for (int index = 0; index < steps.size(); index++) {
+            stepOrdinals.put(steps.get(index).id(), index + 1);
+        }
         StepExecutionContext executionContext = new StepExecutionContext(
-                context, new VariableStore(), environmentRegistry, reportingEventPublisher, resourceScope, undoLog);
-
-        List<ScenarioStep> steps = scenario.steps();
+                context, new VariableStore(), environmentRegistry, reportingEventPublisher,
+                resourceScope, undoLog, stepOrdinals);
         int total = steps.size();
         Instant startedAt = clock.instant();
         List<StepResult> stepResults = new ArrayList<>();
@@ -163,7 +170,7 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
             publishScenario(context, ScenarioPhase.STARTED);
             LOG.info("Scenario '{}' started: {} step(s), env={}", context.scenarioId(), total, context.environment());
             try {
-                prepareSteps(scenario, total, executionContext, context, stepResults);
+                prepareSteps(effective, total, executionContext, context, stepResults);
                 for (int index = 0; index < total; index++) {
                     ScenarioStep step = steps.get(index);
                     StepResult result = executeStep(step, index + 1, total, executionContext, context, stepResults);
@@ -178,7 +185,7 @@ public final class DefaultScenarioRunner implements ScenarioRunner {
                 primary = failure;
                 throw failure;
             } finally {
-                CompensationReport report = drainCompensations(undoLog, scenario.cleanupPolicy(), primary != null, context);
+                CompensationReport report = drainCompensations(undoLog, effective.cleanupPolicy(), primary != null, context);
                 closeQuietly(resourceScope);
                 publishScenario(context, ScenarioPhase.FINISHED);
                 logScenarioFinished(context, primary != null || report.hasFailures(), primary, startedAt);

@@ -29,6 +29,7 @@ import ru.alfa.stand.test.core.result.ScenarioResult;
 import ru.alfa.stand.test.core.scenario.Scenario;
 import ru.alfa.stand.test.core.validation.ScenarioValidator;
 import ru.alfa.stand.test.db.DbStepExecutor;
+import ru.alfa.stand.test.eq.EqStepExecutor;
 import ru.alfa.stand.test.grpc.GrpcStepExecutor;
 import ru.alfa.stand.test.kafka.KafkaStepExecutor;
 import ru.alfa.stand.test.rest.RestStepExecutor;
@@ -44,6 +45,17 @@ class StandTestAutoConfigurationTest {
             .withConfiguration(AutoConfigurations.of(StandTestAutoConfiguration.class));
 
     @Test
+    @DisplayName("BR-01/04: Spring binds the default environment and rejects an absent target during context startup")
+    void defaultEnvironmentBinding() {
+        runner.withPropertyValues("stand.test.version=6", "stand.test.default-environment=ift",
+                "stand.test.environments.ift.services.example.base-url-ref=EXAMPLE_URL")
+                .run(context -> assertThat(context.getBean(EnvironmentRegistry.class).defaultEnvironment()).contains("ift"));
+        runner.withPropertyValues("stand.test.version=6", "stand.test.default-environment=missing",
+                "stand.test.environments.ift.services.example.base-url-ref=EXAMPLE_URL")
+                .run(context -> assertThat(context).hasFailed());
+    }
+
+    @Test
     @DisplayName("default context wires StandClient plus all adapter executors on the classpath")
     void defaultContext_wiresStandClientAndExecutors() {
         runner.run(context -> {
@@ -55,7 +67,8 @@ class StandTestAutoConfigurationTest {
             assertThat(context).hasSingleBean(KafkaStepExecutor.class);
             assertThat(context).hasSingleBean(DbStepExecutor.class);
             assertThat(context).hasSingleBean(GrpcStepExecutor.class);
-            assertThat(context).getBeans(StepExecutor.class).hasSize(4);
+            assertThat(context).hasSingleBean(EqStepExecutor.class);
+            assertThat(context).getBeans(StepExecutor.class).hasSize(5);
             assertThat(context).hasSingleBean(Awaiter.class);
             assertThat(context).hasSingleBean(AwaitPolicy.class);
         });
@@ -406,7 +419,7 @@ class StandTestAutoConfigurationTest {
     void restAdapterAbsent_executorNotRegistered() {
         runner.withClassLoader(new FilteredClassLoader(RestStepExecutor.class)).run(context -> {
             assertThat(context).doesNotHaveBean("standTestRestStepExecutor");
-            assertThat(context).getBeans(StepExecutor.class).hasSize(3);
+            assertThat(context).getBeans(StepExecutor.class).hasSize(4);
             assertThat(context).hasSingleBean(StandClient.class);
         });
     }
@@ -416,7 +429,7 @@ class StandTestAutoConfigurationTest {
     void grpcAdapterAbsent_executorNotRegistered() {
         runner.withClassLoader(new FilteredClassLoader(GrpcStepExecutor.class)).run(context -> {
             assertThat(context).doesNotHaveBean("standTestGrpcStepExecutor");
-            assertThat(context).getBeans(StepExecutor.class).hasSize(3);
+            assertThat(context).getBeans(StepExecutor.class).hasSize(4);
             assertThat(context).hasSingleBean(StandClient.class);
         });
     }
@@ -425,7 +438,8 @@ class StandTestAutoConfigurationTest {
     @DisplayName("with no adapters on the classpath the client still wires with zero executors")
     void allAdaptersAbsent_clientWiresWithNoExecutors() {
         runner.withClassLoader(new FilteredClassLoader(
-                RestStepExecutor.class, KafkaStepExecutor.class, DbStepExecutor.class, GrpcStepExecutor.class)).run(context -> {
+                RestStepExecutor.class, KafkaStepExecutor.class, DbStepExecutor.class, GrpcStepExecutor.class,
+                EqStepExecutor.class)).run(context -> {
                     assertThat(context).getBeans(StepExecutor.class).isEmpty();
                     assertThat(context).hasSingleBean(StandClient.class);
                     assertThat(context).hasSingleBean(ScenarioRunner.class);

@@ -1,5 +1,6 @@
 package ru.alfa.stand.test.core.execution;
 
+import java.util.Map;
 import java.util.Objects;
 import ru.alfa.stand.test.core.compensation.UndoLog;
 import ru.alfa.stand.test.core.context.ScenarioContext;
@@ -24,6 +25,7 @@ import ru.alfa.stand.test.core.variable.VariableStore;
  * @param reportingEventPublisher the reporting sink
  * @param resourceScope the run-scoped registry of closeable resources
  * @param undoLog the per-run test-data compensation registry
+ * @param stepOrdinals immutable one-based scenario step positions by step id
  */
 public record StepExecutionContext(
         ScenarioContext scenarioContext,
@@ -31,7 +33,8 @@ public record StepExecutionContext(
         EnvironmentRegistry environmentRegistry,
         ReportingEventPublisher reportingEventPublisher,
         ResourceScope resourceScope,
-        UndoLog undoLog) {
+        UndoLog undoLog,
+        Map<String, Integer> stepOrdinals) {
 
     public StepExecutionContext {
         Objects.requireNonNull(scenarioContext, "scenarioContext must not be null");
@@ -40,6 +43,15 @@ public record StepExecutionContext(
         Objects.requireNonNull(reportingEventPublisher, "reportingEventPublisher must not be null");
         Objects.requireNonNull(resourceScope, "resourceScope must not be null");
         Objects.requireNonNull(undoLog, "undoLog must not be null");
+        stepOrdinals = Map.copyOf(Objects.requireNonNull(stepOrdinals, "stepOrdinals must not be null"));
+    }
+
+    /** Preserves the six-argument constructor used before step ordinals became available. */
+    public StepExecutionContext(ScenarioContext scenarioContext, VariableStore variableStore,
+            EnvironmentRegistry environmentRegistry, ReportingEventPublisher reportingEventPublisher,
+            ResourceScope resourceScope, UndoLog undoLog) {
+        this(scenarioContext, variableStore, environmentRegistry, reportingEventPublisher,
+                resourceScope, undoLog, Map.of());
     }
 
     /**
@@ -59,7 +71,8 @@ public record StepExecutionContext(
             EnvironmentRegistry environmentRegistry,
             ReportingEventPublisher reportingEventPublisher,
             ResourceScope resourceScope) {
-        this(scenarioContext, variableStore, environmentRegistry, reportingEventPublisher, resourceScope, new UndoLog());
+        this(scenarioContext, variableStore, environmentRegistry, reportingEventPublisher,
+                resourceScope, new UndoLog(), Map.of());
     }
 
     /**
@@ -77,7 +90,8 @@ public record StepExecutionContext(
             VariableStore variableStore,
             EnvironmentRegistry environmentRegistry,
             ReportingEventPublisher reportingEventPublisher) {
-        this(scenarioContext, variableStore, environmentRegistry, reportingEventPublisher, new ResourceScope(), new UndoLog());
+        this(scenarioContext, variableStore, environmentRegistry, reportingEventPublisher,
+                new ResourceScope(), new UndoLog(), Map.of());
     }
 
     /**
@@ -88,5 +102,14 @@ public record StepExecutionContext(
      */
     public VariableResolver resolver() {
         return new VariableResolver(scenarioContext, variableStore);
+    }
+
+    /** Returns the scenario's one-based step ordinal, never an adapter-local counter. */
+    public int stepOrdinal(String stepId) {
+        Integer ordinal = stepOrdinals.get(stepId);
+        if (ordinal == null || ordinal < 1) {
+            throw new IllegalStateException("Step ordinal is unavailable for '" + stepId + "'");
+        }
+        return ordinal;
     }
 }

@@ -3,14 +3,13 @@
 **Group:** adapters · **Gradle plugin:** `java-library`
 
 REST / HTTP adapter for calling services on a stand. It owns the typed `RestStep` model and the REST
-`StepExecutor` (registered via the core SPI), and is the **single point of real HTTP IO** to the stand
+`StepExecutor` (registered via the core SPI), and calls the shared `stand-test-http` transport
 (plan §4, Iteration 4 / MVP).
 
-**Internal dependencies:** `stand-test-core` (`api`), `stand-test-await` (`implementation`).
+**Internal dependencies:** `stand-test-http` (`api`), `stand-test-await` (`implementation`).
 
-**External dependencies:** a mature HTTP client — Spring `WebClient` (`spring-webflux`) driven through
-the **JDK HttpClient connector** (`JdkClientHttpConnector`), so reactor-netty is *not* pulled in — plus
-`json-path` (JSONPath, json-smart provider; no Jackson). The SDK never ships its own HTTP client
+**External dependencies:** `json-path` (JSONPath, json-smart provider; no Jackson). The HTTP module
+uses Spring `WebClient` with the JDK connector, so reactor-netty is not pulled in. The SDK never ships its own HTTP client
 (plan §4, §20).
 
 ## What it does (MVP)
@@ -46,9 +45,10 @@ the **JDK HttpClient connector** (`JdkClientHttpConnector`), so reactor-netty is
 | `RestStep` | Lazy builder. Static `get`/`post`/`put`/`delete`; `header`/`query`/`body`/`bodyFromResource`/`injectCorrelationId`/`expectStatus`/`assertPath`/`capture`/`id`; `build()` → core `ScenarioStep`. Performs **no IO**. |
 | `RestStepExecutor` | The `StepExecutor` SPI implementation (`supports("rest.*")`). Stateless / thread-safe; discovered via `ServiceLoader` (`META-INF/services`). The single point of real HTTP IO. |
 | `RestStepParameters` | The shared parameter-map schema (key names + readers) — the one contract `RestStep` writes and `RestStepExecutor` reads, so a future YAML front-end can target the same map. |
-| `HttpCaller` / `WebClientHttpCaller` | The HTTP transport seam and its default WebClient (JDK connector) implementation. |
-| `BaseUrlResolver` / `EnvironmentBaseUrlResolver` | Resolves a `baseUrlRef` (treated strictly as a reference — the name of an environment variable holding the base URL) to an absolute base URL. Tests inject their own resolver rather than embedding a literal URL in the registry. |
-| `RestRequest` / `RestResponse` / `RestAssertion` / `RestCapture` | Immutable value objects. |
+| `HttpCaller` / `WebClientHttpCaller` | HTTP transport in `stand-test-http`; the no-arg caller preserves 10/30 second timeouts. |
+| `BaseUrlResolver` / `EnvironmentBaseUrlResolver` | Runtime reference resolution in `stand-test-http`. |
+| `RestRequest` / `RestResponse` | HTTP value objects in `stand-test-http`. |
+| `RestAssertion` / `RestCapture` | REST assertion and capture value objects. |
 
 ## Usage sketch
 

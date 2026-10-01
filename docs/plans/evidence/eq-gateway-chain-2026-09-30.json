@@ -1,0 +1,127 @@
+{
+  "capturedOn": "2026-09-30",
+  "capturedBy": "stand-test-framework stage-0 recon (read-mostly; mock contour)",
+  "gate": "G0-EQ",
+  "context": {
+    "endpoint": "http://10.232.128.12:4567/api",
+    "unit": "K68",
+    "canonicalConfig": "taxa_api_ai/src/main/resources/application.yml",
+    "gatewayKind": "JRuby/Sinatra/WEBrick mock (Server: WEBrick/1.8.1 Ruby/3.1.4), not a real AS/400 EQ",
+    "safety": "The endpoint is the demo/mock contour, not production EQ; requests carried only generated test data and a probe-styled organisation name.",
+    "readOnlyProbes": [
+      "GET /api -> 404 (Sinatra, 433 bytes) — before 2026-09-30 the same host closed every connection with 0 bytes",
+      "POST {unit} -> 500 RuntimeError: unit: Not found!",
+      "POST {unit, no option} -> 500 RuntimeError: option: Not found!",
+      "POST {unit, option=<unknown>} -> 200 'No such file or directory - yaml/<option>.yaml'"
+    ]
+  },
+  "organisationChain": {
+    "note": "One organisation created through the canonical gateway. Response SHAPES confirmed; identifiers are mock-generated test data.",
+    "steps": [
+      {
+        "option": "ONU",
+        "request": { "unit": "K68", "option": "ONU", "params": { "GZCUN": "<name>", "GZCTP": "CA", "GZINN": "<generated 10-digit INN>", "GZFNM1": "<name>" } },
+        "responseHttpStatus": 200,
+        "responseBody": "UDHSUS",
+        "confirmed": "PIN is a bare string matching ^[A-Z0-9]{6}$ (AS-3)"
+      },
+      {
+        "option": "OKC",
+        "request": { "unit": "K68", "option": "OKC", "params": { "GZACT": "CA", "GZAB": "0110", "GZCCY": "810", "GZCUS": "<pin>" } },
+        "responseHttpStatus": 200,
+        "responseBody": "40702810501100006848",
+        "confirmed": "account is a bare 20-digit string matching ^[0-9]{20}$; prefix 40702 confirms CA -> 40702 on this contour (OQ-9)"
+      },
+      {
+        "option": "YFT2",
+        "request": { "unit": "K68", "option": "YFT2", "params": { "GZNAR": "", "GZENC": "<account>", "GZEND": "20202810408350000000", "GZAMA": "100000", "GZCCY": "810" } },
+        "responseHttpStatus": 200,
+        "responseBody": "{}",
+        "confirmed": "confirmed success contract is an empty JSON object (OQ-5)"
+      },
+      {
+        "option": "KP1",
+        "request": { "unit": "K68", "option": "KP1", "params": { "GZPID": "PU_LST", "GZREG": "N", "GZSROK": "1M", "GZEAN": "<account>" } },
+        "responseHttpStatus": 200,
+        "responseBody": "{}",
+        "confirmed": "confirmed success contract is an empty JSON object (OQ-5); the response carries no deal id (OQ-4)"
+      }
+    ]
+  },
+  "correlation": {
+    "probe": "Sent X-Correlation-Id, correlationId, X-Request-Id and Correlation-Id on POST KP1",
+    "result": "No header was echoed and no correlation id appeared in the body; the mock does not read or trace a correlation header",
+    "note": "OQ-16 answered only for the mock contour; the real EQ gateway's acceptance remains unverified"
+  },
+  "errorsObserved": {
+    "unit_missing": "500 RuntimeError: unit: Not found!",
+    "option_missing": "500 RuntimeError: option: Not found!",
+    "unknown_option": "200 No such file or directory - yaml/<option>.yaml",
+    "validation": [
+      "ONU without GZCTP -> undefined method `size' for nil:NilClass",
+      "ONU with GZCTP length != 2 -> Size Parameter |GZCTP < 2|",
+      "ONU with GZCTP != CA -> Error: KSM2010Customer Type",
+      "OKC without a real PIN -> Error: KSM2003Customer / KSM2010Customer",
+      "YFT2 with a non-existent account -> Error: YFT0021"
+    ],
+    "note": "The mock signals validation errors as HTTP 200 text; the SDK's status-based classification stays conservative and does not treat such a body as success."
+  },
+  "individualChain": {
+    "note": "One individual created through the canonical gateway on the same day. Response SHAPES confirmed; identifiers are mock-generated test data. Closes OQ-5 for the individual chain and G0-FL for the contract shape.",
+    "steps": [
+      {
+        "option": "ONF",
+        "request": { "unit": "K68", "option": "ONF", "params": { "GZCUN": "<FIO>", "GZFNM1": "<last>", "GZFNM2": "<first>", "GZFNM3": "<middle>", "GZINN": "<generated 12-digit INN>", "GZNOM": "<document number>", "GZDUL": "091" } },
+        "responseHttpStatus": 200,
+        "responseBody": "BPBCJ7",
+        "confirmed": "PIN is a bare string matching ^[A-Z0-9]{6}$; GZDUL is the document TYPE (091 accepted, 21/01/10 rejected)"
+      },
+      {
+        "option": "VAD",
+        "request": { "unit": "K68", "option": "VAD", "params": { "GZCUS": "<pin>" } },
+        "responseHttpStatus": 200,
+        "responseBody": "{}",
+        "confirmed": "confirmed success contract is an empty JSON object (OQ-5 individual)"
+      },
+      {
+        "option": "OKC",
+        "request": { "unit": "K68", "option": "OKC", "params": { "GZACT": "EE", "GZAB": "0110", "GZCCY": "810", "GZCUS": "<pin>" } },
+        "responseHttpStatus": 200,
+        "responseBody": "40817810101100014688",
+        "confirmed": "individual account is a bare 20-digit string with prefix 40817"
+      },
+      {
+        "option": "YFT2",
+        "request": { "unit": "K68", "option": "YFT2", "params": { "GZNAR": "Пополнение счета", "GZENC": "<account>", "GZEND": "20202810408350000000", "GZAMA": "100000", "GZCCY": "810" } },
+        "responseHttpStatus": 200,
+        "responseBody": "{}",
+        "confirmed": "confirmed success contract is an empty JSON object"
+      },
+      {
+        "option": "SPU",
+        "request": { "unit": "K68", "option": "SPU", "params": { "GZCUS": "<pin>", "GZP3R": "T04" } },
+        "responseHttpStatus": 200,
+        "responseBody": "{}",
+        "confirmed": "confirmed success contract is an empty JSON object; SPU is per client, not per account (Г-2)"
+      }
+    ]
+  },
+  "probes": {
+    "Q0_15_duplicateInn": {
+      "organisation": "ONU with the same INN returned a fresh PIN each time (UDHSV4/UDHSV5/UDHSV6); the mock does NOT reject a duplicate INN",
+      "individual": "ONF with the same INN returned a fresh PIN (BPBCKA/BPBCKB); no duplicate rejection",
+      "conclusion": "On this contour a duplicate INN is accepted, so no retry-on-duplicate is ever needed here; real-EQ duplicate behaviour stays unconfirmed but does not block the SDK (it never auto-retries)."
+    },
+    "correlation": {
+      "headersTried": ["X-Correlation-Id", "correlationId", "X-Request-Id", "Correlation-Id"],
+      "result": "None echoed in response headers or body; the mock does not read or trace a correlation id",
+      "conclusion": "OQ-16 unobservable on this contour; real-EQ correlation acceptance stays open."
+    }
+  },
+  "openAfterThisCapture": [
+    "OQ-4: deal id after KP1 — not returned by the chain (confirmed {}); a data-mart read is the only known route.",
+    "OQ-16: correlation acceptance on the real EQ gateway (mock does not read it).",
+    "The real authenticated EQ gateway (the WEBrick mock answers for unit K68 without credentials).",
+    "Остаток G0-FL: read the transport for the individual chain on the real AS/400 gateway; the contract shape itself is confirmed."
+  ]
+}

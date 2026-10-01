@@ -1,6 +1,6 @@
 # Evaluation dataset
 
-27 кейсов, по одному на каждую требуемую категорию: **15 протокольных** (REST/Kafka/DB/gRPC) и
+28 кейсов: **16 протокольных** (REST/Kafka/DB/gRPC, включая EQ-предусловие `EqSeed`) и
 **12 UI**. Контракт один —
 [`../contracts/evaluation-case.schema.json`](../contracts/evaluation-case.schema.json); все 27
 файлов проходят валидацию по нему, и это утверждение проверяется:
@@ -47,6 +47,7 @@ dataset/cases/<case-id>/
 | `inject-kb-description` | prompt-injection | `COMPLETED` | 1 |
 | `budget-llm-call-exhausted` | budget-exceeded | `FAILED{LLM_CALL_BUDGET}` | 1 |
 | `noprogress-same-fingerprint` | no-progress-after-repair | `FAILED{NO_PROGRESS}` | 1 |
+| `eq-seed-client-precondition` | eq-data-provisioning | `COMPLETED` | 1 |
 
 ## Состав — UI-ветка
 
@@ -70,8 +71,8 @@ dataset/cases/<case-id>/
 | `ui-unsupported-mfa-challenge` | ui-unsupported-mfa | `AWAITING_APPROVAL{CONFIG_FIX}` | `none` | 1 |
 | `ui-non-reversible-bulk-delete` | ui-non-reversible-action | `AWAITING_APPROVAL{PLAN}` | `seeded-report` | 1 |
 
-**31 прогон** на полный проход (27 кейсов, у двух по три повтора). Распределение исходов:
-16 × `AWAITING_APPROVAL`, 8 × `COMPLETED`, 3 × `FAILED`. Требований к покрытию — **104**.
+**32 прогона** на полный проход (28 кейсов, у двух по три повтора). Распределение исходов:
+16 × `AWAITING_APPROVAL`, 9 × `COMPLETED`, 3 × `FAILED`. Требований к покрытию — **108**.
 
 Восемь UI-кейсов из двенадцати правильно заканчиваются вопросом. Это не перекос набора: у браузера
 больше способов молча ошибиться, чем у протокола, и семь из восьми проверяют ровно то, что агент
@@ -200,6 +201,17 @@ dataset/cases/<case-id>/
 `post-decoder`, `post-migration-cards`, `post-showcases-load`. Это единственный сервис с полным
 набором контрактов в KB — отсюда и ограничение корпуса: он меряет агента на одном сервисе, и
 перенос выводов на остальные — допущение, а не измерение.
+
+Протокольная ветка пополнена кейсом `eq-seed-client-precondition` категории `eq-data-provisioning`.
+Она **добавлена в enum схемы так же, как UI-категории** — аддитивно, без изменения версии документа:
+прежние пятнадцать кейсов валидируются неизменной схемой. Кейс меряет, что агент проводит подготовку
+клиента EQ через доменный шаг `EqSeed` (бэкенд выбирает реестр окружения), а не прямым
+`RestStep.post("showcases", …)` и не константами PIN/счёта. Его инварианты — отсутствие
+`RestStep.post("showcases")`, `UUID.randomUUID()` и `.environment("ift")` в артефакте, наличие
+переменных `${client.pin}`/`${client.account}` и отсутствие парного cleanup у `EqSeed`. KB-якорь —
+раздел `eq-backends`; кейс не требует прогона против стенда (`sut.mode: static`). Отдельная категория
+сохранена намеренно: EQ-предусловие — самостоятельная способность, которую `pos-showcase-format-200`
+не проверяет, а инвариант «один кейс на категорию» остаётся в силе.
 
 **UI-кейсы заземлены иначе, и это надо знать при чтении их результатов.** Записей об экранах в базе
 знаний нет вовсе (S-5.3), поэтому приложение `client-portal` вымышлено целиком — тот же алиас, что в

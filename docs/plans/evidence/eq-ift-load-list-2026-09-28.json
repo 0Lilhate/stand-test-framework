@@ -1,0 +1,36 @@
+{
+  "observedOn": "2026-09-28",
+  "successWithoutMessages": {
+    "httpStatus": 200,
+    "body": {
+      "sentCount": 0,
+      "status": "OK",
+      "timestamp": "2026-09-28T10:54:30.810783527+03:00"
+    }
+  },
+  "positiveSend": {
+    "httpStatus": 200,
+    "request": {
+      "businessCode": "ACLM",
+      "messageCount": 1,
+      "identifiersStoredOutsideGit": "build/stand-test/eq-stage0-2026-09-28.txt"
+    },
+    "body": {
+      "sentCount": 1,
+      "status": "OK",
+      "timestamp": "2026-09-28T10:59:31.788887176+03:00"
+    }
+  },
+  "rejectedUnknownBusinessCode": {
+    "httpStatus": 400,
+    "body": {
+      "timestamp": null,
+      "status": 400,
+      "error": "BAD_REQUEST",
+      "code": null,
+      "message": "Batch validation failed. Errors:\n- [idx=0] Витрина не найдена: businessCode=STAGE0_UNKNOWN_20260928, version=1\n",
+      "path": "/showcases/load/list",
+      "details": null
+    }
+  }
+}

@@ -38,6 +38,15 @@ import ru.alfa.stand.test.core.scenario.GenericStep;
 import ru.alfa.stand.test.core.scenario.ScenarioStep;
 import ru.alfa.stand.test.core.variable.VariableResolver;
 import ru.alfa.stand.test.core.variable.VariableStore;
+import ru.alfa.stand.test.http.AuthHeaderResolver;
+import ru.alfa.stand.test.http.BaseUrlResolver;
+import ru.alfa.stand.test.http.CorrelationHeader;
+import ru.alfa.stand.test.http.EnvironmentAuthHeaderResolver;
+import ru.alfa.stand.test.http.EnvironmentBaseUrlResolver;
+import ru.alfa.stand.test.http.HttpCaller;
+import ru.alfa.stand.test.http.RestRequest;
+import ru.alfa.stand.test.http.RestResponse;
+import ru.alfa.stand.test.http.WebClientHttpCaller;
 
 /**
  * REST {@link StepExecutor}: the single point of real HTTP IO to a stand.
@@ -227,14 +236,7 @@ public final class RestStepExecutor implements StepExecutor {
         CorrelationConfig correlation = endpoint.correlation();
         boolean hasHeaderCarrier = correlation != null && correlation.source() == CorrelationSource.HEADER;
         boolean shouldInject = RestStepParameters.injectCorrelationIdFlag(parameters).orElse(hasHeaderCarrier);
-        if (!shouldInject) {
-            return;
-        }
-        if (!hasHeaderCarrier) {
-            throw new StandTestException("Correlation id injection was requested for service '" + endpoint.name()
-                    + "', but it has no HEADER correlation config");
-        }
-        headers.put(correlation.name(), context.scenarioContext().correlationId().value());
+        CorrelationHeader.inject(shouldInject, endpoint, headers, context.scenarioContext().correlationId().value());
     }
 
     private static String resolveBody(Map<String, Object> parameters, VariableResolver resolver) {

@@ -9,6 +9,8 @@ dependencies {
     api(project(":stand-test-await"))
     api(project(":stand-test-junit"))
     api(project(":stand-test-rest"))
+    api(project(":stand-test-http"))
+    api(project(":stand-test-eq"))
     api(project(":stand-test-kafka"))
     api(project(":stand-test-db"))
     api(project(":stand-test-grpc"))
@@ -31,6 +33,7 @@ dependencies {
     api(libs.protobuf.java.util)
     api(libs.allure.java.commons)
     api(libs.snakeyaml)
+    api(libs.jt400)
     api(libs.playwright)
   }
 }

@@ -7,6 +7,7 @@ dependencies {
   compileOnly(project(":stand-test-kafka"))
   compileOnly(project(":stand-test-db"))
   compileOnly(project(":stand-test-grpc"))
+  compileOnly(project(":stand-test-eq"))
 
   api(libs.spring.boot.autoconfigure)
   api(libs.spring.boot)
@@ -25,6 +26,7 @@ dependencies {
   testImplementation(project(":stand-test-kafka"))
   testImplementation(project(":stand-test-db"))
   testImplementation(project(":stand-test-grpc"))
+  testImplementation(project(":stand-test-eq"))
   testImplementation(project(":stand-test-config"))
   testRuntimeOnly(libs.junit.platform.launcher)
 }

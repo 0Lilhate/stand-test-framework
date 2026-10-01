@@ -130,6 +130,9 @@ public final class StandTestExtension implements ParameterResolver {
             value = declaredValue(extensionContext, StandTest.class, StandTest::env);
         }
         if (value == null) {
+            value = environmentRegistry(extensionContext).defaultEnvironment().orElse(null);
+        }
+        if (value == null) {
             throw new ParameterResolutionException(
                     "No environment declared: annotate the test or parameter with @StandEnv, or set @StandTest(env=...)");
         }
@@ -165,15 +168,19 @@ public final class StandTestExtension implements ParameterResolver {
     private static StandClient standClient(ExtensionContext extensionContext) {
         return extensionContext.getRoot()
                 .getStore(NAMESPACE)
-                .computeIfAbsent(StandClient.class, key -> buildStandClient(), StandClient.class);
+                .computeIfAbsent(StandClient.class, key -> buildStandClient(environmentRegistry(extensionContext)), StandClient.class);
     }
 
-    private static StandClient buildStandClient() {
+    private static EnvironmentRegistry environmentRegistry(ExtensionContext extensionContext) {
+        return extensionContext.getRoot().getStore(NAMESPACE)
+                .computeIfAbsent(EnvironmentRegistry.class, key -> uniqueProvider(providers(EnvironmentRegistry.class),
+                        EnvironmentRegistry.class).orElseGet(NoProviderEnvironmentRegistry::new), EnvironmentRegistry.class);
+    }
+
+    private static StandClient buildStandClient(EnvironmentRegistry registry) {
         List<StepExecutor> executors = providers(StepExecutor.class);
         ReportingEventPublisher publisher = uniqueProvider(providers(ReportingEventPublisher.class), ReportingEventPublisher.class)
                 .orElse(NoOpReportingEventPublisher.INSTANCE);
-        EnvironmentRegistry registry = uniqueProvider(providers(EnvironmentRegistry.class), EnvironmentRegistry.class)
-                .orElseGet(NoProviderEnvironmentRegistry::new);
         ScenarioRunner runner = new DefaultScenarioRunner(executors, new DefaultScenarioValidator(), registry, publisher);
         return new DefaultStandClient(runner);
     }

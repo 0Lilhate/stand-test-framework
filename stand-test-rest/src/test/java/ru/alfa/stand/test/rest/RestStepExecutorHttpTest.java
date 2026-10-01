@@ -1,5 +1,13 @@
 package ru.alfa.stand.test.rest;
 
+import ru.alfa.stand.test.http.HttpCaller;
+import ru.alfa.stand.test.http.WebClientHttpCaller;
+import ru.alfa.stand.test.http.BaseUrlResolver;
+import ru.alfa.stand.test.http.EnvironmentBaseUrlResolver;
+import ru.alfa.stand.test.http.AuthHeaderResolver;
+import ru.alfa.stand.test.http.EnvironmentAuthHeaderResolver;
+import ru.alfa.stand.test.http.RecordingHttpServer;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

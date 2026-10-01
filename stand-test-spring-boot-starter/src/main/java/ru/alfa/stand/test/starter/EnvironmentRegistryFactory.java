@@ -9,6 +9,8 @@ import ru.alfa.stand.test.core.environment.CorrelationConfig;
 import ru.alfa.stand.test.core.environment.DatasourceDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentConfigFormat;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
+import ru.alfa.stand.test.core.environment.EnvironmentSection;
+import ru.alfa.stand.test.core.environment.SectionEntry;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.GrpcTargetDefinition;
 import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
@@ -71,7 +73,12 @@ public final class EnvironmentRegistryFactory {
             String name = entry.getKey();
             environments.put(name, toEnvironment(name, entry.getValue(), version));
         }
-        return new InMemoryEnvironmentRegistry(environments);
+        String defaultEnvironment = properties.getDefaultEnvironment();
+        if (defaultEnvironment != null) {
+            EnvironmentConfigFormat.requireSectionSupported(version, "default-environment",
+                    EnvironmentConfigFormat.DEFAULT_ENVIRONMENT_SINCE_VERSION, "stand.test");
+        }
+        return new InMemoryEnvironmentRegistry(environments, defaultEnvironment);
     }
 
     private static EnvironmentDefinition toEnvironment(String name, StandTestProperties.Environment env, int version) {
@@ -84,11 +91,54 @@ public final class EnvironmentRegistryFactory {
                     grpcTargets(env),
                     kafkaCluster(env.getKafkaCluster()),
                     kafkaClusters(env),
-                    uiApplications(env, name, version));
+                    uiApplications(env, name, version), sections(env, name, version));
         } catch (IllegalArgumentException invalid) {
             throw new IllegalStateException(
                     "Invalid stand.test.environments." + name + " configuration: " + invalid.getMessage(), invalid);
         }
+    }
+
+    private static Map<String, EnvironmentSection> sections(StandTestProperties.Environment env, String environment, int version) {
+        Map<String, Map<String, Object>> configured = env.getEqBackends();
+        if (configured.isEmpty()) {
+            return Map.of();
+        }
+        String sectionName = "eq-backends";
+        EnvironmentConfigFormat.requireSectionSupported(version, sectionName, EnvironmentConfigFormat.SECTIONS_SINCE_VERSION,
+                "stand.test.environments." + environment + "." + sectionName);
+        Map<String, SectionEntry> entries = new LinkedHashMap<>();
+        configured.forEach((alias, fields) -> entries.put(alias, new SectionEntry(alias, normalizeBoundMap(fields))));
+        return Map.of(sectionName, new EnvironmentSection(sectionName, entries));
+    }
+
+    private static Map<String, Object> normalizeBoundMap(Map<?, ?> source) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        source.forEach((key, value) -> {
+            String name = String.valueOf(key);
+            Object normalized = normalizeBoundValue(value);
+            if ("write-allowed".equals(name) && normalized instanceof String text
+                    && ("true".equalsIgnoreCase(text) || "false".equalsIgnoreCase(text))) {
+                normalized = Boolean.valueOf(text);
+            }
+            result.put(name, normalized);
+        });
+        return result;
+    }
+
+    private static Object normalizeBoundValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> nested = normalizeBoundMap(map);
+            if (!nested.isEmpty() && java.util.stream.IntStream.range(0, nested.size())
+                    .allMatch(index -> nested.containsKey(String.valueOf(index)))) {
+                return java.util.stream.IntStream.range(0, nested.size())
+                        .mapToObj(index -> nested.get(String.valueOf(index))).toList();
+            }
+            return nested;
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().map(EnvironmentRegistryFactory::normalizeBoundValue).toList();
+        }
+        return value;
     }
 
     /**

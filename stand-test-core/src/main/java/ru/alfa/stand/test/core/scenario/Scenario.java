@@ -66,6 +66,18 @@ public final class Scenario {
         return environment;
     }
 
+    /** Returns an immutable copy with the supplied logical environment. */
+    public Scenario withEnvironment(String value) {
+        Builder copy = new Builder(id);
+        copy.environment = value;
+        copy.steps.addAll(steps);
+        copy.tags.addAll(tags);
+        copy.title = title;
+        copy.description = description;
+        copy.cleanupPolicy = cleanupPolicy;
+        return new Scenario(copy);
+    }
+
     public List<ScenarioStep> steps() {
         return steps;
     }

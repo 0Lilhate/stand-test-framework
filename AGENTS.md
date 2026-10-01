@@ -19,9 +19,11 @@ Allure) that gives one consistent way to write integration/e2e tests against **r
 `correlationId`, a single await mechanism (no `Thread.sleep`), unified reporting, and a constrained
 declarative format safe for AI-generated tests.
 
-**`docs/arch/stand-test-sdk-implementation-plan.md` is the source of truth.** Read it before
-implementing anything — it defines the module graph, the core contracts (§8 "Итерация 0"), the MVP
-scope (§6), and the strict implementation order (§7). Each module also has a `README.md`, and the root
+**The former `docs/arch/stand-test-sdk-implementation-plan.md` is unavailable and must not be treated
+as a prerequisite.** The implemented module graph and core contracts are documented in this file and
+the current source code; each module has a `README.md`. For EQ data provisioning, read
+`docs/brd/eq-data-provisioning-brd.md` and `docs/plans/eq-data-provisioning-implementation-plan.md`
+before changing code; they define that feature's requirements, dependencies and delivery order. The root
 `README.md` is the consumer-facing quick start (module table, `stand-test-environments.yml` example,
 plain-JUnit and Spring Boot setup) — keep it in sync when consumer-visible behaviour changes.
 
@@ -33,7 +35,7 @@ plain-JUnit and Spring Boot setup) — keep it in sync when consumer-visible beh
 ./gradlew :stand-test-core:test       # run a module's tests
 ./gradlew :stand-test-core:checkstyleMain :stand-test-core:spotbugsMain   # analysis only (strict: any finding fails)
 ./gradlew publishToMavenLocal         # publish modules locally (never needs the remote-repo properties)
-./gradlew publish -PARTIFACTORY_USER=<user> -PARTIFACTORY_PASSWORD=<token>   # remote publish; see docs/publishing.md
+ARTIFACTORY_USER=<user> ARTIFACTORY_PASSWORD=<token> ./gradlew publish   # remote publish (env vars, NOT -P); see docs/publishing.md
 ./gradlew printVersion                # the version the CI publish stage reads (ru.alfalab.semantic-version)
 
 # Run a single test class / method (JUnit 5 platform):
@@ -47,11 +49,15 @@ Use `--console=plain` for clean CI-style output. Configuration cache, parallel a
 ## Build conventions (non-obvious, enforced)
 
 - **The build runs on the corporate configurer plugins** (since 2026-09-09, to make the Jenkins job
-  green: it calls `:sonar` and `dockerCreateDockerfile`, neither of which a hand-rolled build has).
-  The `dockerCreateDockerfile` stub is **not** a no-op: the pipeline's prepublish stage asserts
-  `find . -type f -path '*/build/docker/Dockerfile'` after calling it, so the task writes a placeholder
-  `FROM scratch` context. `artifact_target_type=BUILD` gates only `publish`, not `prepublish` — see the
-  CI section of the root `README.md` before touching either.
+  green: it calls `:sonar`, which a hand-rolled build has no task for).
+  **There is deliberately no docker stub any more.** The microservice pipeline's prepublish stage
+  asserts `find . -type f -path '*/build/docker/Dockerfile'`, and a hand-written `dockerCreateDockerfile`
+  task used to satisfy it with a `FROM scratch` placeholder; it was removed (with the now-unread
+  `docker_registry` property) because this repository ships Maven artifacts and no image, and a
+  context an image could accidentally be pushed from is worse than no context. The consequence is a
+  requirement on the job, not on the build: it needs a library pipeline, or a microservice one with the
+  docker stages gated — `artifact_target_type=BUILD` gates only `publish`, not `prepublish`. See the CI
+  section of the root `README.md` before re-adding anything docker-shaped.
   Root declares `ru.alfalab.library-configurer:10.0.4` (`apply false` — that is what puts
   `ru.alfalab.gradle:base`, and with it `sonarqube-gradle-plugin`, on the script classpath) plus
   `ru.alfalab.semantic-version`, and applies `ru.alfalab.codestyle` and `org.sonarqube` to the root
@@ -65,7 +71,9 @@ Use `--console=plain` for clean CI-style output. Configuration cache, parallel a
   version catalog `gradle/libs.versions.toml` — add versions there, not as inline coordinates.
 - **What the configurer brings** (verified in its sources): `java-library`, `maven-publish` with a
   publication named `artifact` and an `alfa` repository (`ARTIFACTORY_HOST` / `ARTIFACTORY_USER` /
-  `ARTIFACTORY_PASSWORD`, repo keys `LIBRARY_RELEASE_REPOSITORY` / `LIBRARY_SNAPSHOT_REPOSITORY`),
+  `ARTIFACTORY_PASSWORD`, repo keys `LIBRARY_RELEASE_REPOSITORY` / `LIBRARY_SNAPSHOT_REPOSITORY` — each
+  read by its `PropertyUtils` as an UPPER-case **env var** or a lower-case Gradle property, so
+  `-PARTIFACTORY_USER=…` reaches nothing and the environment is the only spelling that works),
   `withSourcesJar()`, JUnit-platform test wiring, JaCoCo **reports** (no coverage gate), SonarQube,
   and checkstyle + SpotBugs through the `ru.vyarus` quality plugin. Three consequences worth knowing
   before they surprise you: the corporate checkstyle config is generated into
@@ -105,14 +113,14 @@ Use `--console=plain` for clean CI-style output. Configuration cache, parallel a
 - **`stand-test-bom` is a `java-platform`** and is deliberately *skipped* by the root `subprojects`
   block — `library-configurer` cannot be applied to it, since it pulls in `java-library`. It therefore
   keeps its own `maven-publish` block, which mirrors the corporate `alfa` repository property-for-property
-  so all 13 artefacts land in the same place, plus the `verifyBomCoversEveryPublishedModule` guard.
+  so all artefacts land in the same place, plus the `verifyBomCoversEveryPublishedModule` guard.
   External consumers import it via `testImplementation(platform("ru.alfa.stand.test:stand-test-bom:<version>"))`.
 - **The toolchain the configurer declares is overridden on purpose.** Its `SourcesConfigurer` pins
   toolchain **17**, and the CI agent has only JDK 25 with no way to provision another, so the root
   `subprojects` block re-points the toolchain at the JVM running Gradle
   (`JavaVersion.current()`) and keeps the artefact contract through **`--release 17`** (catalog
-  `javaRelease`). Bytecode still targets Java 17 and the SDK still loads on consumer JDK 17/21/24 (plan
-  §14 resolved) whichever JDK built it. `--release 17` also bans APIs newer than 17, so keep sources
+  `javaRelease`). Bytecode still targets Java 17 and the SDK still loads on consumer JDK 17/21/24
+  whichever JDK built it. `--release 17` also bans APIs newer than 17, so keep sources
   17-compatible (no Sequenced-collection APIs, `Math.clamp`, virtual threads, record-patterns /
   pattern-switch). To retarget, change `javaRelease` only. Gradle wrapper is **9.6.1** — the corporate
   `AlfaBasePlugin` refuses to run on anything older.
@@ -132,8 +140,8 @@ YAML DSL ────────────────┘                    
 - **The Java DSL is a lazy builder.** It assembles an immutable `Scenario` and executes nothing;
   imperative eager-IO in a fluent chain is forbidden because it would bypass the validator/guardrails.
 - **`stand-test-core` is the dependency-graph sink** — it depends on no sibling module and on no
-  adapter/IO library. Its one sanctioned external dependency is the logging facade `slf4j-api` (plan
-  §17: SLF4J + MDC) — a pure facade with no binding/IO, so the "JDK-only, no IO" invariant still holds
+  adapter/IO library. Its one sanctioned external dependency is the logging facade `slf4j-api`
+  (SLF4J + MDC) — a pure facade with no binding/IO, so the "JDK-only, no IO" invariant still holds
   and the consumer supplies the binding. It owns the generic model (`Scenario`/`ScenarioStep`), the SPI
   (`ScenarioRunner`, `StepExecutor`, `StepExecutionContext`), value objects, result/event models,
   validation and exceptions. **Typed steps (`RestStep`/`KafkaStep`/…) and `StepExecutor`
@@ -143,6 +151,7 @@ YAML DSL ────────────────┘                    
 ### Module graph (`A → B` = A depends on B; keep this acyclic, core is the only sink)
 
 - `await`, `junit`, `rest`, `kafka`, `db`, `grpc`, `ui` → `core` (and the adapters + junit also → `await`)
+- `eq` → `core` for its initial lazy DSL; the planned executor depends on the stage-1 `http` module and `await`
 - `allure` → `core`; `scenario-yaml` → **core only** (adapters resolved via SPI at runtime, no compile edges); `config` → **core only** (+ SnakeYAML; ships the `FileEnvironmentRegistry` SPI provider that loads `stand-test-environments.yml`)
 - `spring-boot-starter` → the runtime modules it wires as `compileOnly` optionals (never the reverse); `bom` is the `java-platform` outside the compile graph — it constrains every published module plus the curated third-party versions (only external consumers import it)
 - **Adapter modules must not depend on each other.** Each module's `build.gradle.kts` keeps its
@@ -155,7 +164,7 @@ YAML DSL ────────────────┘                    
   driver package, and nothing depending on `ui`. The rules above are now convention: a violation
   compiles and the build stays green, so check the graph by reading the `build.gradle.kts` files.
 
-### Core contracts to respect (plan §8)
+### Core contracts to respect
 
 - **`ScenarioContext` is immutable metadata only** (ids, environment, tags, createdAt). Runtime
   variables live in a separate **mutable `VariableStore`**, one per run, owned by the runner — never
@@ -273,7 +282,9 @@ YAML DSL ────────────────┘                    
 
 ## Current state & where to work
 
-**All modules are implemented** (the plan's iterations 0–10 plus the follow-on modules):
+**The original SDK modules are implemented; `stand-test-eq` is under development:**
+Its current slice contains the `eq.seed` DSL only, with no `StepExecutor` provider; see
+`stand-test-eq/README.md`. Do not treat it as a runnable adapter yet.
 **`stand-test-core`** (models, value objects, contracts, SPI, the `core.validation` SQL
 classifier/`SqlSpanScanner`, the pre-flight guardrail validator, the `core.event` reporting events and
 the `core.assertion` matcher evaluator — `AssertionMatcher`/`AssertionMatchers`, absent wire key =
@@ -361,10 +372,16 @@ real but whose remedy was Java.
 Publishing is wired by the corporate configurer: the `alfa` repository takes its host and credentials
 from `ARTIFACTORY_HOST` / `ARTIFACTORY_USER` / `ARTIFACTORY_PASSWORD` and its repo keys from
 `LIBRARY_SNAPSHOT_REPOSITORY` / `LIBRARY_RELEASE_REPOSITORY` (snapshot or release chosen by the version
-suffix; `stand-test-bom` mirrors the same properties by hand — see `docs/publishing.md`). Only a first
-real publish run remains; note that the Jenkins job publishes a docker image, not maven artifacts, so a
-green pipeline does not mean the SDK was published. Remediation from the 2026-07
-full-library review is **complete** (the critical, all 9 majors and all deferred minors are fixed and
+suffix; `stand-test-bom` mirrors the same properties by hand — but reads *its* Gradle property in UPPER
+case where the configurer reads a lower-case one, which is why credentials go through the environment
+and no `-P` spelling covers all artefacts — see `docs/publishing.md`). Two things a first publish
+runs into: the deploy target must be a **local** repository (`.../artifactory/public/` is a virtual
+aggregate of ~57 repos and refuses a PUT — it is a read address), and the account needs the Deploy
+right on it; a local attempt on 2026-09-16 built all 13 artefacts green and got `403` on the first PUT
+into every `tksc-*` repository, so the SDK is still unpublished and the blocker is a permission, not
+the build. A green Jenkins pipeline does not by itself mean the SDK was published either — the
+microservice job's publish stage is about a docker image, which this repository does not build.
+Remediation from the 2026-07 full-library review is **complete** (the critical, all 9 majors and all deferred minors are fixed and
 pinned by tests — see the memory note `full-library-review-2026-07` for the item-by-item record). The
 standing rules still apply: do not start work that destabilises a module's dependencies, and do not pull
 adapter/IO, Spring, Allure, YAML or business logic into `stand-test-core`.

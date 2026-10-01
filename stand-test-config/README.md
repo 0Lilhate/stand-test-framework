@@ -36,7 +36,8 @@ Add the module (typically `testImplementation`) and drop a `stand-test-environme
 classpath (`src/test/resources`):
 
 ```yaml
-version: 2                                        # registry FORMAT version (optional; absent means 1)
+version: 6                                        # registry FORMAT version (optional; absent means 1)
+default-environment: ${APP_STEND:ift}             # optional; requires version 6
 environments:
   ift:
     services:
@@ -114,8 +115,8 @@ The warning is attached to the parse of the document — once per load, per surf
 alias resolution, so a scenario touching a dozen aliases does not print a dozen copies.
 
 A section introduced after version 1 requires the document to declare at least the version it arrived
-in — `ui-applications` requires `version: 2`, and the `auth.login` / `auth.challenge` keys inside it
-require `version: 3`. A field added to an existing section counts as a section for this purpose: an SDK
+in — `ui-applications` requires `version: 2`, the `auth.login` / `auth.challenge` keys inside it
+require `version: 3`, and `default-environment` plus `eq-backends` require `version: 6`. A field added to an existing section counts as a section for this purpose: an SDK
 built before those keys existed greets them with `Unknown field 'login'`, which is exactly the case the
 version key exists to replace.
 

@@ -1,38 +1,92 @@
 # Publishing the stand-test SDK
 
-The build publishes **13 artifacts** — the 12 SDK modules plus `stand-test-bom` (a `java-platform`
+The build publishes **15 artifacts** — the 14 SDK modules plus `stand-test-bom` (a `java-platform`
 carrying only a POM). Every module
 artifact ships `.jar` + `-sources.jar` + `-javadoc.jar` (javadoc is generated with doclint disabled).
+`stand-test-http` also has Gradle test fixtures for SDK tests; their variants are excluded from its Maven publication.
+`stand-test-eq` implements the confirmed showcases organisation slice (executor registered through both
+SPI and the starter); its `gateway` backend and individuals remain fail-closed, so do not release this
+working tree as a fully consumer-ready EQ SDK.
 
 ## Repository configuration
 
 Publication is wired by the corporate `ru.alfalab.library-configurer`: it creates one publication per
 module (named `artifact`) and one repository (named `alfa`). The endpoint is not in this repository —
-it comes from the corporate properties, each of which is read as a Gradle property or an environment
-variable of the same name:
+it comes from the corporate settings below.
 
-| Property / env var | Default | Meaning |
+| Setting | Default | Meaning |
 | --- | --- | --- |
-| `ARTIFACTORY_HOST` | `https://binary.alfabank.ru` | Artifactory base URL |
+| `ARTIFACTORY_HOST` | `https://binary.alfabank.ru` | Artifactory base URL; the repository URL is `$host/artifactory/$repo` |
 | `ARTIFACTORY_USER` | — | publish user |
-| `ARTIFACTORY_PASSWORD` | — | publish token |
+| `ARTIFACTORY_PASSWORD` | — | publish password or token |
 | `LIBRARY_SNAPSHOT_REPOSITORY` | `libs-snapshot-local` | repo key for `-SNAPSHOT` versions |
 | `LIBRARY_RELEASE_REPOSITORY` | `libs-release-local` | repo key for release versions |
 
 Snapshot or release is chosen by the version the build carries: `*-SNAPSHOT` → the snapshot repo,
 anything else → the release repo. `stand-test-bom` cannot use the configurer (it is a `java-platform`,
-and the configurer applies `java-library`), so its own build script mirrors the very same properties —
+and the configurer applies `java-library`), so its own build script mirrors the very same settings —
 keep the two in step if the corporate plugin ever changes them.
 
 `./gradlew build` and `./gradlew publishToMavenLocal` need none of this.
 
-```bash
-# Snapshot to the internal repo
-./gradlew publish -PARTIFACTORY_USER=ci-user -PARTIFACTORY_PASSWORD=***
+### Pass them as environment variables, not as `-P`
 
-# Same via environment (e.g. CI secrets)
-ARTIFACTORY_USER=ci-user ARTIFACTORY_PASSWORD=*** ./gradlew publish
+**A `-PARTIFACTORY_USER=…` on the command line is silently ignored by the 14 SDK modules.** The configurer
+reads every one of these settings through `PropertyUtils` in `ru.alfalab.gradle:base`:
+
+```groovy
+static Provider<String> globalProperty(ProviderFactory providers, String name) {
+    return providers.environmentVariable(name.toUpperCase())
+            .orElse(providers.gradleProperty(name.toLowerCase()))   // ← lowercase
+}
 ```
+
+So a *Gradle property* only counts when it is spelled in **lower case** (`artifactory_user`), while
+`stand-test-bom/build.gradle.kts` reads its own `corporateProperty("ARTIFACTORY_USER")` in **upper
+case**. No single `-P` spelling reaches all 15 artifacts; an **environment variable** (upper case)
+does, and that is the one way to spell it that is right everywhere.
+
+```bash
+export ARTIFACTORY_HOST=https://binary.alfabank.ru
+export LIBRARY_SNAPSHOT_REPOSITORY=libs-snapshot-local
+export LIBRARY_RELEASE_REPOSITORY=libs-release-local
+export ARTIFACTORY_USER=ci-user
+read -rs ARTIFACTORY_PASSWORD && export ARTIFACTORY_PASSWORD   # keeps it out of the shell history
+
+./gradlew publish --console=plain
+```
+
+### Which repository can be published to
+
+The deploy target must be a **local** repository. `.../artifactory/public/` — the URL most consumers
+have in their settings — is a **virtual** repository aggregating ~57 others, and a virtual repository
+without a default deployment repository refuses a PUT. It is a read address, not a publish address.
+
+`libs-snapshot-local` / `libs-release-local`, the configurer's defaults, are members of both `public`
+and `maven-secure` (the repository this build itself resolves from), so publishing there needs no
+change on the consumer side. A team-local repository such as `tksc-maven-snapshots` works too, but it
+is in neither aggregate, so consumers would have to declare it explicitly:
+
+```kotlin
+repositories { maven { url = uri("https://binary.alfabank.ru/artifactory/tksc-maven-snapshots") } }
+```
+
+`binary.alfabank.ru` and `binary.moscow.alfaintra.net` are two names for the same instance; both serve
+https. The configurer sets `allowInsecureProtocol = true`, so a plain-`http` host also works, but
+prefer https.
+
+### When `publish` fails at the first PUT
+
+**`401`** — the credentials were rejected. Check that the user and password actually reach Gradle: a
+trailing space or a `\r` on a `gradle.properties` line is enough to break one.
+
+**`403`** — the login succeeded and the account simply lacks the deploy right on that repository or
+path. Ask the Artifactory owners for Deploy/Cache on `ru/alfa/stand/test/**` in the target repository,
+or publish from CI under its own account.
+
+A quick way to tell the two apart without running the build: `curl -u user:pass` any Artifactory API
+endpoint. `401` means the login itself failed; `403` means it succeeded and the account merely lacks
+the right. Nothing is written on a `403`, so a failed run leaves no partial upload behind.
 
 Note what the POMs now carry: the configurer adds the Spring Boot and Spring Cloud BOMs as `api`
 platforms to **every** module, so each published POM imports them under `dependencyManagement` —
@@ -61,8 +115,8 @@ from the git tags: with no release tag yet the plugin starts at `0.1.0`.
 2. `./gradlew printReleaseVersion` — confirm the number the release will carry.
 3. Tag it: `git tag -a 0.1.0 -m 'Release 0.1.0' && git push origin 0.1.0`. The tag is what makes the
    version a release; nothing is edited in `gradle.properties`.
-4. `./gradlew publish -PARTIFACTORY_USER=… -PARTIFACTORY_PASSWORD=…` from the tagged commit — the
-   release repo is chosen by the version having no `-SNAPSHOT` suffix.
+4. `./gradlew publish` from the tagged commit, with the credentials exported as environment
+   variables (see above) — the release repo is chosen by the version having no `-SNAPSHOT` suffix.
 
 Snapshots need no ceremony at all: publish from any branch and the coordinates carry the branch name.
 
@@ -110,7 +164,7 @@ testImplementation("ru.alfa.stand.test:stand-test-rest")
 
 ```bash
 ./gradlew publishToMavenLocal
-ls ~/.m2/repository/ru/alfa/stand/test/            # 13 directories
+ls ~/.m2/repository/ru/alfa/stand/test/            # 15 directories
 ls ~/.m2/repository/ru/alfa/stand/test/stand-test-core/<version>/   # jar + sources + javadoc + pom
 ```
 

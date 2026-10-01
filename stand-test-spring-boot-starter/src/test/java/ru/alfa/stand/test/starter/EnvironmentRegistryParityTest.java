@@ -5,9 +5,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.lang.reflect.RecordComponent;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.env.YamlPropertySourceLoader;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.core.io.ByteArrayResource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,10 +21,12 @@ import ru.alfa.stand.test.config.YamlEnvironmentConfigLoader;
 import ru.alfa.stand.test.core.environment.AuthScheme;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
+import ru.alfa.stand.test.core.environment.EnvironmentSection;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.UiAuthConfig;
 import ru.alfa.stand.test.core.environment.UiAuthScheme;
 import ru.alfa.stand.test.core.environment.UiLoginChallenge;
+import ru.alfa.stand.test.eq.config.EqBackendConfigParser;
 
 /**
  * Parity guard between the two hand-maintained surface->registry mappers of the same logical schema:
@@ -38,6 +45,138 @@ class EnvironmentRegistryParityTest {
     @AfterEach
     void clearConfigPathProperty() {
         System.clearProperty(CONFIG_PATH_PROPERTY);
+    }
+
+    @Test
+    @DisplayName("BR-45: Spring binding and file YAML preserve the same nested version-6 backend section")
+    void backendSectionParity() throws IOException {
+        String yaml = """
+                version: 6
+                default-environment: ${STAND_TEST_STAGE1_UNSET:ift}
+                environments:
+                  ift:
+                    eq-backends:
+                      eq:
+                        kind: showcases
+                        service: showcases
+                        path: /showcases/load/list
+                  test:
+                    eq-backends:
+                      eq:
+                        kind: gateway
+                        write-allowed: true
+                        base-url-ref: EQ_GATEWAY_URL
+                        unit: {ref: EQ_UNIT}
+                        branch: {ref: EQ_BRANCH}
+                        inn-region-code: ${STAND_TEST_STAGE1_UNSET:77}
+                        inn-tax-offices: {ref: EQ_INN_TAX_OFFICES}
+                        cash-accounts:
+                          RUR: {ref: EQ_CASH_RUR}
+                          USD: {ref: EQ_CASH_USD}
+                          EUR: {ref: EQ_CASH_EUR}
+                        timeouts: {connect: 10s, response: 60s}
+                        serialization:
+                          acquire-timeout: ${STAND_TEST_STAGE1_UNSET:10m}
+                        unit-phase:
+                          system-ref: EQ_AS400_SYSTEM
+                          username-ref: EQ_AS400_USER
+                          password-ref: EQ_AS400_PASSWORD
+                          allowed: [ACTIVE, READY]
+                          cache-ttl: 5m
+                        visibility:
+                          probe:
+                            service: tks
+                            path: /api/client
+                            query: {clientCode: '{seed.pin}'}
+                            expect-status: 200
+                            expect-body: {path: '$.clientCode', equals: '{seed.pin}'}
+                          timeout: ${STAND_TEST_STAGE1_UNSET:120s}
+                          poll-interval: 2s
+                        defaults:
+                          organisation: {name-prefix: 'ООО АТ'}
+                          account: {type-organisation: CA, type-individual: EE, currency: RUR, top-up: 100000}
+                """;
+        EnvironmentRegistry fromYaml = loadFromYaml(yaml);
+        EnvironmentSection expected = fromYaml.environment("test").orElseThrow().section("eq-backends").orElseThrow();
+        System.clearProperty(CONFIG_PATH_PROPERTY);
+        String starterYaml = "stand:\n  test:\n" + yaml.indent(4);
+        var propertySources = new YamlPropertySourceLoader().load("stage-one",
+                new ByteArrayResource(starterYaml.getBytes(StandardCharsets.UTF_8)));
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(StandTestAutoConfiguration.class))
+                .withInitializer(context -> propertySources.forEach(context.getEnvironment().getPropertySources()::addFirst))
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    EnvironmentSection actual = context.getBean(EnvironmentRegistry.class).environment("test")
+                            .orElseThrow().section("eq-backends").orElseThrow();
+                    assertThat(actual).isEqualTo(expected);
+                    assertThat(EqBackendConfigParser.parse("test", actual.entries().get("eq")))
+                            .isEqualTo(EqBackendConfigParser.parse("test", expected.entries().get("eq")));
+                    assertThat(context.getBean(EnvironmentRegistry.class).environment("ift").orElseThrow()
+                            .section("eq-backends")).isEqualTo(fromYaml.environment("ift").orElseThrow().section("eq-backends"));
+                });
+    }
+
+    @Test
+    @DisplayName("BR-45: v5 remains readable, v6 accepts no new keys, and v7 is rejected on both surfaces")
+    void versionSixCompatibility() throws IOException {
+        for (int version : List.of(5, 6)) {
+            StandTestProperties properties = new StandTestProperties();
+            properties.setVersion(version);
+            properties.getEnvironments().put("ift", new StandTestProperties.Environment());
+            assertThat(EnvironmentRegistryFactory.build(properties).environment("ift")).isPresent();
+            assertThat(loadFromYaml("version: " + version + "\nenvironments: {ift: {}}\n").environment("ift"))
+                    .isPresent();
+        }
+        StandTestProperties future = new StandTestProperties();
+        future.setVersion(7);
+        assertThatThrownBy(() -> EnvironmentRegistryFactory.build(future)).hasMessageContaining("up to 6");
+        assertThatThrownBy(() -> loadFromYaml("version: 7\nenvironments: {}\n")).hasMessageContaining("up to 6");
+
+        StandTestProperties oldWithSection = new StandTestProperties();
+        oldWithSection.setVersion(5);
+        StandTestProperties.Environment ift = new StandTestProperties.Environment();
+        ift.getEqBackends().put("eq", java.util.Map.of("kind", "showcases"));
+        oldWithSection.getEnvironments().put("ift", ift);
+        assertThatThrownBy(() -> EnvironmentRegistryFactory.build(oldWithSection)).hasMessageContaining("version 6");
+        assertThatThrownBy(() -> loadFromYaml("""
+                version: 5
+                environments:
+                  ift:
+                    eq-backends:
+                      eq: {kind: showcases}
+                """)).hasMessageContaining("version 6");
+    }
+
+    @Test
+    @DisplayName("BR-01/04: default environment is version-gated and validated on both registry surfaces")
+    void defaultEnvironmentParity() throws IOException {
+        StandTestProperties properties = new StandTestProperties();
+        properties.setVersion(6);
+        properties.setDefaultEnvironment("ift");
+        properties.getEnvironments().put("ift", new StandTestProperties.Environment());
+
+        assertThat(EnvironmentRegistryFactory.build(properties).defaultEnvironment()).contains("ift");
+        assertThat(loadFromYaml("""
+                version: 6
+                default-environment: ${STAND_TEST_STAGE1_UNSET:ift}
+                environments: {ift: {}}
+                """).defaultEnvironment()).contains("ift");
+
+        properties.setDefaultEnvironment("missing");
+        assertThatThrownBy(() -> EnvironmentRegistryFactory.build(properties)).hasMessageContaining("missing");
+        assertThatThrownBy(() -> loadFromYaml("""
+                version: 6
+                default-environment: missing
+                environments: {ift: {}}
+                """)).hasMessageContaining("missing");
+        properties.setVersion(5);
+        assertThatThrownBy(() -> EnvironmentRegistryFactory.build(properties)).hasMessageContaining("version 6");
+        assertThatThrownBy(() -> loadFromYaml("""
+                version: 5
+                default-environment: ift
+                environments: {ift: {}}
+                """)).hasMessageContaining("version 6");
     }
 
     @Test

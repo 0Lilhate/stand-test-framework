@@ -23,6 +23,7 @@ import ru.alfa.stand.test.core.execution.StepExecutor;
 import ru.alfa.stand.test.core.validation.DefaultScenarioValidator;
 import ru.alfa.stand.test.core.validation.ScenarioValidator;
 import ru.alfa.stand.test.db.DbStepExecutor;
+import ru.alfa.stand.test.eq.EqStepExecutor;
 import ru.alfa.stand.test.grpc.GrpcStepExecutor;
 import ru.alfa.stand.test.kafka.KafkaStepExecutor;
 import ru.alfa.stand.test.rest.RestStepExecutor;
@@ -224,6 +225,25 @@ public class StandTestAutoConfiguration implements BeanClassLoaderAware {
         @ConditionalOnMissingBean(GrpcStepExecutor.class)
         public GrpcStepExecutor standTestGrpcStepExecutor() {
             return new GrpcStepExecutor();
+        }
+    }
+
+    /**
+     * EQ executor contribution, active only when {@code stand-test-eq} is on the classpath.
+     */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(EqStepExecutor.class)
+    static class EqConfiguration {
+
+        /**
+         * EQ step executor.
+         *
+         * @return the EQ step executor
+         */
+        @Bean
+        @ConditionalOnMissingBean(EqStepExecutor.class)
+        public EqStepExecutor standTestEqStepExecutor() {
+            return new EqStepExecutor();
         }
     }
 

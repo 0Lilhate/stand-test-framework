@@ -9,6 +9,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import ru.alfa.stand.test.core.environment.DatasourceDefinition;
 import ru.alfa.stand.test.core.environment.EnvironmentDefinition;
+import ru.alfa.stand.test.core.environment.EnvironmentSection;
+import ru.alfa.stand.test.core.environment.SectionEntry;
 import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.InMemoryEnvironmentRegistry;
 import ru.alfa.stand.test.core.environment.ServiceEndpointDefinition;
@@ -28,6 +30,28 @@ import ru.alfa.stand.test.core.scenario.StepParameterKeys;
 class DefaultScenarioValidatorTest {
 
     private final ScenarioValidator validator = new DefaultScenarioValidator();
+
+    @Test
+    @DisplayName("SEC-02: eq steps require a backend alias declared in the environment section")
+    void eqBackendWhitelist() {
+        EnvironmentDefinition ift = new EnvironmentDefinition("ift", Map.of(), Map.of(), Map.of(), Map.of(),
+                null, Map.of(), Map.of(), Map.of("eq-backends", new EnvironmentSection("eq-backends",
+                        Map.of("eq", new SectionEntry("eq", Map.of("kind", "showcases"))))));
+        EnvironmentRegistry registry = new InMemoryEnvironmentRegistry(Map.of("ift", ift));
+
+        Scenario allowed = Scenario.builder("eq-allowed").environment("ift")
+                .step(new GenericStep("seed", "eq.seed", "", Map.of("backend", "eq"))).build();
+        Scenario unknown = Scenario.builder("eq-unknown").environment("ift")
+                .step(new GenericStep("seed", "eq.seed", "", Map.of("backend", "other"))).build();
+        Scenario missing = Scenario.builder("eq-missing").environment("ift")
+                .step(GenericStep.of("seed", "eq.seed")).build();
+
+        assertThat(validator.validate(allowed, registry).isValid()).isTrue();
+        assertThat(validator.validate(unknown, registry).errors()).extracting(ValidationIssue::code)
+                .contains("NON_WHITELISTED_EQ_BACKEND");
+        assertThat(validator.validate(missing, registry).errors()).extracting(ValidationIssue::code)
+                .contains("EQ_BACKEND_REQUIRED");
+    }
 
     @Test
     @DisplayName("a well-formed scenario is valid")
@@ -529,6 +553,29 @@ class DefaultScenarioValidatorTest {
         assertThat(result.isValid()).isTrue();
         assertThat(result.errors()).extracting(ValidationIssue::code)
                 .doesNotContain(ForbiddenOperation.NON_WHITELISTED_ENVIRONMENT.code());
+    }
+
+    @Test
+    @DisplayName("AC-7: a direct RestStep.post(\"showcases\") in the test environment is refused before IO")
+    void showcasesServiceIsNotWhitelistedOnTestEnvironment() {
+        // The `test` environment has the real EQ gateway and deliberately no `showcases` alias: the
+        // data-mart mock exists only on ift. A scenario that reaches for it must be refused here, before
+        // any HTTP call, so a mock-seeded test cannot silently run against it.
+        EnvironmentDefinition test = new EnvironmentDefinition("test", Map.of(), Map.of(), Map.of(), Map.of(),
+                null, Map.of(), Map.of(), Map.of("eq-backends", new EnvironmentSection("eq-backends",
+                        Map.of("eq", new SectionEntry("eq", Map.of("kind", "gateway"))))));
+        EnvironmentRegistry registry = new InMemoryEnvironmentRegistry(Map.of("test", test));
+
+        Scenario directSeeding = Scenario.builder("lgot-direct-showcases")
+                .environment("test")
+                .step(new GenericStep("seed", "rest.post", "", Map.of(StepParameterKeys.SERVICE, "showcases")))
+                .build();
+
+        ValidationResult result = validator.validate(directSeeding, registry);
+
+        assertThat(result.isValid()).isFalse();
+        assertThat(result.errors()).extracting(ValidationIssue::code)
+                .contains(ForbiddenOperation.NON_WHITELISTED_SERVICE.code());
     }
 
     private static EnvironmentRegistry mainDbRegistry() {

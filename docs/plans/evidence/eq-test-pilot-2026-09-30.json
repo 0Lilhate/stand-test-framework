@@ -1,0 +1,43 @@
+{
+  "capturedOn": "2026-09-30",
+  "gate": "G0-TEST / AC-1",
+  "pilot": "ru.alfa.taksa.lgot.UlDiscountSchemeCancelTest",
+  "command": "APP_STEND=test ./gradlew test --tests 'ru.alfa.taksa.lgot.UlDiscountSchemeCancelTest'",
+  "result": "PASSED (9s), BUILD SUCCESSFUL — the pilot runs green on the test stand with the real gateway backend, unchanged test code (AC-1)",
+  "unitPhaseDiscovery": {
+    "source": "mock gateway option PHASE (the same option eq_at uses: run_option(\"PHASE\",\"A\",\"UNIT\"=>$unit))",
+    "K68": "DSU — not a working phase; ONU/OKC are rejected with KSM4001 (write forbidden while the unit is closed)",
+    "D68": "DOK — working phase; ONU issues a PIN (UDHSUK/UDHSUM), OKC an account (40702…), YFT2/KP1 {}, SPU {}",
+    "B01": "DOK — but B01 is the read-only / production-shadow unit (a forbidden seeding target)",
+    "conclusion": "unit-phase.allowed: [DOK] is correct; the working unit is D68 (K68 was in DSU at capture time). This is exactly the failure the unit-phase precondition catches."
+  },
+  "mockBehaviour": {
+    "endpoint": "http://10.232.128.12:4567/api",
+    "kind": "JRuby/WEBrick mock (Server: WEBrick/1.8.1)",
+    "units": "K68, D68, B01",
+    "phase": "PHASE returns {RESULT: <phase>}",
+    "notes": "ONU at a non-working unit -> Error: KSM4001 (HTTP 200). Unknown option -> 'No such file or directory - yaml/<option>.yaml'. Unknown param -> \"Don't Find Parameter |X|\"."
+  },
+  "sdkDefectsFixedDuringPilot": [
+    {
+      "id": "WebClient timeout",
+      "where": "stand-test-http WebClientHttpCaller.execute(request, timeout)",
+      "was": ".block(min(timeout, RESPONSE_TIMEOUT=30s)) — the registry response timeout (60s) was silently clamped to 30s",
+      "now": ".block(timeout) — the caller's timeout is authoritative",
+      "why": "YFT2/TXN on the real gateway take ~10s each; the clamp made the registry timeout unreachable and the chain timed out"
+    },
+    {
+      "id": "gateway *-ref accepts a value",
+      "where": "core SecretReferences.resolveOrLiteral/requireReferenceOrLiteral, eq ConfiguredValue.resolve/EqConfigReader.reference/EqStepExecutor.resolveReference",
+      "why": "Spring collapses ${VAR:default} before the SDK sees eq-backends, so base-url-ref arrives holding the URL and unit-phase.system-ref a system name; both are now accepted, literal:// stays refused"
+    }
+  ],
+  "consumerChangesToRun": [
+    "build.gradle.kts: testRuntimeOnly(\"net.sf.jt400:jt400\") — jt400 is compileOnly in stand-test-eq (task 3.9.0)",
+    "application.yml: eq-backends.eq.unit = D68 (K68 was closed); unit-phase left commented pending AS/400 creds (EQ_AS400_USER/EQ_AS400_PASSWORD)"
+  ],
+  "remaining": [
+    "Real AS/400 phase gate: needs EQ_AS400_USER/EQ_AS400_PASSWORD (the mock answers phase without auth); re-enable unit-phase before production",
+    "Secrets still inline in application.yml (DB passwords) — move to bare *-ref env vars"
+  ]
+}

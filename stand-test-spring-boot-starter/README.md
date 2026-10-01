@@ -98,7 +98,8 @@ wire, just with an empty executor list.
 stand:
   test:
     enabled: true
-    version: 2                # registry FORMAT version (not the SDK version); absent means 1
+    version: 6                # registry FORMAT version (not the SDK version); absent means 1
+    default-environment: ${APP_STEND:ift}
     await:
       timeout: 30s
       poll-interval: 500ms
@@ -185,6 +186,7 @@ exists to diagnose:
 | `auth.login` / `auth.challenge` inside it | `stand.test.version: 3` |
 | `auth.credentials-username` / `auth.credentials-password` | `stand.test.version: 4` |
 | `auth.credentials-username-ref` / `auth.credentials-password-ref` | `stand.test.version: 5` |
+| `default-environment` / `eq-backends` | `stand.test.version: 6` |
 
 **UI applications** are addressed by alias exactly like services and topics; a scenario names
 `client-portal` and no step can carry a URL. `base-url` / `base-url-ref` behave like every other

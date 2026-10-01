@@ -49,9 +49,10 @@ import ru.alfa.stand.test.core.exception.StandTestException;
  */
 public final class EnvironmentConfig {
 
-    private static final Set<String> ROOT_KEYS = Set.of("environments", EnvironmentConfigFormat.VERSION_FIELD);
+    private static final Set<String> ROOT_KEYS = Set.of("environments", "default-environment", EnvironmentConfigFormat.VERSION_FIELD);
+    private static final String DEFAULT_ENVIRONMENT = "default-environment";
     private static final Set<String> ENV_KEYS = Set.of("services", "topics", "datasources", "grpc-targets", "grpcTargets", "kafka-cluster",
-            "kafkaCluster", "kafka-clusters", "kafkaClusters", "ui-applications", "uiApplications");
+            "kafkaCluster", "kafka-clusters", "kafkaClusters", "ui-applications", "uiApplications", "eq-backends", "eqBackends");
     private static final Set<String> SERVICE_KEYS = Set.of("base-url-ref", "baseUrlRef", "correlation", "auth");
 
     private static final Set<String> AUTH_KEYS = Set.of("scheme", "username-ref", "usernameRef", "password-ref", "passwordRef",
@@ -95,14 +96,21 @@ public final class EnvironmentConfig {
             return new InMemoryEnvironmentRegistry(Map.of());
         }
         Map<String, Object> document = asMap(root, "<document>");
-        checkKnownKeys(document, ROOT_KEYS, "<document>");
         int version = EnvironmentConfigFormat.requireSupported(document.get(EnvironmentConfigFormat.VERSION_FIELD), "<document>");
+        checkKnownKeys(document, ROOT_KEYS, "<document>");
+        String defaultEnvironment = optionalString(document.get(DEFAULT_ENVIRONMENT), DEFAULT_ENVIRONMENT);
+        if (defaultEnvironment != null) {
+            EnvironmentConfigFormat.requireSectionSupported(version, DEFAULT_ENVIRONMENT,
+                    EnvironmentConfigFormat.DEFAULT_ENVIRONMENT_SINCE_VERSION, "<document>");
+            defaultEnvironment = FilePlaceholders.resolve(defaultEnvironment, DEFAULT_ENVIRONMENT);
+        }
         Map<String, Object> environments = namedMap(document.get("environments"), "environments");
         Map<String, EnvironmentDefinition> result = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : environments.entrySet()) {
             result.put(entry.getKey(), environment(entry.getKey(), entry.getValue(), version));
         }
-        return new InMemoryEnvironmentRegistry(result);
+        final String selectedDefault = defaultEnvironment;
+        return build("<document>", () -> new InMemoryEnvironmentRegistry(result, selectedDefault));
     }
 
     private static EnvironmentDefinition environment(String name, Object value, int version) {
@@ -134,9 +142,10 @@ public final class EnvironmentConfig {
         }
         Map<String, UiApplicationDefinition> uiApplications = uiApplications(pick(fields, "ui-applications", "uiApplications"), location,
                 version);
+        var sections = EnvironmentSections.fromFile(pick(fields, "eq-backends", "eqBackends"), location, version);
         return build(location,
                 () -> new EnvironmentDefinition(name, services, topics, datasources, grpcTargets, kafkaCluster, kafkaClusters,
-                uiApplications));
+                uiApplications, sections));
     }
 
     /**

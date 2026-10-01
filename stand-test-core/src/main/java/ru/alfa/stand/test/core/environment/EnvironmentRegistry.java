@@ -19,4 +19,9 @@ public interface EnvironmentRegistry {
      * @return the environment definition, or empty if not whitelisted
      */
     Optional<EnvironmentDefinition> environment(String name);
+
+    /** Returns the configured default, if this registry declares one. */
+    default Optional<String> defaultEnvironment() {
+        return Optional.empty();
+    }
 }

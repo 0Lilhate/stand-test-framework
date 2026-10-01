@@ -53,6 +53,14 @@ file. Read what was written.
    is somebody's real account number, a `db.seed` whose cleanup filters a different column than the
    seed tagged.
 
+   **`EqSeed` is the exception to the paired-cleanup rule.** The rule "every seed has a paired
+   cleanup" is a `db.seed` / `db.write` rule; an EQ client created by `EqSeed` is never deleted and
+   has NO cleanup step — do not raise a finding for its absence, and do not let a `db.cleanup`
+   authored only to satisfy the rule slip through. Confirm instead that the test consumes
+   `${<alias>.pin}` / `${<alias>.account}` / `${<alias>.deal.<i>}` rather than a constant, and that a
+   direct `RestStep.post("showcases", …)` appears only in an explicitly IFT-only test (a new test
+   must use `EqSeed`).
+
 **For a UI generation, load `stand-test-ui-safety-review` as well** — it is stage 7 of the UI branch
 and adds findings the protocol checklist has no equivalent of. `detectors.json` now carries **8
 UI-specific detectors**, so the machine reaches further than it did — but it reaches source, not

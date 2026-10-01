@@ -1,5 +1,10 @@
 package ru.alfa.stand.test.rest;
 
+import ru.alfa.stand.test.http.HttpCaller;
+import ru.alfa.stand.test.http.WebClientHttpCaller;
+import ru.alfa.stand.test.http.BaseUrlResolver;
+import ru.alfa.stand.test.http.EnvironmentBaseUrlResolver;
+
 import java.util.Map;
 import ru.alfa.stand.test.core.context.ScenarioContext;
 import ru.alfa.stand.test.core.environment.AuthConfig;

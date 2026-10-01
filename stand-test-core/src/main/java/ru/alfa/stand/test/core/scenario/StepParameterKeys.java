@@ -11,6 +11,13 @@ package ru.alfa.stand.test.core.scenario;
  */
 public final class StepParameterKeys {
 
+    /** Wire prefix for steps using an environment section as a backend whitelist. */
+    public static final String EQ_PREFIX = "eq.";
+    /** Wire parameter selecting a backend alias. */
+    public static final String EQ_BACKEND = "backend";
+    /** Registry section containing backend aliases. */
+    public static final String EQ_BACKENDS_SECTION = "eq-backends";
+
     /** Prefix of the core step type produced for a REST step (for example {@code rest.get}). */
     public static final String REST_PREFIX = "rest.";
     /** Prefix of the core step type produced for a Kafka step (for example {@code kafka.send}). */

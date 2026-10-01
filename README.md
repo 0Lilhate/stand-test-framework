@@ -14,11 +14,11 @@ JUnit 5, Allure) — не собственный транспорт и не Test
 | Guardrails | сценарий не может обратиться к неразрешённому стенду, зашить секрет, выполнить деструктивный SQL |
 | Ограниченный декларативный формат | YAML-поверхность, безопасная для AI-генерации тестов |
 
-**Координаты:** group `ru.alfa.stand.test`, версия `0.1.0-SNAPSHOT`, 14 модулей.
+**Координаты:** group `ru.alfa.stand.test`, версия вычисляется из git, 15 модулей.
 **Требования:** JDK 17+ у потребителя (байткод собирается с `--release 17`), JUnit 5, Gradle или Maven.
 
-Документация: [архитектурный обзор для контрибьюторов](docs/arch/architecture-overview.md) ·
-[план реализации — источник истины](docs/arch/stand-test-sdk-implementation-plan.md) ·
+Документация: [контракты и правила разработки](AGENTS.md) ·
+[план EQ data provisioning](docs/plans/eq-data-provisioning-implementation-plan.md) ·
 [публикация](docs/publishing.md).
 
 ---
@@ -71,6 +71,8 @@ flowchart LR
 flowchart RL
     core["<b>core</b><br/>сток: только slf4j-api"]
     await["await"]
+    http["http<br/>общий транспорт"]
+    eq["eq<br/>DSL: этап 2"]
 
     subgraph ad["адаптеры — не зависят друг от друга"]
         direction LR
@@ -92,8 +94,14 @@ flowchart RL
     starter["spring-boot-starter<br/>на него не зависит никто"]
 
     await --> core
+    http --> core
+    rest --> http
+    eq --> core
     ad --> await
-    ad --> core
+    kafka --> core
+    db --> core
+    grpc --> core
+    ui --> core
     junit --> await
     junit --> core
     co --> core
@@ -105,19 +113,20 @@ flowchart RL
 ```
 
 `bom` — `java-platform` вне compile-графа: он констрейнит версии, но его не импортирует ни один модуль
-(обратный импорт дал бы цикл `core → bom → core`). `example` — test-only сток: на него не зависит никто,
-зато у него на classpath лежит весь SDK сразу, поэтому именно там живёт ArchUnit-проверка графа.
+(обратный импорт дал бы цикл `core → bom → core`).
 
 | Модуль | Что даёт потребителю | Внешние зависимости |
 |---|---|---|
 | [stand-test-core](stand-test-core/README.md) | Модель, SPI, валидация, guardrails, события, исключения | **только `slf4j-api`** |
 | [stand-test-await](stand-test-await/README.md) | Поллинг-движок, `TimeSource` | `slf4j-api` |
 | [stand-test-junit](stand-test-junit/README.md) | `@StandTest` — инжект `StandClient`, composition root для plain JUnit | — |
-| [stand-test-rest](stand-test-rest/README.md) | `rest.*` шаги, инъекция correlation-заголовка, JSONPath-ассерты и captures | spring-webflux (JDK-коннектор), json-path |
+| [stand-test-http](stand-test-http/README.md) | Общий HTTP-транспорт, разрешение URL/auth и correlation-заголовок | spring-webflux (JDK-коннектор) |
+| [stand-test-rest](stand-test-rest/README.md) | `rest.*` шаги, JSONPath-ассерты и captures | json-path |
 | [stand-test-kafka](stand-test-kafka/README.md) | `kafka.*` шаги, корреляция по заголовку, уникальная consumer group на прогон | kafka-clients 3.9.x |
 | [stand-test-db](stand-test-db/README.md) | `db.*` шаги, fail-closed SQL write-guard, undo-log | **нет** — чистый `java.sql`, драйвер даёт потребитель |
 | [stand-test-grpc](stand-test-grpc/README.md) | `grpc.unary` через server reflection + `DynamicMessage`, обязательный deadline | grpc-java 1.68.x, protobuf 3.25.x |
 | [stand-test-ui](stand-test-ui/README.md) | `ui.*` шаги на Playwright, пул техучёток по ролям, артефакты падения | playwright 1.61.x |
+| [stand-test-eq](stand-test-eq/README.md) | `eq.seed`: доменный шаг подготовки данных EQ; бэкенды `showcases` (ЮЛ) и `gateway` (ЮЛ, офлайн); ФЛ и приёмка test — за внешними гейтами | jackson-databind (3.x), json-path; jt400 `compileOnly` |
 | [stand-test-allure](stand-test-allure/README.md) | Маппинг reporting-событий в Allure, маскирование вложений | allure-java-commons 2.29.x |
 | [stand-test-config](stand-test-config/README.md) | Файловый `EnvironmentRegistry` (`stand-test-environments.yml`) для plain JUnit | snakeyaml |
 | [stand-test-spring-boot-starter](stand-test-spring-boot-starter/README.md) | Boot-3 auto-configuration: `@Autowired StandClient`, окружения из `application.yml` | spring-boot-autoconfigure 3.5.x |
@@ -400,7 +409,8 @@ testRuntimeOnly("org.postgresql:postgresql:<version>")
 ни endpoints, ни секреты не попадают в исходники.
 
 ```yaml
-version: 2                                  # версия ФОРМАТА файла, не версия SDK; можно опустить — тогда 1
+version: 6                                  # версия ФОРМАТА файла, не версия SDK; можно опустить — тогда 1
+default-environment: ${APP_STEND:ift}       # необязательно; пустой Scenario.environment() возьмёт это значение
 environments:
   ift:
     services:
@@ -431,6 +441,11 @@ environments:
 
 Запускайте тесты с выставленными переменными, на которые ссылается конфиг (`CLIENT_SERVICE_URL`,
 `MAIN_DB_URL`, …). UI-приложения — см. §5.
+В стартере тот же ключ пишется как `stand.test.default-environment`. Явный `.environment(...)` имеет
+приоритет; ссылка на отсутствующее окружение останавливает загрузку реестра. Формат v5 продолжает
+загружаться, но новые ключи `default-environment` и `eq-backends` требуют v6.
+`eq-backends` сохраняется в реестре как секция алиасов; `EqSeed` исполняется бэкендом, выбранным этой
+секцией (`showcases` для confirmed-среза ЮЛ; `gateway` и `individual(...)` пока fail-closed).
 
 ### 2.3 Первый тест
 
@@ -968,7 +983,9 @@ Guardrails выводятся из `ForbiddenOperation` и enforce'ятся ра
 ./gradlew build                       # компиляция + корпоративный анализ (валит сборку) + тесты
 ./gradlew :stand-test-core:test       # тесты одного модуля
 ./gradlew publishToMavenLocal         # локальная публикация всех модулей + BOM
-./gradlew publish -PARTIFACTORY_USER=<user> -PARTIFACTORY_PASSWORD=<token>
+
+# удалённая публикация: учётка ТОЛЬКО через переменные окружения, `-P` не сработает
+ARTIFACTORY_USER=<user> ARTIFACTORY_PASSWORD=<token> ./gradlew publish
 ```
 
 Сборка стоит на корпоративных плагинах `ru.alfalab.*` (`library-configurer` на модулях, `codestyle` и
@@ -982,6 +999,12 @@ Gradle 9.6.1 (ниже корпоративный плагин не запуск
 в репозиторий `alfa`, который настраивает configurer: хост `ARTIFACTORY_HOST`, учётка `ARTIFACTORY_USER`
 / `ARTIFACTORY_PASSWORD`, ключи репозиториев `LIBRARY_SNAPSHOT_REPOSITORY` / `LIBRARY_RELEASE_REPOSITORY`
 — см. [docs/publishing.md](docs/publishing.md).
+
+Эти настройки передаются **переменными окружения**: `PropertyUtils` корпоративного плагина читает env в
+ВЕРХНЕМ регистре либо gradle-свойство в нижнем (`artifactory_user`), а `stand-test-bom` — своё
+gradle-свойство в верхнем, так что единого написания через `-P` на все 15 артефактов не существует.
+Цель публикации должна быть **локальным** репозиторием: `.../artifactory/public/` — виртуальный
+агрегат и PUT не принимает, это адрес для чтения.
 
 Статанализ (checkstyle + SpotBugs корпоративного codestyle) — **гейт сборки**: `strict = true`, любая
 находка валит `build`. Это стало возможным после того, как репозиторий довели до нуля находок; до этого
@@ -997,22 +1020,21 @@ Gradle 9.6.1 (ниже корпоративный плагин не запуск
 ### CI
 
 Репозиторий собирает **Jenkins** — джоба `stand-test-framework` по пайплайну `ci/microservice/Jenkinsfile`
-из `taksa-core/jenkins`: `build -x test` → `test` → `jacocoTestReport :sonar` → `dockerCreateDockerfile`
-(prepublish) → publish. Пайплайн микросервисный, а этот репозиторий поставляется jar-ами и никакого
-образа не публикует, поэтому в корневой сборке живёт заглушка `dockerCreateDockerfile`.
+из `taksa-core/jenkins`: `build -x test` → `test` → `jacocoTestReport :sonar` → prepublish → publish.
 
-Заглушка **не пустая, и это существенно**: стадия prepublish не ограничивается вызовом задачи — после
-неё она проверяет `find . -type f -path '*/build/docker/Dockerfile'` и валит сборку, если контекста нет
-(сборки #11 и #12 падали именно так). Поэтому задача пишет `build/docker/Dockerfile` — валидный
-`FROM scratch` с label `ru.alfa.stand.test.placeholder`, чтобы случайно собранный из него образ был
-опознаваем в реестре.
+Docker-заглушки в сборке больше нет. `dockerCreateDockerfile` (задача bmuschko-плагина, которую даёт
+только `ru.alfalab.microservice-configurer` — здесь применяется `library-configurer`) какое-то время
+жила в корневом `build.gradle.kts` как самописная заглушка, писавшая `build/docker/Dockerfile` с
+`FROM scratch`: микросервисная стадия prepublish проверяет `find . -type f -path '*/build/docker/Dockerfile'`
+и валила сборку без контекста (сборки #11 и #12). Заглушка убрана вместе со свойством `docker_registry`
+из `gradle.properties` (его читает только `MicroserviceConfigurerExtension`, в этой сборке — никто):
+этот репозиторий поставляется Maven-артефактами и никакого образа не публикует, а держать контекст,
+из которого может уехать в реестр образ-пустышка, хуже, чем не иметь его вовсе.
 
-⚠️ Параметр `artifact_target_type=BUILD` закрывает только стадию **publish**, но не prepublish — это
-проверено по эталонному `jenkinsfile-ci-docker` из `card-info-service`, где docker вообще живёт внутри
-закрытой флагом стадии publish и отдельной prepublish нет. Если в `taksa-core/jenkins` стадия publish
-тоже закрыта флагом, заглушки достаточно и никакой образ не публикуется. Если нет — из этого контекста
-соберётся и уедет в реестр образ-заглушка; это ошибка конфигурации джобы, и правильное решение —
-перевести её на библиотечный пайплайн, а заглушку удалить.
+⚠️ Отсюда следует требование к джобе: ей нужен **библиотечный** пайплайн либо микросервисный без
+docker-стадий. Параметр `artifact_target_type=BUILD` закрывает только стадию **publish**, но не
+prepublish, поэтому на микросервисном пайплайне без правки стадия prepublish снова упадёт на проверке
+docker-контекста. Это ошибка конфигурации джобы, а не сборки — чинить на стороне пайплайна.
 
 Браузерный набор (`:stand-test-ui:browserTest`) в CI не запускается — ему нужен образ с Chromium.
 
@@ -1036,7 +1058,7 @@ Gradle 9.6.1 (ниже корпоративный плагин не запуск
 
 ## 12. Куда смотреть дальше
 
-- [`docs/arch/architecture-overview.md`](docs/arch/architecture-overview.md) — устройство библиотеки изнутри
-  (для тех, кто дорабатывает сам SDK).
-- [`docs/arch/stand-test-sdk-implementation-plan.md`](docs/arch/stand-test-sdk-implementation-plan.md) —
-  источник истины по решениям и порядку реализации.
+- [`AGENTS.md`](AGENTS.md) — текущие контракты и правила разработки SDK.
+- [`docs/brd/eq-data-provisioning-brd.md`](docs/brd/eq-data-provisioning-brd.md) и
+  [`docs/plans/eq-data-provisioning-implementation-plan.md`](docs/plans/eq-data-provisioning-implementation-plan.md) —
+  требования и порядок реализации EQ data provisioning.

@@ -130,6 +130,65 @@ public final class SecretReferences {
     }
 
     /**
+     * Resolves a reference, falling back to the raw text as a literal when a bare name is not set.
+     *
+     * <p>Intended for the EQ gateway endpoint/phase {@code *-ref} fields, whose value on the Spring
+     * surface arrives already collapsed from a {@code ${VAR:default}} placeholder (Spring resolves
+     * {@code ${...}} before the SDK sees the section, so {@code base-url-ref} receives a URL and
+     * {@code system-ref} a system name). A placeholder spelling is honoured as before ({@code ${VAR}}
+     * that is unset stays null so the caller fails, {@code ${VAR:default}} yields the default); a bare
+     * NAME that IS set resolves; any other text (a Spring-substituted URL, unit or user name) is used
+     * verbatim. This keeps the {@code *-ref: ${VAR:default}} ergonomics working on both surfaces.
+     *
+     * @param reference the configured reference (may be null)
+     * @param lookup resolves a variable name to its value, or null when unset
+     * @return the resolved value, the inline default, the raw text as a fallback, or null
+     */
+    public static String resolveOrLiteral(String reference, UnaryOperator<String> lookup) {
+        Objects.requireNonNull(lookup, "lookup must not be null");
+        if (reference == null) {
+            return null;
+        }
+        String resolved = resolve(reference, lookup);
+        if (reference.trim().startsWith("${")) {
+            return resolved;
+        }
+        return resolved != null ? resolved : reference.trim();
+    }
+
+    /**
+     * Validates a {@code *-ref} value that may be EITHER a reference (a bare NAME, {@code ${NAME}} or
+     * {@code ${NAME:default}}) OR a value.
+     *
+     * <p>This is the relaxed twin of {@link #requireReferenceShape} for the EQ gateway endpoint/phase
+     * fields. On the Spring surface Spring resolves {@code ${VAR:default}} before the SDK sees the
+     * {@code eq-backends} section, so a field like {@code base-url-ref} legitimately arrives holding a
+     * URL, and {@code system-ref} holding a system name — each indistinguishable from a value. The
+     * marker is still refused fail-closed, and a malformed placeholder is still refused. The trade-off
+     * is the consumer's: a value written here lives in the configuration.
+     *
+     * @param value the configured value
+     * @param field the field name for the error message
+     * @param location the configuration location for the error message
+     * @return the validated value, verbatim
+     * @throws StandTestException if the value is blank, carries the literal marker, or is a malformed placeholder
+     */
+    public static String requireReferenceOrLiteral(String value, String field, String location) {
+        if (value == null || value.isBlank()) {
+            throw new StandTestException("Field '" + field + "' at " + location + " must be a non-blank reference or value");
+        }
+        if (isLiteral(value.trim())) {
+            throw new StandTestException("Field '" + field + "' at " + location
+                    + " carries the SDK-internal literal marker — it must never appear in configuration.");
+        }
+        if (value.trim().startsWith("${") && !PLACEHOLDER.matcher(value.trim()).matches()) {
+            throw new StandTestException("Field '" + field + "' at " + location
+                    + " looks like a malformed placeholder — use ${ENV_VAR} or ${ENV_VAR:default} (no whitespace or nested braces)");
+        }
+        return value;
+    }
+
+    /**
      * Validates that the given {@code *-ref} value is plausibly a reference (a bare name or a
      * {@code ${NAME}}/{@code ${NAME:default}} placeholder) and returns it verbatim — resolution
      * happens later, at the point of use.

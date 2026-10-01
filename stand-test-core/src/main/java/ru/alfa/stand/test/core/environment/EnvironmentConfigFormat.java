@@ -45,7 +45,13 @@ public final class EnvironmentConfigFormat {
     public static final int INITIAL_VERSION = 1;
 
     /** The highest registry format version this SDK build can read. */
-    public static final int SUPPORTED_VERSION = 5;
+    public static final int SUPPORTED_VERSION = 6;
+
+    /** Format version in which named extension sections became available. */
+    public static final int SECTIONS_SINCE_VERSION = 6;
+
+    /** Format version in which a registry could declare a default environment. */
+    public static final int DEFAULT_ENVIRONMENT_SINCE_VERSION = 6;
 
     /** Format version in which the per-environment {@code ui-applications} section was introduced. */
     public static final int UI_APPLICATIONS_SINCE_VERSION = 2;

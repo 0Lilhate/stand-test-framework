@@ -39,7 +39,61 @@ format.
 entry; for services it is the service `id` (services carry no alias field); the environment
 binding always references the entity by `id`.
 
-**Ref spelling per surface.** On the plain-JUnit file surface a `*-ref` may be a bare env-var
+## EQ backends (`eq-backends`, registry format version 6)
+
+When the environment's KB entry carries `eqBackends`, render it into the registry's `eq-backends`
+section verbatim (field by field, no interpretation beyond the mapping below). The SDK parses the
+section fail-closed, so an unknown field, a wrong type or a missing required value is caught by the
+adapter's parser before any IO — but the renderer must not emit one in the first place.
+
+| KB (`eqBackends[]`) | Registry (`eq-backends.<alias>`) |
+|---|---|
+| `alias` | map key under `eq-backends` |
+| `kind`, `service`, `path` | `kind`, `service`, `path` |
+| `writeAllowed` | `write-allowed` |
+| `baseUrlRef` / `baseUrl` | `base-url-ref` / `base-url` (value twin; `*-ref` is the safe spelling) |
+| `auth.scheme` + `usernameRef`/`passwordRef` (BASIC) or `tokenRef` (BEARER) | `auth: { scheme: BASIC, username-ref, password-ref }` / `auth: { scheme: BEARER, token-ref }` |
+| `unit`, `branch`, `innRegionCode`, `innTaxOffices` | `unit`, `branch`, `inn-region-code`, `inn-tax-offices` |
+| `cashAccounts.RUR` (…per `[A-Z]{3}`) | `cash-accounts.RUR` |
+| `timeouts.connect/response` | `timeouts.connect/response` |
+| `serialization.acquireTimeout` | `serialization.acquire-timeout` |
+| `unitPhase.systemRef/usernameRef/passwordRef/allowed/cacheTtl` | `unit-phase.system-ref/username-ref/password-ref/allowed/cache-ttl` |
+| `visibility.probe.endpointId` | resolve to `visibility.probe.service` (the endpoint's serviceId) + `visibility.probe.path` (the endpoint's path) |
+| `visibility.probe.query/expectStatus/expectBody` | `visibility.probe.query/expect-status/expect-body` |
+| `visibility.timeout/pollInterval` | `visibility.timeout/poll-interval` |
+| `defaults.organisation.namePrefix/type` | `defaults.organisation.name-prefix/type` |
+| `defaults.account.typeOrganisation/typeIndividual/currency/topUp/packageRegistration/packageDuration` | `defaults.account.type-organisation/type-individual/currency/top-up/package-registration/package-duration` |
+| `defaults.individual.lastName/firstName/middleName/documentType/servicePackage` | `defaults.individual.last-name/first-name/middle-name/document-type/service-package` (physical-client inputs for the gateway `ONF`/`VAD`/`SPU` chain; `document-type` is `GZDUL`, `service-package` is `GZP3R`) |
+
+**Value and ref spelling.** A KB `eqValue` is emitted literally when it is a scalar or a list, and as
+`{ref: NAME}` (both surfaces — the file loader and the starter mapper both resolve it lazily) when the
+KB gives `{ref: NAME}`. **Secrets are always refs**: `unitPhase` credentials and any `auth` credential
+are emitted as `*-ref` bare NAMEs, never as values and never with a `${VAR:default}` default. A
+non-secret value WITHOUT a default in the KB is emitted as `{ref: NAME}` (not `${VAR}`): on the
+starter Spring would otherwise resolve `${VAR}` at binding time, before the backend is selected, and
+require the test-stand variable even for an IFT run. A value WITH a known safe default may be a
+`${VAR:default}` placeholder on either surface.
+
+**The gateway `*-ref` fields accept a reference OR a value.** On the START surface Spring collapses
+`${VAR:default}` before the SDK sees `eq-backends`, so `base-url-ref: ${EQ_GATEWAY_URL:http://…}` arrives
+holding the URL and `unit-phase.system-ref: ${EQ_AS400_SYSTEM:alfamosu}` holding the system name; the EQ
+parser accepts either a reference or a value there and uses a value verbatim (a bare NAME that is not set
+also falls back to its own text as a value). So a non-secret endpoint/unit value MAY be written directly
+in the file or as a `${VAR:default}` value twin. **Secrets must still stay bare NAMEs** — a credential as
+a value would live in the configuration and in the Spring Environment.
+
+**Endpoint resolution.** `visibility.probe.endpointId` is resolved through the same KB lookup the
+skill already loads for services: a missing endpoint is a `Missing KB reference` (render error, the
+`eq-backends` entry is not written), never a guessed `service`/`path`. `ui-applications` is still not
+touched — the merge preserves it as before.
+
+**Readiness check (before emitting).** Render the BRD Appendix В example and confirm: the section
+passes the SDK's `EqBackendConfigParser` (unknown field / secret literal / missing required field
+refused); the file and starter forms of the same KB entry yield an equal `EnvironmentSection` and an
+equal `EqBackendConfig`; the section declares version 6 at the document root (the loader refuses
+`eq-backends` in a document that declares an older version).
+
+## Ref spelling per surface. On the plain-JUnit file surface a `*-ref` may be a bare env-var
 NAME or a `${NAME}`/`${NAME:default}` placeholder (the SDK resolves it lazily). On the STARTER
 surface refs are **bare NAMES only**: Spring resolves `${...}` during property binding, so a
 placeholder inside a `*-ref` would materialise the variable's VALUE (for credentials — the

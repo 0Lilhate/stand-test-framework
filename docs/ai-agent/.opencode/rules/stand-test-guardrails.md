@@ -118,6 +118,16 @@ Which layer enforces each rule, and what it defends against:
   guardrail gate (structural-only).
 - Never catch `StandTestAssertionError`/`StandTestException` to make a test pass; negative
   paths only via `assertThatThrownBy`.
+- **EQ client provisioning (`EqSeed`).** An EQ client precondition is provisioned via `EqSeed`,
+  never by a direct `RestStep.post("showcases", …)` in a NEW test: a direct showcases call is
+  acceptable only for an explicitly IFT-only test (tagged as such), because on test the validator
+  rejects the `showcases` alias (`NON_WHITELISTED_SERVICE`) before IO. PIN / account / deal come
+  from the step's published variables (`${<alias>.pin}`, `${<alias>.account}`, …) — never a
+  constant. **`EqSeed` is the one seeding step with NO cleanup pairing:** EQ clients are never
+  deleted (there is no sanctioned deletion), so the "every seed has a paired cleanup" rule above
+  applies to `db.seed`, and to `db.write`'s undo-log, but NOT to `EqSeed` — its created clients are
+  tagged with `testRunId` and listed in `eq-seeded.jsonl` for operatives. Do not require, invent or
+  write a cleanup for `EqSeed`.
 - Never hide a failure: no assertion deletion, no `@Disabled` without a ticket, no blind
   timeout inflation.
 - Do not modify SDK modules, add adapters, or change core APIs while authoring tests; new

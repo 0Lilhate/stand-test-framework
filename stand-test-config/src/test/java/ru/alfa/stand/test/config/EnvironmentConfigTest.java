@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
+import java.util.Map;
 import ru.alfa.stand.test.core.environment.AuthConfig;
 import ru.alfa.stand.test.core.environment.AuthScheme;
 import ru.alfa.stand.test.core.environment.CorrelationSource;
@@ -27,6 +28,29 @@ class EnvironmentConfigTest {
 
     private static EnvironmentRegistry parse(String yaml) {
         return EnvironmentConfig.toRegistry(SafeYaml.load(yaml));
+    }
+
+    @Test
+    @DisplayName("BR-46: file section resolves value defaults and preserves lazy references")
+    void backendSectionFilePlaceholders() {
+        EnvironmentDefinition environment = parse("""
+                version: 6
+                environments:
+                  ift:
+                    eq-backends:
+                      eq:
+                        kind: showcases
+                        service: showcases
+                        path: /showcases/load/list
+                        branch: ${STAND_TEST_STAGE1_UNSET:4101}
+                        base-url-ref: EQ_GATEWAY_URL
+                        unit: {ref: EQ_UNIT}
+                """).environment("ift").orElseThrow();
+
+        Map<String, Object> fields = environment.section("eq-backends").orElseThrow().entry("eq").orElseThrow().fields();
+        assertThat(fields.get("branch")).isEqualTo("4101");
+        assertThat(fields.get("base-url-ref")).isEqualTo("EQ_GATEWAY_URL");
+        assertThat(fields.get("unit")).isEqualTo(Map.of("ref", "EQ_UNIT"));
     }
 
     @Test

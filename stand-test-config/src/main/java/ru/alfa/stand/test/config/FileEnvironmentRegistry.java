@@ -12,7 +12,7 @@ import ru.alfa.stand.test.core.environment.EnvironmentRegistry;
  * <p>Registered in {@code META-INF/services}, so a plain-JUnit {@code StandTestExtension} discovers it via
  * {@link java.util.ServiceLoader} and gets a populated registry from the config file — no wiring code.
  *
- * <p>Loading is <strong>lazy</strong> (on first {@link #environment(String)} call) and cached: this keeps
+ * <p>Loading is <strong>lazy</strong> (on first environment or default-environment lookup) and cached: this keeps
  * {@code ServiceLoader} discovery free of file IO, so a malformed config surfaces at first use rather than
  * breaking service discovery with a {@code ServiceConfigurationError}. The class must have a public no-arg
  * constructor for the SPI.
@@ -41,6 +41,11 @@ public final class FileEnvironmentRegistry implements EnvironmentRegistry {
     @Override
     public Optional<EnvironmentDefinition> environment(String name) {
         return delegate().environment(name);
+    }
+
+    @Override
+    public Optional<String> defaultEnvironment() {
+        return delegate().defaultEnvironment();
     }
 
     private EnvironmentRegistry delegate() {

@@ -1,5 +1,7 @@
 package ru.alfa.stand.test.rest;
 
+import ru.alfa.stand.test.http.RestResponse;
+
 import java.util.Objects;
 
 /**

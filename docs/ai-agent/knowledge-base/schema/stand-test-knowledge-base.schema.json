@@ -526,6 +526,11 @@
       "properties": {
         "id": { "$ref": "#/$defs/envId" },
         "description": { "$ref": "#/$defs/freeText" },
+        "eqBackends": {
+          "description": "EQ data-provisioning backends, one per alias. stand-test-env-generation renders these into the runtime eq-backends section of either registry form. Added by the EQ feature; environments without it validate unchanged.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/eqBackend" }
+        },
         "services": {
           "type": "array",
           "minItems": 1,
@@ -617,6 +622,160 @@
             }
           }
         }
+      }
+    },
+    "eqScalar": {
+      "description": "A non-secret EQ setting: a typed literal. Secret fields use eqRef only; a value that must stay in the environment uses eqRef.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 400
+    },
+    "eqRef": {
+      "description": "A lazy reference object; NAME is an environment-variable name (never a value), resolved only for the selected backend.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref"],
+      "properties": { "ref": { "$ref": "#/$defs/envVarRef" } }
+    },
+    "eqValue": {
+      "description": "A non-secret EQ value: a literal scalar, a list of codes (inn-tax-offices), or a lazy {ref: NAME}. The parser rejects a value shaped like a bare env-var name where a ref belongs.",
+      "oneOf": [
+        { "$ref": "#/$defs/eqScalar" },
+        { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1, "maxLength": 64 } },
+        { "$ref": "#/$defs/eqRef" },
+        { "type": "object", "minProperties": 1, "additionalProperties": { "$ref": "#/$defs/eqValue" } }
+      ]
+    },
+    "eqVisibility": {
+      "description": "The read-only visibility probe for a backend: poll a KB endpoint until status and body match. probe.endpointId resolves to service/path at render time; an unknown endpoint is a render error.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["probe", "timeout", "poll-interval"],
+      "properties": {
+        "probe": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["endpointId", "expectStatus"],
+          "properties": {
+            "endpointId": { "$ref": "#/$defs/kebabId" },
+            "query": { "type": "object", "additionalProperties": { "type": "string", "maxLength": 200 } },
+            "expectStatus": { "type": "integer", "minimum": 100, "maximum": 599 },
+            "expectBody": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "equals"],
+              "properties": {
+                "path": { "$ref": "#/$defs/jsonPath" },
+                "equals": { "type": "string", "minLength": 1, "maxLength": 400 }
+              }
+            }
+          }
+        },
+        "timeout": { "$ref": "#/$defs/boundedTimeout" },
+        "poll-interval": { "$ref": "#/$defs/boundedTimeout" }
+      }
+    },
+    "eqUnitPhase": {
+      "description": "AS/400 unit-phase precondition. Secrets are refs only (never values), matching D-16.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["systemRef", "usernameRef", "passwordRef", "allowed"],
+      "properties": {
+        "systemRef": { "$ref": "#/$defs/envVarRef" },
+        "usernameRef": { "$ref": "#/$defs/envVarRef" },
+        "passwordRef": { "$ref": "#/$defs/envVarRef" },
+        "allowed": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1, "maxLength": 40 } },
+        "cacheTtl": { "$ref": "#/$defs/boundedTimeout" }
+      }
+    },
+    "eqDefaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "organisation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "namePrefix": { "type": "string", "minLength": 1, "maxLength": 120 },
+            "type": { "type": "string", "minLength": 1, "maxLength": 40 }
+          }
+        },
+        "account": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "typeOrganisation": { "type": "string", "minLength": 1, "maxLength": 40 },
+            "typeIndividual": { "type": "string", "minLength": 1, "maxLength": 40 },
+            "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+            "topUp": { "oneOf": [{ "type": "number" }, { "type": "string", "pattern": "^[0-9]+([.][0-9]+)?$" }] },
+            "packageRegistration": { "type": "string", "minLength": 1, "maxLength": 40 },
+            "packageDuration": { "type": "string", "minLength": 1, "maxLength": 40 }
+          }
+        },
+        "individual": {
+          "description": "Physical-client inputs for the gateway ONF/VAD/SPU chain (individual provisioning). The SDK generates the ФЛ INN (12 digits) and the document number; these are the name parts, the document type and the client service package. Required only when the environment seeds individuals through a gateway backend.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "lastName": { "type": "string", "minLength": 1, "maxLength": 60 },
+            "firstName": { "type": "string", "minLength": 1, "maxLength": 60 },
+            "middleName": { "type": "string", "minLength": 1, "maxLength": 60 },
+            "documentType": { "type": "string", "minLength": 1, "maxLength": 20 },
+            "servicePackage": { "type": "string", "minLength": 1, "maxLength": 40 }
+          }
+        }
+      }
+    },
+    "eqBackend": {
+      "description": "One eq-backends entry: a backend alias, its kind, and the typed fields that render the runtime eq-backends section. Secrets are refs only; non-secret values are literals or lazy refs. Both registry front-ends must produce an equal EnvironmentSection and an equal EqBackendConfig for the same entry.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["alias", "kind"],
+      "properties": {
+        "alias": { "$ref": "#/$defs/kebabId" },
+        "kind": { "enum": ["showcases", "gateway"] },
+        "service": { "$ref": "#/$defs/kebabId" },
+        "path": { "$ref": "#/$defs/httpPath" },
+        "writeAllowed": { "type": "boolean" },
+        "baseUrlRef": { "$ref": "#/$defs/envVarRef" },
+        "baseUrl": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "auth": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["scheme"],
+          "properties": {
+            "scheme": { "enum": ["BASIC", "BEARER"] },
+            "usernameRef": { "$ref": "#/$defs/envVarRef" },
+            "passwordRef": { "$ref": "#/$defs/envVarRef" },
+            "tokenRef": { "$ref": "#/$defs/envVarRef" }
+          }
+        },
+        "unit": { "$ref": "#/$defs/eqValue" },
+        "branch": { "$ref": "#/$defs/eqValue" },
+        "innRegionCode": { "$ref": "#/$defs/eqValue" },
+        "innTaxOffices": { "$ref": "#/$defs/eqValue" },
+        "cashAccounts": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "pattern": "^[A-Z]{3}$" },
+          "additionalProperties": { "$ref": "#/$defs/eqValue" }
+        },
+        "timeouts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "connect": { "$ref": "#/$defs/boundedTimeout" },
+            "response": { "$ref": "#/$defs/boundedTimeout" }
+          }
+        },
+        "serialization": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "acquireTimeout": { "$ref": "#/$defs/boundedTimeout" } }
+        },
+        "unitPhase": { "$ref": "#/$defs/eqUnitPhase" },
+        "visibility": { "$ref": "#/$defs/eqVisibility" },
+        "defaults": { "$ref": "#/$defs/eqDefaults" }
       }
     },
     "testCaseMapping": {

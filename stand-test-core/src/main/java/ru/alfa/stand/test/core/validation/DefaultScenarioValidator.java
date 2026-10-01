@@ -173,6 +173,24 @@ public final class DefaultScenarioValidator implements ScenarioValidator {
             checkAlias(step, StepParameterKeys.APPLICATION, environment, ForbiddenOperation.NON_WHITELISTED_UI_APPLICATION,
                     "UI application", EnvironmentDefinition::uiApplication, issues);
             checkUiLoginRole(step, environment, issues);
+        } else if (type.startsWith(StepParameterKeys.EQ_PREFIX)) {
+            checkSectionAlias(step, environment, issues);
+        }
+    }
+
+    private static void checkSectionAlias(GenericStep step, EnvironmentDefinition environment, List<ValidationIssue> issues) {
+        Object selected = step.parameters().get(StepParameterKeys.EQ_BACKEND);
+        if (!(selected instanceof String alias) || alias.isBlank()) {
+            issues.add(ValidationIssue.error("EQ_BACKEND_REQUIRED",
+                    "Step '" + step.id() + "' requires a backend alias from section '"
+                            + StepParameterKeys.EQ_BACKENDS_SECTION + "'"));
+            return;
+        }
+        if (environment.section(StepParameterKeys.EQ_BACKENDS_SECTION)
+                .flatMap(section -> section.entry(alias)).isEmpty()) {
+            issues.add(ValidationIssue.error("NON_WHITELISTED_EQ_BACKEND",
+                    "Backend '" + alias + "' is not whitelisted in section '" + StepParameterKeys.EQ_BACKENDS_SECTION
+                            + "' of environment '" + environment.name() + "'"));
         }
     }
 

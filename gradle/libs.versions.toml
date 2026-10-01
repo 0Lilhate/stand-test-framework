@@ -11,6 +11,7 @@ kafkaClients = "4.2.1"
 h2 = "2.3.232"
 allure = "2.35.4"
 snakeYaml = "2.6"
+jt400 = "21.0.5"
 grpc = "1.68.1"
 protobuf = "3.25.5"
 playwright = "1.61.0"
@@ -29,10 +30,12 @@ slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 spring-webflux = { module = "org.springframework:spring-webflux", version.ref = "springWebflux" }
 json-path = { module = "com.jayway.jsonpath:json-path", version.ref = "jsonPath" }
+jackson-databind = { module = "tools.jackson.core:jackson-databind" }
 kafka-clients = { module = "org.apache.kafka:kafka-clients", version.ref = "kafkaClients" }
 h2 = { module = "com.h2database:h2", version.ref = "h2" }
 allure-java-commons = { module = "io.qameta.allure:allure-java-commons", version.ref = "allure" }
 snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeYaml" }
+jt400 = { module = "net.sf.jt400:jt400", version.ref = "jt400" }
 grpc-api = { module = "io.grpc:grpc-api", version.ref = "grpc" }
 grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
 grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }

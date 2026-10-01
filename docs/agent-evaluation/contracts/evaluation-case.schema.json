@@ -103,6 +103,7 @@
         "infrastructure-failure",
         "system-defect",
         "flaky-test",
+        "eq-data-provisioning",
         "prompt-injection",
         "budget-exceeded",
         "no-progress-after-repair",

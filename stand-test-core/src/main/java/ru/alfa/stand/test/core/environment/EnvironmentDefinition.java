@@ -34,7 +34,8 @@ public record EnvironmentDefinition(
         Map<String, GrpcTargetDefinition> grpcTargets,
         KafkaClusterDefinition kafkaCluster,
         Map<String, KafkaClusterDefinition> kafkaClusters,
-        Map<String, UiApplicationDefinition> uiApplications) {
+        Map<String, UiApplicationDefinition> uiApplications,
+        Map<String, EnvironmentSection> sections) {
 
     public EnvironmentDefinition {
         if (name == null || name.isBlank()) {
@@ -46,6 +47,7 @@ public record EnvironmentDefinition(
         grpcTargets = (grpcTargets == null) ? Map.of() : Map.copyOf(grpcTargets);
         kafkaClusters = (kafkaClusters == null) ? Map.of() : Map.copyOf(kafkaClusters);
         uiApplications = (uiApplications == null) ? Map.of() : Map.copyOf(uiApplications);
+        sections = (sections == null) ? Map.of() : Map.copyOf(sections);
         for (TopicDefinition topic : topics.values()) {
             if (topic.cluster() != null && !kafkaClusters.containsKey(topic.cluster())) {
                 throw new IllegalArgumentException("topic '" + topic.alias() + "' names Kafka cluster '" + topic.cluster()
@@ -70,7 +72,7 @@ public record EnvironmentDefinition(
             Map<String, TopicDefinition> topics,
             Map<String, DatasourceDefinition> datasources,
             Map<String, GrpcTargetDefinition> grpcTargets) {
-        this(name, services, topics, datasources, grpcTargets, null, Map.of(), Map.of());
+        this(name, services, topics, datasources, grpcTargets, null, Map.of(), Map.of(), Map.of());
     }
 
     /**
@@ -91,7 +93,7 @@ public record EnvironmentDefinition(
             Map<String, DatasourceDefinition> datasources,
             Map<String, GrpcTargetDefinition> grpcTargets,
             KafkaClusterDefinition kafkaCluster) {
-        this(name, services, topics, datasources, grpcTargets, kafkaCluster, Map.of(), Map.of());
+        this(name, services, topics, datasources, grpcTargets, kafkaCluster, Map.of(), Map.of(), Map.of());
     }
 
     /**
@@ -113,7 +115,19 @@ public record EnvironmentDefinition(
             Map<String, GrpcTargetDefinition> grpcTargets,
             KafkaClusterDefinition kafkaCluster,
             Map<String, KafkaClusterDefinition> kafkaClusters) {
-        this(name, services, topics, datasources, grpcTargets, kafkaCluster, kafkaClusters, Map.of());
+        this(name, services, topics, datasources, grpcTargets, kafkaCluster, kafkaClusters, Map.of(), Map.of());
+    }
+
+    /** Preserves the eight-argument constructor used before extension sections existed. */
+    public EnvironmentDefinition(String name, Map<String, ServiceEndpointDefinition> services,
+            Map<String, TopicDefinition> topics, Map<String, DatasourceDefinition> datasources,
+            Map<String, GrpcTargetDefinition> grpcTargets, KafkaClusterDefinition kafkaCluster,
+            Map<String, KafkaClusterDefinition> kafkaClusters, Map<String, UiApplicationDefinition> uiApplications) {
+        this(name, services, topics, datasources, grpcTargets, kafkaCluster, kafkaClusters, uiApplications, Map.of());
+    }
+
+    public Optional<EnvironmentSection> section(String sectionName) {
+        return Optional.ofNullable(sections.get(sectionName));
     }
 
     /**

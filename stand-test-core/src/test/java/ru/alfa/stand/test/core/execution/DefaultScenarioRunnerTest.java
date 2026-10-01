@@ -88,6 +88,64 @@ class DefaultScenarioRunnerTest {
     }
 
     @Test
+    @DisplayName("prepare receives the one-based scenario ordinal, including preceding non-EQ steps")
+    void prepareReceivesScenarioOrdinal() {
+        Map<String, Integer> observed = new LinkedHashMap<>();
+        StepExecutor executor = new StepExecutor() {
+            @Override
+            public boolean supports(String type) {
+                return type.startsWith("fake.");
+            }
+
+            @Override
+            public void prepare(ScenarioStep step, StepExecutionContext context) {
+                observed.put(step.id(), context.stepOrdinal(step.id()));
+            }
+
+            @Override
+            public StepResult execute(ScenarioStep step, StepExecutionContext context) {
+                return StepResult.success(step.id(), step.type(), Instant.now(), Instant.now());
+            }
+        };
+
+        ScenarioResult result = runner(executor).run(scenario(
+                GenericStep.of("first", "fake.ok"), GenericStep.of("second", "fake.ok"),
+                GenericStep.of("third", "fake.ok")));
+
+        assertThat(result.isSuccessful()).isTrue();
+        assertThat(observed).containsEntry("first", 1).containsEntry("second", 2).containsEntry("third", 3);
+    }
+
+    @Test
+    @DisplayName("BR-01/03: the runner selects the default before validation and reports the effective environment")
+    void run_defaultEnvironmentIsEffective() {
+        EnvironmentRegistry registry = new InMemoryEnvironmentRegistry(
+                Map.of("ift", new EnvironmentDefinition("ift", Map.of(), Map.of(), Map.of(), Map.of())), "ift");
+        Queue<ReportingEvent> events = new ConcurrentLinkedQueue<>();
+        ReportingEventPublisher publisher = new ReportingEventPublisher() {
+            @Override
+            public void publish(ScenarioEvent event) {
+                events.add(event);
+            }
+
+            @Override
+            public void publish(StepEvent event) {
+                events.add(event);
+            }
+        };
+        DefaultScenarioRunner defaulted = new DefaultScenarioRunner(List.of(FakeStepExecutor.succeeding("fake.ok")),
+                new DefaultScenarioValidator(), registry, publisher);
+        Scenario scenario = Scenario.builder("defaulted").step(GenericStep.of("s1", "fake.ok")).build();
+
+        ScenarioResult result = defaulted.run(scenario);
+
+        assertThat(result.isSuccessful()).isTrue();
+        assertThat(scenario.environment()).isBlank();
+        assertThat(events.stream().filter(ScenarioEvent.class::isInstance).map(ScenarioEvent.class::cast)
+                .map(ScenarioEvent::environment)).contains("ift");
+    }
+
+    @Test
     @DisplayName("a step that returns a FAILED status is raised as a StandTestAssertionError")
     void run_stepReturnsFailed_throwsAssertionError() {
         DefaultScenarioRunner runner = runner(FakeStepExecutor.failing("fake.fail", "status was PENDING"));

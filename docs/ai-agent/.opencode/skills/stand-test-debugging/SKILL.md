@@ -44,7 +44,7 @@ From the exception message, `ScenarioResult`, or Allure test-case parameters:
 | `configured as a literal value but it is empty` | Spring-starter endpoint value twin (`base-url`/`url`/`target`/`bootstrap-servers`/`security-protocol`) whose `${VAR:}` env var is unset — Spring bound the empty default at startup, the SDK fails lazily at step execution; the message names NO variable | find the variable inside the twin's placeholder in `application.yml`; export it |
 | `sets both '...' and '...-ref' — configure exactly one` | registry alias configured both an endpoint value twin and its `*-ref` — ambiguous, fails Spring context startup before any step | keep exactly one: `${ENV_VAR:...}` in the value field OR the env-var NAME in `*-ref` (human applies) |
 | `carries the SDK-internal literal marker` | a `literal://` value was hand-written into a `*-ref` field — the marker is internal-only | use the sibling value field with a `${ENV_VAR:...}` placeholder, or a plain env-var NAME in the `*-ref` |
-| `No step executor registered for step type` | adapter module missing from test classpath | add `stand-test-rest/-kafka/-db/-grpc` |
+| `No step executor registered for step type` | adapter module missing from test classpath | add `stand-test-rest/-kafka/-db/-grpc/-eq` |
 | `Unresolved variable: '${...}'` | capture missing/typo, or step order wrong | add/fix the producing capture |
 | `Multiple <SPI> providers` | two registries/publishers on classpath | remove one dependency |
 | `rest.expectEventually ... did not observe` + last mismatch (`Expected HTTP status 200 but got 503`) | timed out polling; 5xx polls through by design | check SLA vs timeout; check stand health via correlationId |

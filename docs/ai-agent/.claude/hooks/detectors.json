@@ -552,6 +552,8 @@
         "org.junit.jupiter:",
         "org.assertj:",
         "com.fasterxml.jackson.dataformat:",
+        "tools.jackson.",
+        "net.sf.jt400:",
         "org.springframework.boot:spring-boot-dependencies",
         "org.springframework.boot:spring-boot-starter-test",
         "org.junit.platform:junit-platform-launcher"
@@ -559,7 +561,9 @@
       "$allowedPrefixes": [
         "Список — про то, чем ТЕСТОВЫЙ модуль пользуется по санкции кита, а не про вкус: SDK, allure-junit5, валидатор JSON Schema с Jackson, JDBC-драйвер.",
         "jackson-dataformat добавлен потому, что база знаний по контракту в YAML: без YAML-парсера ту самую проверку схемой, которую кит и рекомендует, не выполнить, и список запрещал собственную рекомендацию.",
-        "spring-boot-dependencies / spring-boot-starter-test — спутники Spring-трека, который кит предлагает сам (@SpringBootTest + @Autowired StandClient); junit-platform-launcher требует Gradle, чтобы вообще запустить JUnit 5. Всё это узкими координатами, а не группой целиком: org.springframework.boot: одним префиксом открыл бы и spring-boot-starter-web."
+        "spring-boot-dependencies / spring-boot-starter-test — спутники Spring-трека, который кит предлагает сам (@SpringBootTest + @Autowired StandClient); junit-platform-launcher требует Gradle, чтобы вообще запустить JUnit 5. Всё это узкими координатами, а не группой целиком: org.springframework.boot: одним префиксом открыл бы и spring-boot-starter-web.",
+        "tools.jackson. (Jackson 3) — стек Spring Boot 4/Spring 7, на котором собирается SDK и его потребитель; com.fasterxml.jackson.* (Jackson 2) остаётся санкционированным отдельно, потому что json-path приносит Jackson 2 только как провайдер чтения.",
+        "net.sf.jt400: — AS/400-драйвер, нужный ТОЛЬКО тесту, который объявляет eq-backends unit-phase (предпроверка фазы юнита); в SDK он compileOnly и транзитивно не приходит, поэтому потребитель добавляет его сам как testRuntimeOnly. Ограничение — узкая координата, а не группа net.sf.:"
       ],
       "fix": "держи тестовый модуль в пределах SDK, allure-junit5, JSON-Schema-валидатора с Jackson и JDBC-драйвера; новая зависимость — это способ, которым сырой клиент появляется без того, чтобы кто-то его импортировал, и она переживает изменение, которое её принесло"
     },

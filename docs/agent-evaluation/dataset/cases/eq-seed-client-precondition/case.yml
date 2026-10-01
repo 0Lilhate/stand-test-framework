@@ -1,0 +1,48 @@
+schemaVersion: 1
+id: eq-seed-client-precondition
+category: eq-data-provisioning
+title: 'EQ client precondition via EqSeed, consumed by variables'
+rationale: >-
+  Measures whether the authoring kit routes an EQ client precondition through the EqSeed domain step
+  (backend selected by the environment registry) instead of a direct showcases call or copied
+  identifiers, and whether it consumes the published variables rather than EQ constants.
+input:
+  file: input.md
+requirements:
+- id: r1
+  text: An EQ client (organisation) with one account and a service package is provisioned as a step of its own
+  coveredBy: step
+- id: r2
+  text: The PIN and account number are referenced as ${client.pin} / ${client.account}, never as test constants
+  coveredBy: step
+- id: r3
+  text: No .environment("ift") is set, so the run targets the default environment (APP_STEND)
+  coveredBy: step
+- id: r4
+  text: The seed step has no paired cleanup step
+  coveredBy: step
+expected:
+  terminalState: COMPLETED
+  retrieval:
+    matched:
+    - eq-backends
+    mustNotMatch:
+    - showcase-mock
+  plan:
+    track: JAVA_DSL
+    stepTypes:
+    - eq.seed
+    - rest.post
+    minSteps: 2
+    maxSteps: 3
+    allSourced: true
+  forbiddenArtifactPatterns:
+  - "RestStep\\.post\\(\\s*\"showcases\""
+  - "UUID\\.randomUUID\\(\\)"
+  - "\\.environment\\(\\s*\"ift\"\\s*\\)"
+  - "private static final String (PIN|ACCOUNT)\\b"
+  humanRequired:
+    expected: false
+repeats: 1
+sut:
+  mode: static

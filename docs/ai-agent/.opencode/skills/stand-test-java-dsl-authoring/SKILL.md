@@ -98,6 +98,7 @@ strings do NOT auto-flow into the builder — pass them explicitly to
 | gRPC call | `GrpcStep.unary(targetAlias).method("pkg.Service/Method").request(json)`/`.requestFromResource(...)` `.metadata(k, v)` `.injectCorrelationId()` `.withinSeconds(n)` (deadline MANDATORY) `.assertPath(p, v)` `.assertPathContains/Matches/Exists/Absent/NotNull(...)` `.capture(var, p)` — all 5 matchers, at parity with REST; enums assert as protobuf JSON names (`"SERVING"`) |
 | Data flow | `.capture("var", "$.jsonPath")` → `${var}` in later path/query/header/body/param values. Built-ins: `${scenarioId}` `${testRunId}` `${correlationId}` `${environment}`. Syntax `${name}` only |
 | Provision a precondition entity | `rest.post` a CURATED create-endpoint, `.capture("pin", "$.pin")`, reference `${pin}` in later step bodies — the in-test alternative to hardcoding a pointer or an out-of-band runbook. Business entities the SUT does NOT mint are created here (or seeded), NEVER copied from the case; no curated create-endpoint ⇒ blocking (scenario-design rule 11 / case-analysis item 7), never an invented endpoint. See [`example-provisioned-prelude.java`](../stand-test-java-dsl-authoring/example-provisioned-prelude.java) |
+| **EQ client precondition** | `EqSeed.organisation("<alias>")` / `EqSeed.individual("<alias>")` — a domain step that provisions an EQ client (client + accounts + service packages) through the environment-selected backend, so ONE test runs unchanged on IFT (showcases mock) and test (real EQ). The step carries a `backend` alias (`eq` by default); the environment registry decides `showcases` vs `gateway`. PIN/account/deal are published as `${<alias>.pin}`, `${<alias>.account}`, `${<alias>.account.<i>}`, `${<alias>.deal.<i>}` — consume them by name; NEVER write a PIN, account number or deal id as a constant. See the EQ section below |
 | Negative path | `assertThatThrownBy(() -> stand.run(scenario)).isInstanceOf(StandTestAssertionError.class).hasMessageContaining("...")` |
 
 ### Choosing between `db.seed` and `db.write`
@@ -163,6 +164,64 @@ create — the boundary rule below still holds.
     (`@Execution(SAME_THREAD)`), or JUnit's native `@ResourceLock("<alias>")` (mutual exclusion by
     named resource; there is no `@StandResourceLock` wrapper). `@StandParallelSafe`
     (`@Execution(CONCURRENT)`) only opts a class's METHODS into concurrency — rarely needed.
+
+## EQ client provisioning (`EqSeed`)
+
+`EqSeed` is the domain step that creates an EQ client (client, accounts, service packages) so a case
+that needs one runs unchanged on both stands: on IFT it writes showcases records through the mock, on
+test it drives the real EQ chain. The test never names the backend — the environment registry entry
+behind the step's `backend` alias (`eq` by default) does. Do NOT set `.environment("ift")` for this:
+leave it to `stand.test.default-environment` (`${APP_STEND:ift}`) so the same test runs on both.
+
+```java
+import ru.alfa.stand.test.eq.EqAccount;
+import ru.alfa.stand.test.eq.EqSeed;
+
+Scenario.builder("ul-discount-scheme-cancel")
+        // no .environment(...) and no dates: the default environment and "today" apply
+        .step(EqSeed.organisation("client")
+                .account(EqAccount.type("CA").currency("RUR").servicePackage("PU_NWA"))
+                .build())                       // id defaults to "eq.seed:client"
+        .step(RestStep.post("pk", "/UL/V1/prodcat/DiscountScheme")
+                .id("cancel-deal")
+                .body(readResource(BODY).replace("__PIN__", "${client.pin}")
+                        .replace("__ACCOUNT__", "${client.account}"))
+                .expectStatus(200).build())
+        .build();
+```
+
+Rules:
+
+- **Never write a PIN, account number or deal id as a constant.** They are published by the step and
+  used by name: `${client.pin}`, `${client.account}` (the first account), `${client.account.<i>}` (i
+  from 0), `${client.deal.<i>}` (showcases only). The same names resolve in REST bodies
+  (inline or `bodyFromResource`) and in `DbStep…param("pin", "${client.pin}")`.
+- **The variables differ by backend.** `showcases` publishes `.pin`/`.account`/`.account.<i>`/`.deal.<i>`
+  and does NOT publish `.inn`; `gateway` publishes `.pin`/`.account`/`.account.<i>` and `.inn`, and does
+  NOT publish `.deal.<i>` (the gateway returns no deal id — `${alias>.deal.<i>}` on gateway is refused).
+  A reference to a variable the environment's backend does not publish fails at the consuming step with
+  `Unresolved variable`; keep the per-backend list in mind (it is also in the module README).
+- **`.backend("…")`** selects another `eq-backends` entry of the environment; leave it out unless the
+  registry defines a second alias. The prefix (`EqSeed.organisation("client")`) and the backend alias
+  are different things.
+- **Attributes may be omitted** and come from the registry's `defaults`. `openedAt(...)`/`topUp(...)`
+  are only for cases that genuinely need them; a backend that cannot reproduce one refuses the step at
+  `prepare` (before IO) unless `.allowApproximation(EqAttribute.OPENED_AT)` opts in, and the report
+  records the approximation. Do not add `.allowApproximation(...)` reflexively — it is a conscious
+  acceptance of a different-data run.
+- **No cleanup and no `db.cleanup` pairing.** EQ clients are never deleted (they are tagged with
+  `testRunId` and listed in `eq-seeded.jsonl` for operatives); the general "every seed has a paired
+  cleanup" rule applies to `db.seed`, not to `EqSeed`. Do not invent a delete.
+- **If a case's seeding is a direct `RestStep.post("showcases", …)`** (the pre-`EqSeed` shape), new
+  tests must migrate to `EqSeed`; a direct showcases call is acceptable only for a test that is
+  explicitly IFT-only, tagged as such — on test the validator rejects the `showcases` alias
+  (`NON_WHITELISTED_SERVICE`) before IO.
+- `individual(...)` runs on the `gateway` backend (the `ONF`/`VAD`/`OKC`/`YFT2`/`SPU` chain); it is still
+  refused on `showcases` at `prepare` (the FL record contract for the mock is unconfirmed, OQ-2). On the
+  `gateway` backend an `individual(...)` step needs the registry's `defaults.individual` (last-name /
+  first-name / document-type, plus service-package) — the SDK generates the ФЛ INN (12 digits) and the
+  document number; the design supplies a name and a service package. Prefer `organisation(...)` unless the
+  case is genuinely about a physical client.
 
 ## Scenario metadata: use `@DisplayName`, not `.title(...)`
 
