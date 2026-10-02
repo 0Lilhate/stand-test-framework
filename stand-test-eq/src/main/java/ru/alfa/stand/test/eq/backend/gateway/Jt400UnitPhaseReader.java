@@ -6,29 +6,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import ru.alfa.stand.test.core.exception.StandTestException;
 
-/**
- * AS/400 phase reader backed by jt400, loaded reflectively so the module compiles and publishes without
- * jt400 on the classpath.
- *
- * <p>jt400 is an optional dependency (NFR-03, DEP-6, G0-JT400): it is never a transitive dependency of the
- * SDK, and a consumer that does not declare {@code unit-phase} never pulls it. To keep the module
- * buildable without jt400 the calls below are made through {@link Class#getMethod} rather than a
- * compile-time import; when jt400 is absent the reader fails with a clear "jt400 is required" error, not a
- * {@code NoClassDefFoundError}.
- *
- * <p><strong>Protocol.</strong> The sequence reproduces the reference library
- * ({@code aiagents-taksa-starter:0.2.0}, {@code UnitPhaseService}): connect as {@code (system, user,
- * password)}, run {@code LIBL <unit>} and {@code CALL PGM(UAA37R)} on a {@code CommandCall}, then a
- * {@code ProgramCall} of {@code ALFAINSTAL/MONUNTSTS} with the unit (3 chars) as input and a 4-char output
- * parameter, and read the phase from that output parameter ({@code ProgramParameter.getOutputData()}), not
- * from a message text.
- *
- * <p><strong>Safety (SEC-05, Г-9).</strong> The reference library concatenates the raw login into the CL
- * text; here the unit and user name are validated against a strict pattern before any interpolation, so a
- * crafted value cannot inject CL, and the <em>password</em> is never interpolated into a command string —
- * it is used only to open the connection. The exact call composition is provisional pending phase-0 item
- * 0.6.
- */
 public final class Jt400UnitPhaseReader implements UnitPhaseReader {
 
     private static final String AS400 = "com.ibm.as400.access.AS400";

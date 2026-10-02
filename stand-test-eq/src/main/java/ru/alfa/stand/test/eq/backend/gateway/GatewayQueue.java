@@ -1,5 +1,7 @@
 package ru.alfa.stand.test.eq.backend.gateway;
 
+import ru.alfa.stand.test.core.exception.StandTestException;
+
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -10,25 +12,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.LongSupplier;
-import ru.alfa.stand.test.core.exception.StandTestException;
 
-/**
- * JVM-local serialization of gateway write chains: exactly one chain at a time per
- * {@code (base-url, unit)} pair.
- *
- * <p>The key is the pair <strong>after reference resolution</strong>, not the backend alias, so two
- * aliases pointing at one gateway cannot bypass the lock (BR-26). The guarantee holds inside one JVM
- * only: the pilot runs with {@code maxParallelForks = 1} and without concurrent CI jobs on the same
- * pair; a {@code Semaphore} is not a substitute for an external coordinator across JVMs.
- *
- * <p>The queue is instantiable (each test owns one) and {@link Shared#instance()} returns the JVM-wide
- * instance production uses — the {@code UiAccountPools} lesson: a singleton with a {@code reset()}
- * would make the test that proves parallel isolation the one most likely to break it.
- *
- * <p>Waiting for a slot is bounded by the caller-supplied {@code acquireTimeout}; on expiry the
- * failure names the queue length and the wait time. This class never runs the chain itself, so a
- * caller can release the slot before a visibility probe (which must not hold the queue, BR-26/3.5.3).
- */
 public final class GatewayQueue {
 
     private final Map<String, Semaphore> locks = new ConcurrentHashMap<>();
@@ -46,17 +30,6 @@ public final class GatewayQueue {
         this.nanoTime = Objects.requireNonNull(nanoTime, "nanoTime must not be null");
     }
 
-    /**
-     * Acquires the single slot for {@code (baseUrl, unit)} within the bound and returns a handle whose
-     * {@link Lease#close()} releases it. The handle is idempotent, so a {@code finally} release is safe
-     * even if the caller already closed it.
-     *
-     * @param baseUrl the resolved gateway base URL (must not be blank)
-     * @param unit the resolved unit (must not be blank)
-     * @param acquireTimeout the bound on waiting for the slot; must be positive
-     * @return the held slot
-     * @throws StandTestException when the slot could not be taken within the bound
-     */
     public Lease acquire(String baseUrl, String unit, Duration acquireTimeout) {
         String key = key(baseUrl, unit);
         Semaphore semaphore = lock(key);

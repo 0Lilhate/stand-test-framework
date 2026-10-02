@@ -11,18 +11,6 @@ import ru.alfa.stand.test.http.HttpCaller;
 import ru.alfa.stand.test.http.RestRequest;
 import ru.alfa.stand.test.http.RestResponse;
 
-/**
- * One gateway call: {@code POST {base-url}} with the {@code {unit, option, params}} envelope.
- *
- * <p>The client owns no retry: a write operation must never be repeated automatically (BR-25), so a
- * transport failure surfaces as a distinct "state unknown" category and the caller decides. Connect and
- * response timeouts come from the registry (NFR-04, Г-7, Г-8); a timeout is {@code TIMEOUT_UNKNOWN}.
- *
- * <p>Auth, when the registry declares it, is injected here from its references (SEC-03); the credential is
- * never logged or attached. Correlation injection is deliberately absent: OQ-16 — whether the gateway
- * accepts and traces a correlation header — is unresolved, so the SDK does not claim it. This exception is
- * recorded in the module README, exactly as BR-22 requires for a gateway that does not accept the header.
- */
 public final class GatewayClient {
 
     private final HttpCaller caller;
@@ -48,15 +36,6 @@ public final class GatewayClient {
         return baseUrl;
     }
 
-    /**
-     * Sends one operation and returns the raw response.
-     *
-     * @param unit the resolved unit
-     * @param option the operation name
-     * @param params the operation parameters
-     * @return the raw response
-     * @throws EqSeedException with category {@code TIMEOUT_UNKNOWN} on a transport failure or timeout
-     */
     public RestResponse call(String unit, String option, Map<String, Object> params) {
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("Content-Type", "application/json");

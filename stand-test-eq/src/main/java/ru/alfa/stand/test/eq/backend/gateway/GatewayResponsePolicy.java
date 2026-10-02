@@ -4,24 +4,7 @@ import java.util.regex.Pattern;
 import ru.alfa.stand.test.eq.EqSeedException;
 import ru.alfa.stand.test.http.RestResponse;
 
-/**
- * The default gateway response policy, confirmed against a live controlled chain.
- *
- * <p>BR-22 requires every response to be checked, and "an unverifiable response counts as an error, not a
- * success". The contracts below were captured on 2026-09-30 from one controlled organisation chain
- * ({@code ONU → OKC → YFT2 → KP1}) against the canonical {@code K68} gateway, closing OQ-5:
- *
- * <ul>
- *   <li>{@code ONU}/{@code ONF} issue a bare PIN — {@code ^[A-Z0-9]{6}$} (observed {@code UDHSUS});</li>
- *   <li>{@code OKC} issues a bare 20-digit account — starting {@code 40702} for an organisation and
- *       {@code 40817} for an individual (both observed);</li>
- *   <li>{@code YFT2}, {@code KP1}, {@code VAD} and {@code SPU} answer an empty JSON object {@code {}} on
- *       success (all four observed on 2026-09-30, closing OQ-5 for the individual chain too).</li>
- * </ul>
- *
- * <p>AS-3 allows the value to arrive as a JSON-quoted scalar, so the body is normalised before matching
- * (surrounding whitespace and quotes stripped). Any other body, and any non-200 status, still fails closed.
- */
+
 public final class GatewayResponsePolicy implements GatewayContracts {
 
     private static final Pattern PIN = Pattern.compile("[A-Z0-9]{6}");

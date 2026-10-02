@@ -22,26 +22,6 @@ import ru.alfa.stand.test.http.AuthHeaderResolver;
 import ru.alfa.stand.test.http.HttpCaller;
 import ru.alfa.stand.test.http.RestResponse;
 
-/**
- * Gateway backend: creates a client in the real EQ through the TAKSA gateway.
- *
- * <p>The organisation chain is {@code ONU → (per account) OKC → YFT2 → KP1} (BR-22, Приложение Б). The
- * individual chain ({@code ONF → VAD → OKC → YFT2 → SPU}) is gated on G0-FL, so it is refused until the FL
- * contract is confirmed (stage 4).
- *
- * <p><strong>Safety and failure semantics.</strong> A write operation is never retried automatically
- * (BR-25): a transport failure surfaces as {@code TIMEOUT_UNKNOWN} with the testRunId marker and the
- * confirmed identifiers, and the chain stops. A partial failure lists the confirmed objects (BR-23). Every
- * response is validated; an unverifiable response ends {@code BROKEN}, never success (BR-22/OQ-5).
- *
- * <p><strong>Serialization (BR-26).</strong> The whole create chain runs while holding the
- * {@link GatewayQueue} slot for {@code (base-url, unit)}. The slot is released as soon as the chain returns;
- * the executor runs the visibility probe afterwards, outside the queue, so a slow probe never blocks
- * another scenario's creation.
- *
- * <p>This class performs no unit-phase check — that is a {@code prepare}-time precondition owned by the
- * executor, so it runs once per scenario before any IO.
- */
 public final class GatewayBackend {
 
     private final HttpCaller caller;
@@ -55,7 +35,6 @@ public final class GatewayBackend {
         this(caller, authHeaderResolver, queue, journal, new GatewayResponsePolicy());
     }
 
-    /** Creates a backend with an explicit response-contract seam for offline tests. */
     public GatewayBackend(HttpCaller caller, AuthHeaderResolver authHeaderResolver, GatewayQueue queue,
                           SeedJournal journal, GatewayContracts contracts) {
         this.caller = Objects.requireNonNull(caller, "caller must not be null");
@@ -65,7 +44,6 @@ public final class GatewayBackend {
         this.contracts = Objects.requireNonNull(contracts, "contracts must not be null");
     }
 
-    /** Executes one create chain (organisation or individual) under the gateway queue. */
     public SeedExecution seed(SeedPlan plan, GatewayBackendConfig config, GatewayContext context) {
         if (!"organisation".equals(plan.clientKind()) && !"individual".equals(plan.clientKind())) {
             throw new StandTestException("EQ gateway seed supports only organisation or individual clients");
@@ -129,11 +107,6 @@ public final class GatewayBackend {
         }
     }
 
-    /**
-     * {@code ONF → VAD → (per account) OKC → YFT2 → SPU} (Приложение Б, stage 4). The {@code ONF}/{@code VAD}/
-     * {@code SPU} contracts were captured live on 2026-09-30 (G0-FL). {@code SPU} connects the client service
-     * package once per client, not per account (defect Г-2).
-     */
     private void createIndividual(SeedPlan plan, GatewaySettings settings, GatewayContext context, GatewayClient client,
                                   SeedLog.Collector collector, String inn, String name, List<String> accounts,
                                   String[] confirmedPin) {

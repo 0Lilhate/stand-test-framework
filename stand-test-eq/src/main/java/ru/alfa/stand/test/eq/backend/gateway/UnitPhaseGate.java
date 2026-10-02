@@ -9,18 +9,6 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import ru.alfa.stand.test.core.exception.StandTestException;
 
-/**
- * Reads and caches the AS/400 unit phase, and refuses a seed when the unit is not in a working phase
- * (BR-38, BR-39).
- *
- * <p>The cache has a TTL ({@code unit-phase.cache-ttl}, five minutes by default) rather than the JVM's
- * lifetime: if the unit enters end-of-day during a long run, a permanent cache would hide it and produce a
- * stream of obscure failures instead of one clear refusal. A phase is cached per {@code (system, unit)}.
- *
- * <p>The check runs on {@code prepare}, so one read serves every scenario in the TTL window and no gateway
- * call is made when the unit is not working. The gate is an instantiable object; production takes
- * {@link Shared#instance()}.
- */
 public final class UnitPhaseGate {
 
     private final UnitPhaseReader reader;
@@ -32,16 +20,6 @@ public final class UnitPhaseGate {
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
 
-    /**
-     * Returns the current phase, reading through the AS/400 reader at most once per TTL window.
-     *
-     * @param system the resolved system reference
-     * @param username the resolved user name (never logged)
-     * @param password the resolved password (never logged)
-     * @param unit the resolved unit, part of the cache key
-     * @param cacheTtl how long a read stays valid
-     * @return the phase value
-     */
     public String currentPhase(String system, String username, String password, String unit, Duration cacheTtl) {
         String key = system + '\u0000' + unit;
         Instant now = clock.instant();

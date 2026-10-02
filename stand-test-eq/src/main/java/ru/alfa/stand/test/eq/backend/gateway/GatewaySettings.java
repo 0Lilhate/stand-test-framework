@@ -11,13 +11,6 @@ import ru.alfa.stand.test.eq.config.ConfiguredValue;
 import ru.alfa.stand.test.eq.config.EqDefaults;
 import ru.alfa.stand.test.eq.config.GatewayBackendConfig;
 
-/**
- * The gateway backend's configuration with every lazy reference resolved for this run.
- *
- * <p>Resolution happens only when the gateway backend is selected, so an IFT run never requires the
- * test-stand variables (BR-46). Values that fail to resolve or do not match their declared type are a
- * configuration error before any gateway call.
- */
 public record GatewaySettings(
         String alias,
         boolean writeAllowed,
