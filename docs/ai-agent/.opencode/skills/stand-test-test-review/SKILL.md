@@ -59,6 +59,14 @@ text case.
   `${testRunId}`-derived key (a selection-free expect, or a constant key alone, is refused at run
   time and flakes on a shared stand); one expect per expected message.
 - DB polling SELECT is written to return at most one row (id predicate present).
+- **Each `db.expectEventually` reads the store the SUT actually writes, bound by the run's OWN key.**
+  Confirm against the consumer's write path that the probe's table/link/join is populated by the
+  pipeline under test (a store populated by a DIFFERENT path, or never populated at all, gives a
+  permanent `lastObserved=0` that reads as a defect). Bind the run by `decisionlabel`/`${testRunId}`,
+  never by a value the SUT may reuse: where the SUT can reuse an existing entity, assert the
+  **format** of its code/id (regex), not equality to the current run's key. A value that lives only
+  in a store the run never reaches must be proven by an observable proxy in the store it does, with
+  the gap recorded as an explicit boundary — not chased with a longer timeout.
 - Full checklist: [`flakiness-checklist.md`](../stand-test-test-review/flakiness-checklist.md).
 
 ### 5. Correlation usage

@@ -112,6 +112,16 @@ Which layer enforces each rule, and what it defends against:
   text, or to a recorded assumption — an unsourced contract detail is a BLOCK finding. The KB
   itself stores refs/aliases/contracts only (schema-enforced): no secrets, no URLs, no
   production environments.
+- **Probe the STORE the SUT writes, bound by the run's OWN key.** A `db.expectEventually` must read
+  the table/link the pipeline under test actually populates and bind the run by a discriminator the
+  SUT does not choose or reuse (`decisionlabel`, `${testRunId}`) — never a store/join that is only
+  populated by a different path, and never a value the SUT may carry over from an ORIGINATING run.
+  A probe against the wrong store/join fails identically on every run (`lastObserved=0` to the
+  timeout) and looks like a system defect; before filing one, read the consumer's write path and
+  confirm the join key. Where the SUT can REUSE an existing entity, assert the **format** of its
+  code/id (regex), not equality to the current run's key; when a value (e.g. `isactive`, an entity's
+  lifecycle date) lives only in a store the run never reaches, prove the observable proxy in the
+  store it does and record the gap as an explicit boundary — never inflate the timeout.
 - No pipeline bypass: no eager IO in builders, no raw HTTP/Kafka/JDBC/gRPC clients, no
   `new DefaultScenarioRunner(...)` / `new DefaultStandClient(...)` in consumer code, no
   validator/runner/StandClient bean overrides, never the one-arg `validate(Scenario)` as a

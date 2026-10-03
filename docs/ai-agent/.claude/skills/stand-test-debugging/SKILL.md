@@ -73,6 +73,52 @@ From the exception message, `ScenarioResult`, or Allure test-case parameters:
 - REST diagnostics: `http.method/path/status` (bodies/headers never echoed).
 - Allure attachments: masked request/response/diagnostics bodies per step.
 
+## Step 4a — a timed-out DB probe: is the row absent, or is the probe pointed at the wrong store?
+
+Before calling a `db.expectEventually` failure a system defect, answer one question from the CONSUMER's
+code, not from the table's name: **which store does the pipeline actually write, and does the probe's
+join even exist there?**
+
+A probe that asserts a row in store X while the pipeline writes store Y (or never creates the row's
+link at all) is a **wrong probe**, not a failing test — and it fails identically on every run, which is
+the tell. Worked instance: a client-scoped IT probe joined `hub_client.businesskey = <run pin>` in the
+Data Vault, but the downstream consumer resolves that link by a different key, which is dropped on the
+rewrite side — so the link is never written and the count is a permanent `0`. The correct probe moved
+to the store the SUT itself populates, keyed by the run's own discriminator (`decisionlabel`).
+
+Rules that follow:
+
+- **Read the write path from the consumer's source** before trusting a probe column: which table,
+  which link, which join key. The table's name is not evidence.
+- **Bind a probe to the run by the run's OWN key** (`decisionlabel`, `${testRunId}`), never by a value
+  the SUT chooses or may reuse. If the SUT can reuse an existing entity, its code/id carries the
+  ORIGINATING run's key, not this one — assert the **format** of that value, and bind via the run-key.
+- **A permanent `lastObserved=0` with `attempts` climbing to the timeout** is the signature: either
+  the row is genuinely never written, or the probe asks a store/join that is never populated. Distinguish
+  by reading the write path — do not inflate the timeout (that hides both).
+
+## Step 4b — checking the database directly (per-stand MCP)
+
+A DB assertion that failed often needs one question answered outside the report: **is the row absent
+because the system did not write it, or because I am looking at the wrong stand?** When the working
+copy wires per-stand database MCP servers (`postgres_<database>_<stand>` — see the consumer's
+bundle manual §"Database MCP servers"), read the table directly — but under the rules that keep the
+answer honest:
+
+- **Query the server whose suffix matches the run's environment.** An `ift` run → `_dev2`; a `test`
+  run → `_test`. A `db.expectEventually` that timed out on `ift` is checked against the dev2 server,
+  never the test one. Checking the other stand and finding the row is the most misleading possible
+  result: it "explains" the failure with the wrong stand's data.
+- **Read the `.env` host first.** Confirm the server points where its name says. A `_test` server
+  pointing at a dev host answers under a false name and sends the diagnosis the wrong way; report the
+  mismatch, do not work around it.
+- **This is corroboration, not a substitute for the step.** The SDK's `db.expectEventually` already
+  read the DB through the registry — the MCP query does not re-decide the test, it distinguishes
+  *test-data-not-written* from *wrong-stand/data-not-yet-processed*. The fix and the report are
+  unchanged by it.
+- **Never write.** No `INSERT`/`UPDATE`/`DELETE`/DDL through the server, and never copy a row value
+  that is a personal or business datum into the debugging report.
+
 ## Step 5 — classify the root cause (exactly one primary)
 
 `test-data` | `environment/config` | `timeout-too-small` | `assertion-wrong-expectation` |
